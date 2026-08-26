@@ -25,6 +25,8 @@ from ..browser import (BrowserManager, fetch_videos, fetch_comments,
                        post_ks_comment,
                        fetch_channels_works, fetch_channels_comments,
                        fetch_channels_self_profile, post_channels_comment,
+                       fetch_mp_works, fetch_mp_comments,
+                       fetch_mp_self_profile, post_mp_comment,
                        fetch_account_works,
                        do_follow, send_dm, send_dm_api)
 from . import compose
@@ -47,6 +49,9 @@ from ..platforms.kuaishou import (parse_ks_feed, parse_ks_comment,
 from ..platforms.channels import (parse_channels_feed, parse_channels_comment,
                    flatten_channels_comments, parse_self_user as parse_channels_self_user,
                    publish_channels)
+from ..platforms.wechat_mp import (parse_mp_feed, parse_mp_comment,
+                   flatten_mp_comments, parse_self_user as parse_mp_self_user,
+                   publish_mp)
 from ..models import (ContentRecord, CommentRecord, CommentRule, CommentTask,
                       CommentWatch, DanmakuWatch, DanmakuRecord,
                        DouyinAccount, MonitorTarget, AccountRiskState,
@@ -958,6 +963,8 @@ class MonitorEngine:
                                 return {"ok": False, "error": str(exc)}
                 elif platform == "kuaishou":
                     u, err = await fetch_ks_self_profile(self.browser, identity)
+                elif platform == "wechat_mp":
+                    u, err = await fetch_mp_self_profile(self.browser, identity)
                 elif platform == "shipinhao":
                     u, err = await fetch_channels_self_profile(self.browser, identity)
                 else:
@@ -980,6 +987,8 @@ class MonitorEngine:
                     parsed = parse_xhs_self_user(u)
                 elif platform == "kuaishou":
                     parsed = parse_ks_self_user(u)
+                elif platform == "wechat_mp":
+                    parsed = parse_mp_self_user(u)
                 elif platform == "shipinhao":
                     parsed = parse_channels_self_user(u)
                 else:
@@ -2572,7 +2581,7 @@ class MonitorEngine:
                           if isinstance(i, int) and 0 <= i < len(files)]
                 if picked:
                     files = picked
-            title_cap = {"douyin": 30, "shipinhao": 16}.get(target_platform, 20)
+            title_cap = {"douyin": 30, "shipinhao": 16, "wechat_mp": 64}.get(target_platform, 20)
             t_title = (title if title is not None else (rec.desc or ""))[:title_cap]
             t_desc = desc if desc is not None else (rec.desc or "")
             t_topics = topics if topics is not None else ""
@@ -2686,6 +2695,11 @@ class MonitorEngine:
                 ok, url, err = False, "", f"发布异常: {e!r}"
             return await self._finish_publish(task_id, ok, url, err, platform="kuaishou")
 
+        if platform == "wechat_mp":
+            ok, url, err = await publish_mp(self.browser, identity, state,
+                                            title, desc, media_type, media_paths,
+                                            topics, location, cover_path=cover_path)
+            return await self._finish_publish(task_id, ok, url, err, platform="wechat_mp")
         if platform == "shipinhao":
             # 视频号发布:登录态在该账号持久 profile 里,走浏览器自动化(wujie shadowRoot)
             if not state:
@@ -2777,7 +2791,7 @@ class MonitorEngine:
                     channels = [{"type": c.type, "config": _loads(c.config)} for c in chans]
                 if channels:
                     pname = {"kuaishou": "快手", "douyin": "抖音",
-                             "shipinhao": "视频号"}.get(platform, "小红书")
+                             "shipinhao": "视频号", "wechat_mp": "微信公众号"}.get(platform, "小红书")
                     await notify_all(channels, f"{pname}发布成功", url or "已发布一条作品")
             except Exception:
                 pass

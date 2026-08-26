@@ -4,7 +4,8 @@ from .manager import BrowserManager, cookie_string_to_state
 from .login import (interactive_login, interactive_creator_login,
                     interactive_xhs_login, interactive_xhs_creator_login,
                     interactive_ks_login, interactive_ks_creator_login,
-                    interactive_channels_login, interactive_channels_creator_login)
+                    interactive_channels_login, interactive_channels_creator_login,
+                    interactive_mp_login, interactive_mp_creator_login)
 from .fetcher import (fetch_videos, fetch_douyin_search,
                       fetch_comments, fetch_creator_comments,
                       fetch_danmaku, fetch_creator_danmaku,
@@ -16,6 +17,8 @@ from .ks_fetcher import (fetch_ks_videos, fetch_ks_comments, fetch_ks_self_profi
                          post_ks_comment)
 from .channels_fetcher import (fetch_channels_works, fetch_channels_comments,
                                fetch_channels_self_profile, post_channels_comment)
+from .mp_fetcher import (fetch_mp_works, fetch_mp_comments,
+                         fetch_mp_self_profile, post_mp_comment)
 from .account_hub import (fetch_account_works, fetch_follows,
                           fetch_dm_conversations, fetch_dm_history,
                           do_follow, send_dm, send_dm_api)
@@ -26,6 +29,7 @@ __all__ = ["BrowserManager", "cookie_string_to_state",
            "interactive_xhs_login", "interactive_xhs_creator_login",
            "interactive_ks_login", "interactive_ks_creator_login",
            "interactive_channels_login", "interactive_channels_creator_login",
+           "interactive_mp_login", "interactive_mp_creator_login",
            "fetch_videos", "fetch_douyin_search", "fetch_comments", "fetch_creator_comments",
            "fetch_danmaku", "fetch_creator_danmaku",
            "fetch_self_profile", "post_comment_browser",
@@ -35,6 +39,9 @@ __all__ = ["BrowserManager", "cookie_string_to_state",
            "post_ks_comment",
            "fetch_channels_works", "fetch_channels_comments",
            "fetch_channels_self_profile", "post_channels_comment",
+           "fetch_mp_works", "fetch_mp_comments",
+           "fetch_mp_self_profile", "post_mp_comment",
            "fetch_account_works", "fetch_follows",
            "fetch_dm_conversations", "fetch_dm_history",
            "do_follow", "send_dm", "send_dm_api"]
+

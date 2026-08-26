@@ -808,6 +808,88 @@ async def interactive_channels_creator_login(mgr: BrowserManager, identity: Iden
     return await interactive_channels_login(
         mgr, identity, timeout_seconds, force_reauth=force_reauth)
 
+# ── 微信公众平台 (WeChat Official Account / wechat_mp) 登录 ──
+_MP_STRONG_LOGIN_COOKIES = {"slave_user", "slave_sid", "bizuin", "data_bizuin"}
+
+
+def _mp_login_ready(cookie_names, url: str) -> bool:
+    """判断微信公众号是否已完成扫码授权并落地后台主页。"""
+    on_home = "mp.weixin.qq.com/cgi-bin/home" in url or "token=" in url
+    has_cookie = bool(_MP_STRONG_LOGIN_COOKIES & set(cookie_names or ()))
+    return on_home and has_cookie
+
+
+async def _read_mp_nickname(page) -> str:
+    """从公众号后台页面读取公众号昵称。"""
+    try:
+        nick = await page.evaluate("() => (window.wx && window.wx.commonData && window.wx.commonData.data && window.wx.commonData.data.nick_name) || ''")
+        if nick and str(nick).strip():
+            return str(nick).strip()[:40]
+    except Exception:
+        pass
+    for sel in ('.weui-desktop-account__nickname', '.account_name', '.meta_content'):
+        try:
+            t = await page.inner_text(sel, timeout=1500)
+            if t and t.strip():
+                return t.strip()[:40]
+        except Exception:
+            continue
+    return ""
+
+
+async def interactive_mp_login(mgr: BrowserManager, identity: Identity,
+                               timeout_seconds: int = 180,
+                               force_reauth: bool = False,
+                               ) -> Tuple[bool, str, str]:
+    """微信公众号扫码登录。打开 mp.weixin.qq.com 供用户微信扫码，捕获 token 与登录态。
+    返回 (是否成功, storage_state_json, nickname)。"""
+    ctx = await mgr.open_headed(identity)
+    if force_reauth:
+        await ctx.clear_cookies()
+    await _open_first_environment_check(mgr, identity, ctx)
+    page = await ctx.new_page()
+    await _focus(page)
+    logged = False
+    nickname = ""
+    state_json = ""
+
+    try:
+        await page.goto("https://mp.weixin.qq.com/", wait_until="domcontentloaded", timeout=30000)
+        await _focus(page)
+        waited = 0
+        while waited < timeout_seconds:
+            if page.is_closed():
+                break
+            try:
+                cookies = await ctx.cookies()
+            except Exception:
+                break
+            names = {c["name"] for c in cookies}
+            if _mp_login_ready(names, page.url):
+                logged = True
+                break
+            await asyncio.sleep(2)
+            waited += 2
+        if logged:
+            await page.wait_for_timeout(2500)
+            nickname = await _read_mp_nickname(page)
+            state_json = json.dumps(await ctx.storage_state())
+    finally:
+        try:
+            await ctx.close()
+        except Exception:
+            pass
+    return logged, state_json, nickname
+
+
+async def interactive_mp_creator_login(mgr: BrowserManager, identity: Identity,
+                                       timeout_seconds: int = 180,
+                                       force_reauth: bool = False,
+                                       ) -> Tuple[bool, str, str]:
+    """公众号后台即创作后台，复用扫码登录。"""
+    return await interactive_mp_login(mgr, identity, timeout_seconds, force_reauth=force_reauth)
+
+
 
 async def _read_ks_nickname(page) -> str:
     for sel in ('.profile-user-name', '[class*="user-name"]', '[class*="userName"]',
@@ -867,3 +949,4 @@ async def _read_nickname(page) -> str:
         except Exception:
             continue
     return ""
+

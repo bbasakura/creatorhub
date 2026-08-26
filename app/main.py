@@ -39,6 +39,8 @@ from .browser import (BrowserManager, cookie_string_to_state,
                       fetch_xhs_note_detail, fetch_xhs_comments,
                       fetch_ks_self_profile,
                       fetch_channels_self_profile,
+                      interactive_mp_login, interactive_mp_creator_login,
+                      fetch_mp_self_profile,
                       fetch_account_works, fetch_follows, fetch_dm_conversations,
                       fetch_dm_history)
 from .browser.backends import (
@@ -70,6 +72,7 @@ from .platforms.kuaishou import (resolve_ks_user_id, resolve_ks_photo_id,
                   looks_like_photo as ks_looks_like_photo,
                   parse_self_user as parse_ks_self_user)
 from .platforms.channels import parse_self_user as parse_channels_self_user
+from .platforms.wechat_mp import parse_self_user as parse_mp_self_user
 from .engine import Downloader, MonitorEngine
 from .engine.share_downloader import (
     ShareDownloadError,
@@ -153,6 +156,7 @@ def _login_scope_label(platform: str, creator: bool) -> str:
         "xhs": "小红书",
         "kuaishou": "快手",
         "shipinhao": "视频号",
+        "wechat_mp": "微信公众号",
         "douyin": "抖音",
     }.get(platform, platform or "平台")
     return f"{label}创作者" if creator else label
@@ -712,6 +716,8 @@ async def _enrich_account_profile(account_id: int, state: str, *,
                     user_agent=_direct_request_ua(identity))
         elif platform == "kuaishou":
             u, err = await fetch_ks_self_profile(browser, identity)
+        elif platform == "wechat_mp":
+            u, err = await fetch_mp_self_profile(browser, identity)
         elif platform == "shipinhao":
             # 视频号扫码授权后，服务端会话偶尔要数秒才在新页面中生效。
             # 单次打开被重定向到登录页不能立即把刚添加的账号判为失效。
@@ -731,6 +737,12 @@ async def _enrich_account_profile(account_id: int, state: str, *,
                 p = parse_xhs_self_user(u)
             elif platform == "kuaishou":
                 p = parse_ks_self_user(u)
+            elif platform == "wechat_mp":
+                p = parse_mp_self_user(u)
+            elif platform == "wechat_mp":
+                reauth_options = {"force_reauth": True} if account_id else {}
+                ok, state_json, nickname = await interactive_mp_login(
+                    browser, identity, **reauth_options)
             elif platform == "shipinhao":
                 p = parse_channels_self_user(u)
             else:
@@ -838,6 +850,7 @@ async def _run_login(task_id: str, creator: bool = False, account_id: int | None
     login_environment = {}
     nm = ("小红书账号" if platform == "xhs"
           else "快手账号" if platform == "kuaishou"
+          else "微信公众号" if platform == "wechat_mp"
           else "视频号账号" if platform == "shipinhao"
           else "创作者账号" if creator else "扫码账号")
     try:
@@ -1068,7 +1081,7 @@ async def _run_login(task_id: str, creator: bool = False, account_id: int | None
                     acc.creator_storage_state = state_json
                     if not is_xhs and not acc.storage_state:
                         acc.storage_state = state_json
-                elif platform == "shipinhao":
+                elif platform in ("shipinhao", "wechat_mp"):
                     # 视频号一套登录态即读取又发布,两处都写
                     acc.storage_state = state_json
                     acc.creator_storage_state = state_json
@@ -1368,6 +1381,34 @@ async def login_channels_start(proxy: str = "auto", browser_backend: str = "defa
         fingerprint_overrides=fingerprint_overrides))
     return {"task_id": task_id, "status": "opening",
             "hint": "已打开视频号助手窗口,请用微信扫码登录"}
+
+
+
+@app.post("/api/login/wechat_mp/start")
+async def login_mp_start(proxy: str = "auto", browser_backend: str = "default",
+                         browser_runtime_id: str = "",
+                         fingerprint: dict[str, Any] | None = None):
+    """微信公众号扫码登录。"""
+    if browser is None:
+        raise HTTPException(503, "浏览器未就绪")
+    browser_backend, browser_runtime_id = _validate_login_browser_backend(
+        browser_backend, browser_runtime_id)
+    fingerprint_overrides = _validate_prelogin_fingerprint(
+        fingerprint, browser_backend, browser_runtime_id)
+    reused = await _reuse_or_reject_interactive_login("wechat_mp", False)
+    if reused is not None:
+        return reused
+    task_id = uuid.uuid4().hex
+    login_tasks[task_id] = _login_task_state(
+        status="opening", platform="wechat_mp", creator=False,
+        account_id=None)
+    asyncio.create_task(_run_login(
+        task_id, platform="wechat_mp", proxy_choice=proxy,
+        browser_backend=browser_backend,
+        browser_runtime_id=browser_runtime_id,
+        fingerprint_overrides=fingerprint_overrides))
+    return {"task_id": task_id, "status": "opening",
+            "hint": "已打开微信公众号登录窗口,请用微信扫码登录"}
 
 
 @app.get("/api/login/browser/poll")
@@ -1907,13 +1948,13 @@ def _account_risk_view(account: DouyinAccount, now: datetime, *,
         platform_account_id = account.douyin_id
         platform_account_id_label = {
             "douyin": "抖音号", "xhs": "小红书号",
-            "kuaishou": "快手号", "shipinhao": "视频号",
+            "kuaishou": "快手号", "shipinhao": "视频号", "wechat_mp": "微信号/原始ID",
         }.get(account.platform, "账号 ID")
     else:
         platform_account_id = account.sec_uid
         platform_account_id_label = {
             "douyin": "sec_uid", "xhs": "user_id",
-            "kuaishou": "user_id", "shipinhao": "finder_id",
+            "kuaishou": "user_id", "shipinhao": "finder_id", "wechat_mp": "gh_id",
         }.get(account.platform, "账号 ID")
     return {
         "account_id": account.id,
@@ -3604,7 +3645,7 @@ async def cancel_account_action(task_id: int):
 
 
 _PLATFORM_HOST = {"douyin": "douyin.com", "xhs": "xiaohongshu.com",
-                  "kuaishou": "kuaishou.com", "shipinhao": "weixin.qq.com"}
+                  "kuaishou": "kuaishou.com", "shipinhao": "weixin.qq.com", "wechat_mp": "weixin.qq.com"}
 _XHS_USER_ME_API = "/api/sns/web/v2/user/me"
 
 
@@ -3735,7 +3776,8 @@ async def open_account_browser(
                      # 显示成“未确认”。首页会加载权威的当前用户接口。
                      else "https://www.xiaohongshu.com/"),
             "kuaishou": "https://www.kuaishou.com/",
-            "shipinhao": "https://channels.weixin.qq.com/platform"}.get(
+            "shipinhao": "https://channels.weixin.qq.com/platform",
+            "wechat_mp": "https://mp.weixin.qq.com/"}.get(
                 platform, "https://www.douyin.com/")
     # 传了 url 且属于本平台域名 -> 停在该地址(否则回首页,防被当跳转开任意站)
     tgt = (url or "").strip()
@@ -4052,6 +4094,7 @@ async def _probe_proxy(url: str, platform: str = "douyin", timeout: float = 15):
         return False, "未配置代理"
     test_url = ("https://www.xiaohongshu.com/" if platform == "xhs"
                 else "https://www.kuaishou.com/" if platform == "kuaishou"
+                else "https://mp.weixin.qq.com/" if platform == "wechat_mp"
                 else "https://channels.weixin.qq.com/" if platform == "shipinhao"
                 else "https://www.douyin.com/")
     try:
@@ -4623,6 +4666,7 @@ def _write_account_cookie_file(account_id: int | None) -> tuple[str, str, str]:
             "xhs": ".xiaohongshu.com",
             "kuaishou": ".kuaishou.com",
             "shipinhao": ".weixin.qq.com",
+            "wechat_mp": ".weixin.qq.com",
         }.get(platform, ".douyin.com")
         for part in raw_cookie.split(";"):
             name, sep, value = part.strip().partition("=")
@@ -8175,11 +8219,11 @@ async def add_publish(body: PublishIn):
         raise HTTPException(400, "没有可用的媒体文件,请先上传")
     with get_session() as s:
         acc = s.get(DouyinAccount, body.account_id)
-        if not acc or acc.platform not in ("xhs", "kuaishou", "douyin", "shipinhao"):
+        if not acc or acc.platform not in ("xhs", "kuaishou", "douyin", "shipinhao", "wechat_mp"):
             raise HTTPException(400, "请选择一个已登录的抖音 / 小红书 / 快手 / 视频号账号")
         pname = {"kuaishou": "快手", "douyin": "抖音",
-                 "shipinhao": "视频号"}.get(acc.platform, "小红书")
-        if acc.platform in ("kuaishou", "douyin", "shipinhao"):
+                 "shipinhao": "视频号", "wechat_mp": "微信公众号"}.get(acc.platform, "小红书")
+        if acc.platform in ("kuaishou", "douyin", "shipinhao", "wechat_mp"):
             # 抖音 / 快手 / 视频号发布走浏览器自动化,登录态在该账号持久 profile 里
             if not (acc.creator_storage_state or acc.storage_state):
                 raise HTTPException(400, f"该{pname}账号不可发布:请先在账号页完成登录")
@@ -8640,14 +8684,14 @@ async def _repost_content(cid: int, body: RepostIn, target_platform: str):
             raise HTTPException(400, "该作品尚未下载完成,无法转发")
         acc = s.get(DouyinAccount, body.account_id)
         if not acc or acc.platform != target_platform:
-            pname = {"douyin": "抖音", "shipinhao": "视频号"}.get(
+            pname = {"douyin": "抖音", "shipinhao": "视频号", "wechat_mp": "微信公众号"}.get(
                 target_platform, "小红书")
             raise HTTPException(400, f"请选择一个已登录的{pname}账号")
-        if target_platform in ("douyin", "shipinhao"):
+        if target_platform in ("douyin", "shipinhao", "wechat_mp"):
             # 抖音/视频号发布走浏览器自动化，有任一持久登录态即可。
             if not (acc.creator_storage_state or acc.storage_state):
-                pname = "视频号" if target_platform == "shipinhao" else "抖音"
-                action = "视频号登录" if target_platform == "shipinhao" else "创作者登录"
+                pname = "微信公众号" if target_platform == "wechat_mp" else ("视频号" if target_platform == "shipinhao" else "抖音")
+                action = "公众号登录" if target_platform == "wechat_mp" else ("视频号登录" if target_platform == "shipinhao" else "创作者登录")
                 raise HTTPException(400, f"该{pname}账号不可发布:请先在账号页完成「{action}」")
         elif not (acc.creator_storage_state or has_creator_cookies(acc.storage_state)):
             raise HTTPException(400, "该账号不可发布:请对该号完成「小红书扫码登录」或「创作者登录」")
@@ -8687,6 +8731,13 @@ async def repost_to_douyin(cid: int, body: RepostIn):
 async def repost_to_channels(cid: int, body: RepostIn):
     """把一条已下载的抖音作品转成视频号发布任务。"""
     return await _repost_content(cid, body, "shipinhao")
+
+
+
+@app.post("/api/contents/{cid}/repost-wechat_mp")
+async def repost_to_wechat_mp(cid: int, body: RepostIn):
+    """把一条已下载的作品转成微信公众号发布任务。"""
+    return await _repost_content(cid, body, "wechat_mp")
 
 
 # ─────────── 自动评论(规则 + 任务)───────────

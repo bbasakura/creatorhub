@@ -21,6 +21,7 @@ from .douyin_im_pb import parse_conversations
 from .fetcher import fetch_videos
 from .ks_fetcher import fetch_ks_videos, fetch_ks_self_profile
 from .channels_fetcher import fetch_channels_works
+from .mp_fetcher import fetch_mp_works
 from .manager import BrowserManager
 from .xhs_dm import send_xhs_dm_page
 from .xhs_fetcher import fetch_xhs_notes
@@ -211,6 +212,42 @@ def _norm_ks_work(feed: dict) -> Optional[dict]:
     }
 
 
+
+def _norm_mp_work(it: dict) -> Optional[dict]:
+    """微信公众号草稿/已发文章 -> 本账号作品 dict。"""
+    if not isinstance(it, dict):
+        return None
+    aid = str(_first(it, "appmsgid", "publish_id", "msgid", "fileid", "id", default="") or "")
+    if not aid:
+        return None
+    appmsg_info = it.get("appmsg_info") or it.get("appmsgInfo") or {}
+    if isinstance(appmsg_info, list) and appmsg_info:
+        appmsg_info = appmsg_info[0]
+    
+    title = str(_first(it, "title", default="") or _first(appmsg_info, "title", default="无标题")).strip()
+    digest = str(_first(it, "digest", default="") or _first(appmsg_info, "digest", default="")).strip()
+    desc = f"{title}\n{digest}".strip() if digest and digest != title else title
+    
+    cover = str(_first(it, "cover", "cdn_url", "thumb_url", default="") or _first(appmsg_info, "cover", "cdn_url", "thumb_url", default="")).strip()
+    ts = _num(_first(it, "create_time", "update_time", "time", default=0))
+    
+    msg_type = _num(_first(it, "appmsg_type", "type", default=9))
+    media_type = "images" if msg_type == 10 else ("video" if msg_type == 15 else "article")
+    
+    return {
+        "item_id": aid,
+        "desc": desc,
+        "media_type": media_type,
+        "cover_url": cover,
+        "create_time": int(ts / 1000) if ts > 1e12 else ts,
+        "like_count": _num(_first(it, "like_num", "like_count", default=0)),
+        "comment_count": _num(_first(it, "comment_num", "comment_count", default=0)),
+        "collect_count": _num(_first(it, "old_like_num", "looking_num", default=0)),
+        "share_count": _num(_first(it, "share_num", "share_count", default=0)),
+        "play_count": _num(_first(it, "read_num", "read_count", default=0)),
+        "status": "published" if it.get("publish_id") else "draft",
+    }
+
 def _norm_channels_work(it: dict) -> Optional[dict]:
     """视频号助手 post_list 一项 -> 本账号作品 dict。视频号视频加密不可下载,
     这里只记元数据+统计(供本账号作品展示 + 作品健康监控)。字段以真机抓包为准。"""
@@ -275,12 +312,15 @@ async def fetch_account_works(mgr: BrowserManager, identity, platform: str, uid:
         except Exception as e:
             print(f"[hub-self] kuaishou self-resolve failed: {e!r}")
     # 视频号:助手接口即本账号,不需要 uid
-    if not uid and not open_url and platform != "shipinhao":
+    if not uid and not open_url and platform not in ("shipinhao", "wechat_mp"):
         return [], "missing_uid:账号缺自身 uid,请先点账号「刷新资料」再同步作品"
 
     known: Set[str] = set()
     try:
-        if platform == "shipinhao":
+        if platform == "wechat_mp":
+            items, _author, err = await fetch_mp_works(mgr, identity, known, max_scrolls=max_scrolls)
+            norm = _norm_mp_work
+        elif platform == "shipinhao":
             items, _author, err = await fetch_channels_works(mgr, identity, known,
                                                              max_scrolls=max_scrolls)
             norm = _norm_channels_work
@@ -1944,3 +1984,4 @@ async def send_dm(mgr: BrowserManager, identity, platform: str, target_uid: str 
                 await ctx.close()
         except Exception:
             pass
+

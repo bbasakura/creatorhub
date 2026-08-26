@@ -821,7 +821,7 @@ async function exportModuleReport(module, full = false, explicitBtn = null) {
 }
 
 let PLATFORM = "douyin";
-const PF_NAME = { douyin: "抖音", xhs: "小红书", kuaishou: "快手", shipinhao: "视频号" };
+const PF_NAME = { douyin: "抖音", xhs: "小红书", kuaishou: "快手", shipinhao: "视频号", wechat_mp: "微信公众号" };
 let CURRENT_TAB = "overview";
 const PAGE_META = {
   overview: {
@@ -876,11 +876,11 @@ function updatePageContext(name = CURRENT_TAB) {
   document.title = `${meta.title} · ${PF_NAME[PLATFORM] || ""} | CreatorHub`;
 }
 // 是否支持「发布」面板(四平台均有)
-function pfHasPublish(pf) { return pf === "xhs" || pf === "kuaishou" || pf === "douyin" || pf === "shipinhao"; }
+function pfHasPublish(pf) { return pf === "xhs" || pf === "kuaishou" || pf === "douyin" || pf === "shipinhao" || pf === "wechat_mp"; }
 // 视频号只有「本账号」数据(助手接口本账号),不支持监控他人作品/评论
 function pfIsChannels(pf) { return pf === "shipinhao"; }
 function switchPlatform(pf) {
-  if (!["douyin", "xhs", "kuaishou", "shipinhao"].includes(pf)) pf = "douyin";
+  if (!["douyin", "xhs", "kuaishou", "shipinhao", "wechat_mp"].includes(pf)) pf = "douyin";
   PLATFORM = pf;
   CONTENT_SRC = CONTENT_GROUP = CONTENT_TAG = "";
   COMMENT_SRC = COMMENT_GROUP = COMMENT_TAG = "";
@@ -923,6 +923,7 @@ function applyPlatformUI() {
   document.querySelectorAll(".xhs-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "xhs"));
   document.querySelectorAll(".ks-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "kuaishou"));
   document.querySelectorAll(".sh-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "shipinhao"));
+  document.querySelectorAll(".mp-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "wechat_mp"));
   document.querySelectorAll(".notsh-only").forEach(e => e.classList.toggle("hidden", pfIsChannels(PLATFORM)));
   document.querySelectorAll(".collect-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "douyin"));
   document.querySelectorAll(".meta-scope").forEach(e => {
@@ -1372,6 +1373,24 @@ async function startKsCreatorLogin() {
 }
 
 // ─── 视频号扫码登录(读取/发布共用,微信扫码) ───
+async function startMpLogin() {
+  clearTimeout(loginPollTimer);
+  const browserBackend = await choosePreLoginBrowserBackend();
+  if (browserBackend === null) return;
+  const proxy = await choosePreLoginProxy();
+  if (proxy === null) return;
+  const fingerprint = await configurePreLoginFingerprint(browserBackend);
+  if (fingerprint === null) return;
+  $("cookiebox").style.display = "none";
+  $("qrbox").style.display = "block";
+  $("qrstatus").textContent = "正在打开微信公众号登录窗口…";
+  try {
+    const res = await api(loginStartUrl("/api/login/wechat_mp/start", proxy, browserBackend), loginStartOptions(fingerprint));
+    $("qrstatus").innerHTML = `${ic("i-eye")} <b>微信公众号窗口已打开</b>，请使用微信扫码登录。<br>登录成功后请稍等片刻再关闭窗口。`;
+    pollLogin(res.task_id);
+  } catch (e) { $("qrstatus").textContent = "启动失败: " + e.message; toast("公众号登录启动失败:" + e.message, "err"); }
+}
+
 async function startChannelsLogin() {
   const browserBackend = await choosePreLoginBrowserBackend();
   if (browserBackend === null) return;
@@ -3385,7 +3404,7 @@ function filterShareAccounts() {
   const old = sel.value;
   const platform = shareAccountPlatform();
   const hasDetectedLink = !!SHARE_LINKS.length;
-  const knownAccountPlatform = ["douyin", "xhs", "kuaishou", "shipinhao"].includes(platform);
+  const knownAccountPlatform = ["douyin", "xhs", "kuaishou", "shipinhao", "wechat_mp"].includes(platform);
   const rows = knownAccountPlatform
     ? SHARE_ACCOUNTS.filter(a => a.platform === platform)
     : [];
@@ -5935,6 +5954,7 @@ let REPOST_TARGET = "xhs";           // xhs / douyin / shipinhao
 const repostXhs = (id) => openRepost(id, "xhs");
 const repostDouyin = (id) => openRepost(id, "douyin");
 const repostChannels = (id) => openRepost(id, "shipinhao");
+const repostWechatMp = (id) => openRepost(id, "wechat_mp");
 async function pickRepostTarget(id) {
   const target = await uiSelect({
     title: "转发作品",
@@ -5942,6 +5962,7 @@ async function pickRepostTarget(id) {
     options: [
       { value: "xhs", label: "小红书" },
       { value: "shipinhao", label: "视频号" },
+      { value: "wechat_mp", label: "微信公众号" },
     ],
     value: "shipinhao",
   });
@@ -5967,8 +5988,9 @@ async function openRepost(id, target) {
   REPOST_ID = id; REPOST_TARGET = target;
   const isDy = target === "douyin";
   const isChannels = target === "shipinhao";
-  const cap = isDy ? 30 : isChannels ? 16 : 20;
-  const pname = isDy ? "抖音" : isChannels ? "视频号" : "小红书";
+  const isMp = target === "wechat_mp";
+  const cap = isDy ? 30 : isChannels ? 16 : isMp ? 64 : 20;
+  const pname = isDy ? "抖音" : isChannels ? "视频号" : isMp ? "微信公众号" : "小红书";
   $("rp-head").textContent = "发" + pname + " · 编辑后推送";
   $("rp-title-label").textContent = `标题(≤${cap} 字)`;
   $("rp-title").maxLength = cap;
@@ -6093,7 +6115,7 @@ async function submitRepost() {
     media_order: rpMediaOrder(),
   };
   const pname = REPOST_TARGET === "douyin" ? "抖音"
-    : REPOST_TARGET === "shipinhao" ? "视频号" : "小红书";
+    : REPOST_TARGET === "shipinhao" ? "视频号" : REPOST_TARGET === "wechat_mp" ? "微信公众号" : "小红书";
   try {
     const r = await api("/api/contents/" + REPOST_ID + "/repost-" + REPOST_TARGET, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -6585,7 +6607,7 @@ switchTab((() => {
 switchHubTab(HUB_TAB);   // 恢复上次停留的子标签(我的作品/关注/粉丝/私信)
 
 // restore last-selected platform (default: 抖音)
-PLATFORM = (() => { try { const p = localStorage.getItem("dym-pf"); return ["xhs", "douyin", "kuaishou", "shipinhao"].includes(p) ? p : "douyin"; } catch (e) { return "douyin"; } })();
+PLATFORM = (() => { try { const p = localStorage.getItem("dym-pf"); return ["xhs", "douyin", "kuaishou", "shipinhao", "wechat_mp"].includes(p) ? p : "douyin"; } catch (e) { return "douyin"; } })();
 applyPlatformUI();
 updateTaskQueuePlatformLabel();
 

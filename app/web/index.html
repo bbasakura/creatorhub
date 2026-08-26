@@ -104,6 +104,7 @@
   .pswitch button.active[data-pf="xhs"] { background:var(--xhs-soft); color:var(--xhs); border-color:var(--xhs-ring); }
   .pswitch button.active[data-pf="kuaishou"] { background:rgba(255,121,2,.16); color:#ff7902; border-color:rgba(255,121,2,.4); }
   .pswitch button.active[data-pf="shipinhao"] { background:rgba(7,193,96,.16); color:#07c160; border-color:rgba(7,193,96,.4); }
+.pswitch button.active[data-pf="wechat_mp"] { background:rgba(7,193,96,.16); color:#07c160; border-color:rgba(7,193,96,.4); }
   .hidden { display:none !important; }
 
   /* ════ 小红书:浅色暖调主题(整页随平台切换;抖音保持深色) ════ */
@@ -171,7 +172,18 @@
   body.pf-kuaishou input[type=date]::-webkit-calendar-picker-indicator,
   body.pf-kuaishou input[type=datetime-local]::-webkit-calendar-picker-indicator { filter:invert(.7); }
 
-  /* ════ 视频号:深色 + 微信招牌绿主题 #07C160 ════ */
+  
+/* ════ 微信公众号:深色 + 微信经典绿主题 #07C160 ════ */
+body.pf-wechat_mp {
+  --acc: #07c160;
+  --acc-soft: rgba(7, 193, 96, 0.14);
+  --acc-ring: rgba(7, 193, 96, 0.35);
+  --acc-hover: #06ad56;
+}
+body.pf-wechat_mp .brand-mark { background:linear-gradient(135deg,#07c160,#4fd68f); box-shadow:0 4px 14px -4px rgba(7,193,96,.55); }
+body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
+
+/* ════ 视频号:深色 + 微信招牌绿主题 #07C160 ════ */
   body.pf-shipinhao {
     --acc:#07c160; --acc-hover:#1ecb73; --acc-soft:rgba(7,193,96,.15); --acc-ring:rgba(7,193,96,.38);
     background:
@@ -1807,6 +1819,7 @@
     <button role="tab" data-pf="xhs" onclick="switchPlatform('xhs')">小红书</button>
     <button role="tab" data-pf="kuaishou" onclick="switchPlatform('kuaishou')">快手</button>
     <button role="tab" data-pf="shipinhao" onclick="switchPlatform('shipinhao')">视频号</button>
+        <button role="tab" data-pf="wechat_mp" onclick="switchPlatform('wechat_mp')">微信公众号</button>
   </div>
   <span class="spacer"></span>
   <span class="engine" id="engine-status" role="status" aria-live="polite" title="后台任务引擎正在运行"><span class="dot live"></span><span class="engine-label">引擎运行中</span></span>
@@ -1915,6 +1928,7 @@
         <button class="ghost ks-only" onclick="startKsCreatorLogin()"><svg><use href="#i-send"/></svg>快手创作者登录</button>
         <button class="ghost ks-only" onclick="toggleCookie()">Cookie 粘贴</button>
         <button class="sh-only" onclick="startChannelsLogin()"><svg><use href="#i-logo"/></svg>视频号登录</button>
+        <button class="mp-only" onclick="startMpLogin()"><svg><use href="#i-logo"/></svg>公众号扫码登录</button>
       </div>
       <div id="qrbox" style="display:none;margin-bottom:14px">
         <div class="mut" id="qrstatus">准备中…</div>
