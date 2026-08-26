@@ -73,6 +73,9 @@ from .platforms.kuaishou import (resolve_ks_user_id, resolve_ks_photo_id,
                   parse_self_user as parse_ks_self_user)
 from .platforms.channels import parse_self_user as parse_channels_self_user
 from .platforms.wechat_mp import parse_self_user as parse_mp_self_user
+from .platforms.wechat_mp.resolve import (resolve_mp_user_id,
+                                          resolve_mp_article_id,
+                                          looks_like_article)
 from .engine import Downloader, MonitorEngine
 from .engine.share_downloader import (
     ShareDownloadError,
@@ -1435,7 +1438,8 @@ class CookieIn(BaseModel):
 @app.post("/api/login/cookie")
 async def login_cookie(body: CookieIn):
     """Cookie 粘贴兜底登录:转成浏览器登录态。"""
-    platform = body.platform if body.platform in ("douyin", "xhs", "kuaishou") else "douyin"
+    platform = (body.platform if body.platform in
+                ("douyin", "xhs", "kuaishou", "wechat_mp") else "douyin")
     state = cookie_string_to_state(body.cookie, platform)
     with get_session() as s:
         acc = DouyinAccount(
@@ -6210,7 +6214,8 @@ def _validate_monitor_strategy(*, max_scrolls: int | None,
 
 @app.post("/api/monitors")
 async def add_monitor(body: TargetIn):
-    platform = body.platform if body.platform in ("douyin", "xhs", "kuaishou") else "douyin"
+    platform = (body.platform if body.platform in
+                ("douyin", "xhs", "kuaishou", "wechat_mp") else "douyin")
     sec_uid = keyword = xsec_token = ""
     kind = "creator"
 
@@ -6228,6 +6233,10 @@ async def add_monitor(body: TargetIn):
         sec_uid = await resolve_ks_user_id(body.url_or_secuid, cfg.engine.user_agent)
         if not sec_uid:
             raise HTTPException(400, "无法解析快手 user_id,请粘贴创作者主页链接 / v.kuaishou.com 短链 / user_id")
+    elif platform == "wechat_mp":
+        sec_uid = await resolve_mp_user_id(body.url_or_secuid, cfg.engine.user_agent)
+        if not sec_uid:
+            raise HTTPException(400, "无法解析公众号 gh_id/__biz,请粘贴公众号主页链接或 gh_ 原始 ID")
     else:
         sec_uid = await resolve_sec_uid(body.url_or_secuid, cfg.engine.user_agent)
         if not sec_uid:
@@ -7404,7 +7413,8 @@ async def list_watches(platform: str | None = None):
 
 @app.post("/api/comment-watches")
 async def add_watch(body: WatchIn):
-    platform = body.platform if body.platform in ("douyin", "xhs", "kuaishou") else "douyin"
+    platform = (body.platform if body.platform in
+                ("douyin", "xhs", "kuaishou", "wechat_mp") else "douyin")
     aweme_id = sec_uid = xsec_token = ""
     title = ""
 
@@ -7445,6 +7455,20 @@ async def add_watch(body: WatchIn):
             sec_uid = await resolve_ks_user_id(body.url_or_id, cfg.engine.user_agent)
             if not sec_uid:
                 raise HTTPException(400, "无法解析快手 user_id,请粘贴主页链接 / 短链 / user_id")
+    elif platform == "wechat_mp":
+        kind = body.kind
+        if kind == "auto":
+            kind = "video" if looks_like_article(body.url_or_id) else "user"
+        if kind == "video":
+            aweme_id = await resolve_mp_article_id(body.url_or_id, cfg.engine.user_agent)
+            if not aweme_id:
+                raise HTTPException(400, "无法解析公众号文章 id,请粘贴 mp.weixin.qq.com 文章链接 / appmsgid")
+            title = "图文 " + aweme_id
+        else:
+            sec_uid = await resolve_mp_user_id(body.url_or_id, cfg.engine.user_agent)
+            if not sec_uid:
+                raise HTTPException(400, "无法解析公众号 gh_id/__biz,请粘贴公众号主页链接或 gh_ 原始 ID")
+        mode = "public"
         mode = "public"
     else:
         kind = body.kind
@@ -8819,6 +8843,10 @@ async def _resolve_rule_target(platform: str, mode: str, target_kind: str, targe
                 if not ref:
                     raise HTTPException(400, "无法解析小红书创作者(主页链接 / xhslink / user_id)")
                 sec_uid, xsec_token = ref.user_id, ref.xsec_token
+            elif platform == "wechat_mp":
+                sec_uid = await resolve_mp_user_id(target, cfg.engine.user_agent)
+                if not sec_uid:
+                    raise HTTPException(400, "无法解析公众号 gh_id/__biz(主页链接 / gh_ 原始 ID)")
             elif platform == "kuaishou":
                 sec_uid = await resolve_ks_user_id(target, cfg.engine.user_agent)
                 if not sec_uid:
@@ -8835,6 +8863,10 @@ async def _resolve_rule_target(platform: str, mode: str, target_kind: str, targe
                 if not ref:
                     raise HTTPException(400, "无法解析小红书笔记(explore 链接 / xhslink / note_id)")
                 aweme_id, xsec_token = ref.note_id, ref.xsec_token
+            elif platform == "wechat_mp":
+                aweme_id = await resolve_mp_article_id(target, cfg.engine.user_agent)
+                if not aweme_id:
+                    raise HTTPException(400, "无法解析公众号文章 id(mp.weixin.qq.com 链接 / appmsgid)")
             elif platform == "kuaishou":
                 aweme_id = await resolve_ks_photo_id(target, cfg.engine.user_agent)
                 if not aweme_id:
@@ -8876,7 +8908,7 @@ async def add_comment_rule(body: CommentRuleIn):
     templates = [t.strip() for t in body.templates if t.strip()]
     if not templates:
         raise HTTPException(400, "请至少配置一条文案模板(AI 生成失败时回退用)")
-    _pn = {"xhs": "小红书", "kuaishou": "快手"}.get(platform, "抖音")
+    _pn = {"xhs": "小红书", "kuaishou": "快手", "wechat_mp": "公众号"}.get(platform, "抖音")
     with get_session() as s:
         acc = s.get(DouyinAccount, body.account_id)
         if not acc or acc.platform != platform:

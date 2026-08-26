@@ -2069,6 +2069,14 @@ class MonitorEngine:
                 fresh = [c for c in (parse_channels_comment(rc)
                                      for rc in flatten_channels_comments(raw))
                          if c and c["comment_id"] not in known]
+            elif platform == "wechat_mp":
+                raw, err = await fetch_mp_comments(
+                    self.browser, identity, item_id, known,
+                    max_scrolls=self.cfg.engine.comment_max_scrolls,
+                    block_media=self.cfg.engine.block_media_resources)
+                error = err or ""
+                fresh = [c for c in (parse_mp_comment(rc) for rc in raw)
+                         if c and c["comment_id"] not in known]
             else:
                 return {"ok": False, "error": f"不支持的平台:{platform}"}
         except XhsApiError as e:
@@ -3743,6 +3751,15 @@ class MonitorEngine:
                 ok, err = await post_channels_comment(
                     self.browser, identity, aweme_id, content,
                     reply_to_text=target_nick if target_cid else "",
+                    headed=(True if native_mode
+                            else self.cfg.engine.comment_browser_headed))
+                result = "ok" if ok else ""
+            elif platform == "wechat_mp":
+                # 公众号留言只能回复自己图文下的精选留言
+                method = "browser"
+                ok, err = await post_mp_comment(
+                    self.browser, identity, aweme_id, content,
+                    reply_to_id=target_cid if target_cid else "",
                     headed=(True if native_mode
                             else self.cfg.engine.comment_browser_headed))
                 result = "ok" if ok else ""
