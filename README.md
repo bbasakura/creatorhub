@@ -62,7 +62,7 @@ chmod +x start.sh
 首次运行会自动创建虚拟环境、安装依赖和 Chromium、生成 `config.yaml`，随后打开：
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:18888
 ```
 
 > **小红书登录建议：** 尽量使用本机系统中已安装的稳定版 Google Chrome。CreatorHub 会优先通过 CDP 启动系统 Chrome，并为每个账号使用独立的持久化 Profile，不会读取或复用个人 Chrome 的日常 Profile；未安装 Chrome 时会自动回退到可见的 Patchright Chromium。
@@ -96,7 +96,7 @@ python -m patchright install chromium
 
 # 复制 config.example.yaml 为 config.yaml 后启动
 python selftest.py
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --host 0.0.0.0 --port 18888
 ```
 
 仅当显式启用小红书 API 发布兼容模式时，才需安装 Node.js 依赖：
