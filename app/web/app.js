@@ -1374,7 +1374,7 @@ async function startKsCreatorLogin() {
 
 // ─── 视频号扫码登录(读取/发布共用,微信扫码) ───
 async function startMpLogin() {
-  clearTimeout(loginPollTimer);
+  clearTimeout(qrTimer);
   const browserBackend = await choosePreLoginBrowserBackend();
   if (browserBackend === null) return;
   const proxy = await choosePreLoginProxy();
@@ -6652,3 +6652,29 @@ window.addEventListener("scroll", () => {
 }, { passive: true });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) loop(); });
 setInterval(loop, 8000);
+
+// Export all onclick-referenced functions to window for inline handler resolution
+Object.assign(window, {
+  switchPlatform, switchTab, startLogin, startCreatorLogin, startXhsLogin,
+  startXhsCreatorLogin, startKsLogin, startKsCreatorLogin, startChannelsLogin,
+  startMpLogin, toggleCookie, saveCookie, scanBrowserRuntimes, addBrowserRuntime,
+  detectProxy, importProxies, testAllProxies, assignAllProxies, addProxy,
+  setRiskAdminToken, refreshRiskCenter, showRiskAudit, saveRiskConfig,
+  setTaskQueueState, refreshTaskQueue, goTaskQueuePage,
+  createCollection, refreshCollections, closeCollectionResults,
+  addMonitor, parseShareLinks, inspectShareLink, downloadShareLink,
+  refreshShareHistory, shareHistorySelAllToggle, shareHistorySelClear,
+  shareHistoryBatchDelete, exportShareHistoryReport, goShareHistoryPage,
+  changeShareHistoryPage, handleShareHistoryPageInput, jumpShareHistoryPage,
+  saveSettings, toggleSecretInput, testAi, saveAiSettings,
+  addPublish, loadPublished, addCommentRule, approveAllDrafts,
+  addChannel, exportModuleReport, contentSelAllToggle, contentSelClear,
+  contentBatchDelete, goContentPage, changeContentPage, handleContentPageInput, jumpContentPage,
+  addWatch, commentSelAllToggle, commentBatchDelete, clearComments,
+  goCommentPage, changeCommentPage, handleCommentPageInput, jumpCommentPage,
+  addDanmakuWatch, clearDanmaku, goDanmakuPage, changeDanmakuPage,
+  handleDanmakuPageInput, jumpDanmakuPage, switchHubTab,
+  syncMyWorks, syncFollows, syncDm, openHubAccountBrowser, sendDm, loadHubStats,
+  hidePreview, hideRepost, submitRepost, hideCollectionComments, hideWorkComments,
+  syncWorkComments, uiModalCancel, uiModalOk, hideRiskEvents,
+});
