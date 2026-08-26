@@ -8216,15 +8216,17 @@ async def list_publish(platform: str | None = None):
 
 @app.post("/api/publish")
 async def add_publish(body: PublishIn):
-    if body.media_type not in ("images", "video"):
-        raise HTTPException(400, "media_type 须为 images 或 video")
-    paths = [p for p in body.media_paths if Path(p).exists()]
-    if not paths:
-        raise HTTPException(400, "没有可用的媒体文件,请先上传")
+    paths = [p for p in body.media_paths if Path(p).exists()] if body.media_paths else []
     with get_session() as s:
         acc = s.get(DouyinAccount, body.account_id)
         if not acc or acc.platform not in ("xhs", "kuaishou", "douyin", "shipinhao", "wechat_mp"):
             raise HTTPException(400, "请选择一个已登录的抖音 / 小红书 / 快手 / 视频号账号")
+        is_mp_article = acc.platform == "wechat_mp" and body.media_type == "article"
+        if is_mp_article:
+            if not body.title.strip():
+                raise HTTPException(400, "公众号文章需要标题")
+        elif body.media_type not in ("images", "video"):
+            raise HTTPException(400, "media_type 须为 images 或 video")
         pname = {"kuaishou": "快手", "douyin": "抖音",
                  "shipinhao": "视频号", "wechat_mp": "微信公众号"}.get(acc.platform, "小红书")
         if acc.platform in ("kuaishou", "douyin", "shipinhao", "wechat_mp"):
@@ -8236,7 +8238,7 @@ async def add_publish(body: PublishIn):
         vis = body.visibility if body.visibility in ("public", "friends", "private") else "public"
         t = PublishTask(
             platform=acc.platform, account_id=body.account_id, media_type=body.media_type,
-            title=body.title.strip()[:20], desc=body.desc, topics=body.topics,
+            title=body.title.strip()[:64 if acc.platform == "wechat_mp" else 20], desc=body.desc, topics=body.topics,
             location=(body.location or "").strip()[:60],
             visibility=vis, allow_save=bool(body.allow_save),
             media_json=json.dumps(paths), scheduled_at=_parse_when(body.scheduled_at),

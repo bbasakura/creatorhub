@@ -924,6 +924,16 @@ function applyPlatformUI() {
   document.querySelectorAll(".ks-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "kuaishou"));
   document.querySelectorAll(".sh-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "shipinhao"));
   document.querySelectorAll(".mp-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "wechat_mp"));
+  // 公众号文章选项只在 wechat_mp 平台显示
+  const pubType = $("pub-type");
+  if (pubType) {
+    const artOpt = pubType.querySelector('option[value="article"]');
+    if (artOpt) artOpt.remove();
+    if (PLATFORM === "wechat_mp") {
+      const vidOpt = pubType.querySelector('option[value="video"]');
+      if (vidOpt) vidOpt.insertAdjacentHTML("afterend", '<option value="article">公众号文章</option>');
+    }
+  }
   document.querySelectorAll(".notsh-only").forEach(e => e.classList.toggle("hidden", pfIsChannels(PLATFORM)));
   document.querySelectorAll(".collect-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "douyin"));
   document.querySelectorAll(".meta-scope").forEach(e => {
@@ -932,12 +942,12 @@ function applyPlatformUI() {
   // 发布面板入口:抖音 / 小红书 / 快手均显示
   document.querySelectorAll(".pub-only").forEach(e => e.classList.toggle("hidden", !pfHasPublish(PLATFORM)));
   // 发布面板文案随平台切换
-  const ks = PLATFORM === "kuaishou", dy = PLATFORM === "douyin", sph = PLATFORM === "shipinhao";
+  const ks = PLATFORM === "kuaishou", dy = PLATFORM === "douyin", sph = PLATFORM === "shipinhao"; const mp = PLATFORM === "wechat_mp";
   const pubSub = $("pub-head-sub");
   if (pubSub) pubSub.textContent = dy ? "上传图集 / 视频到抖音创作平台(实验性)"
     : ks ? "上传图集 / 视频到快手创作平台(实验性)"
-    : sph ? "上传视频到视频号助手(实验性)" : "上传图集 / 视频到小红书(实验性)";
-  if ($("pub-head-lead")) $("pub-head-lead").textContent = (ks || dy || sph) ? "发布作品" : "发布笔记";
+    : sph ? "上传视频到视频号助手(实验性)" : mp ? "公众号文章/图文/视频" : "上传图集 / 视频到小红书(实验性)";
+  if ($("pub-head-lead")) $("pub-head-lead").textContent = (ks || dy || sph) ? "发布作品" : mp ? "发布" : "发布笔记";
   if ($("pub-title")) $("pub-title").placeholder = (ks || dy || sph) ? "给作品起个标题" : "给笔记起个标题";
   const pubHintText = dy
     ? "发布通过自动化抖音创作平台完成。首次登录或触发验证时，请在弹出窗口中完成短信验证或扫码；视频上传后还需等待转码。注意：定时发布可能因本人验证而暂停，建议发布时在场。"
@@ -945,6 +955,7 @@ function applyPlatformUI() {
     ? "发布通过自动化快手创作平台完成。若遇验证码或需要补充封面，请在弹出窗口中手动处理；定时任务由后台引擎按计划执行。"
     : sph
     ? "发布通过自动化视频号助手完成。视频需等待转码，发布前可能要求补充封面、实名或人脸验证，请在弹出窗口中处理。注意：平台页面改版后可能需要重新适配。"
+    : mp ? "公众号文章默认保存为草稿，支持Markdown格式。图文/视频需选择文件。"
     : "发布通过账号独立的可见 Chrome 页面完成。提交只点击一次；若显示“结果待确认”，请先到小红书核对，系统不会自动重发。";
   const pubHint = $("pub-hint");
   if (pubHint) {
@@ -5740,8 +5751,9 @@ let pubFilesDT = new DataTransfer();
 function onPubType() {
   const v = $("pub-type").value, inp = $("pub-files"), lbl = $("pub-files-label");
   if (!inp) return;
-  if (v === "video") { inp.accept = "video/*"; inp.multiple = false; lbl.textContent = "选择视频文件(单个)"; }
-  else { inp.accept = "image/*"; inp.multiple = true; lbl.textContent = "选择图片(可多选,最多 18 张)"; }
+  if (v === "article") { inp.accept = ""; inp.multiple = true; lbl.textContent = "选择封面/插图(可选)"; $("pub-title").maxLength = 64; $("pub-title").previousElementSibling.textContent = "标题(≤ 64 字)"; }
+  else if (v === "video") { inp.accept = "video/*"; inp.multiple = false; lbl.textContent = "选择视频文件(单个)"; $("pub-title").maxLength = 64; $("pub-title").previousElementSibling.textContent = "标题"; }
+  else { inp.accept = "image/*"; inp.multiple = true; lbl.textContent = "选择图片(可多选,最多 18 张)"; $("pub-title").maxLength = 64; $("pub-title").previousElementSibling.textContent = "标题"; }
   pubFilesClear();
 }
 function pubFilesClear() { pubFilesDT = new DataTransfer(); _pubSync(); }
@@ -5782,16 +5794,20 @@ async function addPublish() {
   const acc = $("pub-acc").value;
   if (!acc) { toast("请选择" + (PF_NAME[PLATFORM] || "发布") + "账号", "err"); return; }
   const files = $("pub-files").files;
-  if (!files.length) { toast("请先选择要发布的文件", "err"); return; }
+  if (!files.length && $("pub-type").value !== "article") { toast("请先选择要发布的文件", "err"); return; }
   const btn = evtBtn();
   $("pub-msg").textContent = "上传中…";
   await withBusy(btn, "上传中", async () => {
     try {
-      const fd = new FormData(); for (const f of files) fd.append("files", f);
-      const ur = await fetch("/api/publish/upload", { method: "POST", body: fd });
-      if (!ur.ok) throw new Error("上传失败 " + ur.status);
-      const up = await ur.json();
-      const paths = (up.files || []).map(f => f.path);
+      let paths = [];
+      if (files.length) {
+        const fd = new FormData();
+        for (const f of files) fd.append("files", f);
+        const ur = await fetch("/api/publish/upload", { method: "POST", body: fd });
+        if (!ur.ok) throw new Error("上传失败 " + ur.status);
+        const up = await ur.json();
+        paths = (up.files || []).map(f => f.path);
+      }
       const when = $("pub-when").value || null;
       await api("/api/publish", {
         method: "POST", headers: { "Content-Type": "application/json" },
