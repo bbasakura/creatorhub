@@ -993,6 +993,14 @@ async def _run_login(task_id: str, creator: bool = False, account_id: int | None
                 reauth_options = {"force_reauth": True} if account_id else {}
                 ok, state_json, nickname = await interactive_channels_login(
                     browser, identity, **reauth_options)
+            elif platform == "wechat_mp":
+                reauth_options = {"force_reauth": True} if account_id else {}
+                if creator:
+                    ok, state_json, nickname = await interactive_mp_creator_login(
+                        browser, identity, **reauth_options)
+                else:
+                    ok, state_json, nickname = await interactive_mp_login(
+                        browser, identity, **reauth_options)
             elif creator:
                 reauth_options = {"force_reauth": True} if account_id else {}
                 ok, state_json, nickname = await interactive_creator_login(
