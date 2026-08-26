@@ -739,10 +739,6 @@ async def _enrich_account_profile(account_id: int, state: str, *,
                 p = parse_ks_self_user(u)
             elif platform == "wechat_mp":
                 p = parse_mp_self_user(u)
-            elif platform == "wechat_mp":
-                reauth_options = {"force_reauth": True} if account_id else {}
-                ok, state_json, nickname = await interactive_mp_login(
-                    browser, identity, **reauth_options)
             elif platform == "shipinhao":
                 p = parse_channels_self_user(u)
             else:

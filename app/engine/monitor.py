@@ -2697,8 +2697,8 @@ class MonitorEngine:
 
         if platform == "wechat_mp":
             ok, url, err = await publish_mp(self.browser, identity, state,
-                                            title, desc, media_type, media_paths,
-                                            topics, location, cover_path=cover_path)
+                                            title, desc, media_type, files,
+                                            topics, location)
             return await self._finish_publish(task_id, ok, url, err, platform="wechat_mp")
         if platform == "shipinhao":
             # 视频号发布:登录态在该账号持久 profile 里,走浏览器自动化(wujie shadowRoot)
