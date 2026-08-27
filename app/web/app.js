@@ -993,10 +993,11 @@ function applyPlatformUI() {
   applyCollectionForm();
   if (PLATFORM === "douyin") applyDanmakuForm();
   if ($("t-kind") && PLATFORM !== "xhs") $("t-kind").value = "creator";
-  // 视频号只有本账号数据,不支持「监控他人」:若正停在这些面板,自动切到「账号管理」
-  if (pfIsChannels(PLATFORM)) {
+  // 视频号/公众号只有本账号数据,「作品监控」不可用:停在该面板时切回账号管理。
+  // 评论监控与自动评论只回自己作品下的留言,公众号/视频号保留入口。
+  if (pfIsChannels(PLATFORM) || PLATFORM === "wechat_mp") {
     const cur = (document.querySelector('.navitem.active') || {}).dataset;
-    if (cur && ["monitors", "comments", "autocomment"].includes(cur.tab)) switchTab("hub");
+    if (cur && ["monitors"].includes(cur.tab)) switchTab("hub");
     // 视频号本账号只有「我的作品 / 数据」;若停在关注/粉丝/私信子页,切回我的作品
     if (["following", "fans", "dm"].includes(HUB_TAB)) switchHubTab("myworks");
   }
@@ -5327,9 +5328,9 @@ const SRC = { public: "公开", creator: "创作中心" };
 async function addWatch() {
   const url_or_id = $("w-url").value.trim();
   if (!url_or_id) { toast("请粘贴视频链接 / 账号主页 / sec_uid", "err"); return; }
-  if (PLATFORM === "xhs" && !$("w-acc").value) {
+  if ((PLATFORM === "xhs" || PLATFORM === "wechat_mp") && !$("w-acc").value) {
     if (!ACCOUNTS.length) { toast("请先在「账号」里完成小红书扫码登录", "err"); switchTab("accounts"); return; }
-    toast("小红书评论监控必须选择一个已登录账号", "err"); return;
+    toast((PLATFORM === "xhs" ? "小红书" : "公众号") + "评论监控必须选择一个已登录账号", "err"); return;
   }
   const btn = evtBtn();
   $("w-msg").textContent = "解析中…";
@@ -6166,13 +6167,16 @@ function onAcMode() {
 }
 function onAcKind() {
   const mode = $("ac-mode").value, kind = $("ac-kind").value, xhs = PLATFORM === "xhs";
+  const mp = PLATFORM === "wechat_mp";
   let show = true, label = "目标", ph = "";
   if (mode === "auto_reply") {
     if (kind === "self") show = false;
-    else { label = xhs ? "笔记链接 / id" : "作品链接 / id"; ph = xhs ? "explore 链接 / xhslink / note_id" : "作品链接 / 短链 / 数字 id"; }
+    else { label = xhs ? "笔记链接 / id" : (mp ? "图文链接 / id" : "作品链接 / id");
+      ph = xhs ? "explore 链接 / xhslink / note_id" : (mp ? "mp.weixin.qq.com 链接 / appmsgid" : "作品链接 / 短链 / 数字 id"); }
   } else {
     if (kind === "keyword") { label = "搜索关键词"; ph = "例如:露营装备 / 口红试色"; }
-    else { label = xhs ? "博主主页 / id" : "博主主页 / sec_uid"; ph = xhs ? "主页链接 / xhslink / user_id" : "主页链接 / 短链 / sec_uid"; }
+    else { label = xhs ? "博主主页 / id" : (mp ? "公众号主页 / gh_id" : "博主主页 / sec_uid");
+      ph = xhs ? "主页链接 / xhslink / user_id" : (mp ? "主页链接 / gh_ 原始 ID" : "主页链接 / 短链 / sec_uid"); }
   }
   $("ac-target-wrap").style.display = show ? "" : "none";
   $("ac-target-label").textContent = label; $("ac-target").placeholder = ph;
@@ -6182,7 +6186,11 @@ function onAcKind() {
 function populateAcAccount() {
   const sel = $("ac-acc"); if (!sel) return;
   const xhs = PLATFORM === "xhs";
-  sel.innerHTML = accOptions(ACCOUNTS, xhs ? "请选择小红书账号(必选)" : "请选择抖音账号(必选)");
+  const ph = xhs ? "请选择小红书账号(必选)"
+    : PLATFORM === "wechat_mp" ? "请选择公众号账号(必选)"
+    : PLATFORM === "shipinhao" ? "请选择视频号账号(必选)"
+    : "请选择抖音账号(必选)";
+  sel.innerHTML = accOptions(ACCOUNTS, ph);
   if (ACCOUNTS.length) sel.value = String(ACCOUNTS[0].id);
   csSyncAll();
 }
@@ -6226,13 +6234,16 @@ function emOnMode() {
 }
 function emOnKind() {
   const mode = $("em-mode").value, kind = $("em-kind").value, xhs = EM_PF === "xhs";
+  const mp = EM_PF === "wechat_mp";
   let show = true, label = "目标", ph = "";
   if (mode === "auto_reply") {
     if (kind === "self") show = false;
-    else { label = xhs ? "笔记链接 / id" : "作品链接 / id"; ph = xhs ? "explore / xhslink / note_id" : "作品链接 / 短链 / 数字 id"; }
+    else { label = xhs ? "笔记链接 / id" : (mp ? "图文链接 / id" : "作品链接 / id");
+      ph = xhs ? "explore / xhslink / note_id" : (mp ? "mp.weixin.qq.com 链接 / appmsgid" : "作品链接 / 短链 / 数字 id"); }
   } else {
     if (kind === "keyword") { label = "搜索关键词"; ph = "例如:露营装备 / 口红试色"; }
-    else { label = xhs ? "博主主页 / id" : "博主主页 / sec_uid"; ph = xhs ? "主页 / xhslink / user_id" : "主页 / 短链 / sec_uid"; }
+    else { label = xhs ? "博主主页 / id" : (mp ? "公众号主页 / gh_id" : "博主主页 / sec_uid");
+      ph = xhs ? "主页 / xhslink / user_id" : (mp ? "主页 / gh_ 原始 ID" : "主页 / 短链 / sec_uid"); }
   }
   $("em-target-wrap").style.display = show ? "" : "none";
   $("em-target-label").textContent = label; $("em-target").placeholder = ph;

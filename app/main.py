@@ -1439,7 +1439,7 @@ class CookieIn(BaseModel):
 async def login_cookie(body: CookieIn):
     """Cookie 粘贴兜底登录:转成浏览器登录态。"""
     platform = (body.platform if body.platform in
-                ("douyin", "xhs", "kuaishou", "wechat_mp") else "douyin")
+                ("douyin", "xhs", "kuaishou", "wechat_mp", "shipinhao") else "douyin")
     state = cookie_string_to_state(body.cookie, platform)
     with get_session() as s:
         acc = DouyinAccount(
@@ -6215,7 +6215,7 @@ def _validate_monitor_strategy(*, max_scrolls: int | None,
 @app.post("/api/monitors")
 async def add_monitor(body: TargetIn):
     platform = (body.platform if body.platform in
-                ("douyin", "xhs", "kuaishou", "wechat_mp") else "douyin")
+                ("douyin", "xhs", "kuaishou", "wechat_mp", "shipinhao") else "douyin")
     sec_uid = keyword = xsec_token = ""
     kind = "creator"
 
@@ -7414,7 +7414,7 @@ async def list_watches(platform: str | None = None):
 @app.post("/api/comment-watches")
 async def add_watch(body: WatchIn):
     platform = (body.platform if body.platform in
-                ("douyin", "xhs", "kuaishou", "wechat_mp") else "douyin")
+                ("douyin", "xhs", "kuaishou", "wechat_mp", "shipinhao") else "douyin")
     aweme_id = sec_uid = xsec_token = ""
     title = ""
 
@@ -8903,12 +8903,14 @@ async def list_comment_rules(platform: str | None = None):
 
 @app.post("/api/comment-rules")
 async def add_comment_rule(body: CommentRuleIn):
-    platform = body.platform if body.platform in ("douyin", "xhs", "kuaishou") else "douyin"
+    platform = (body.platform if body.platform in
+                ("douyin", "xhs", "kuaishou", "wechat_mp", "shipinhao") else "douyin")
     mode = body.mode if body.mode in ("auto_reply", "auto_comment") else "auto_reply"
     templates = [t.strip() for t in body.templates if t.strip()]
     if not templates:
         raise HTTPException(400, "请至少配置一条文案模板(AI 生成失败时回退用)")
-    _pn = {"xhs": "小红书", "kuaishou": "快手", "wechat_mp": "公众号"}.get(platform, "抖音")
+    _pn = {"xhs": "小红书", "kuaishou": "快手", "wechat_mp": "公众号",
+           "shipinhao": "视频号"}.get(platform, "抖音")
     with get_session() as s:
         acc = s.get(DouyinAccount, body.account_id)
         if not acc or acc.platform != platform:

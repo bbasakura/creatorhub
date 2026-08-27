@@ -72,6 +72,10 @@ from .collection import KeywordCollector
 
 MAX_AUTO_RETRY = 3
 _BROWSER_SUBMIT_MARKER = "write_submitted:browser"
+# 评论入库只认 CommentRecord 的列;公众号解析出的 avatar/is_elected 等额外字段
+# 若直接 **c 展开会导致 TypeError,统一在这里裁剪。
+_RECORD_KEYS = frozenset({"comment_id", "text", "user_nickname", "like_count",
+                          "create_time", "reply_to"})
 
 log = logging.getLogger("creatorhub.engine")
 
@@ -2077,6 +2081,7 @@ class MonitorEngine:
                 error = err or ""
                 fresh = [c for c in (parse_mp_comment(rc) for rc in raw)
                          if c and c["comment_id"] not in known]
+                fresh = [{k: c[k] for k in _RECORD_KEYS if k in c} for c in fresh]
             else:
                 return {"ok": False, "error": f"不支持的平台:{platform}"}
         except XhsApiError as e:
@@ -2222,6 +2227,18 @@ class MonitorEngine:
                                                            name, first_scan)
             elif platform == "kuaishou":   # 单条作品
                 total_new, author = await self._cw_ks_video(watch_id, identity, aweme_id,
+                                                            name, first_scan)
+            elif platform == "shipinhao" and kind == "user":
+                total_new, author = await self._cw_channels_user(watch_id, identity, sec_uid,
+                                                                 name, first_scan)
+            elif platform == "shipinhao":   # 单条作品
+                total_new, author = await self._cw_channels_video(watch_id, identity, aweme_id,
+                                                                  name, first_scan)
+            elif platform == "wechat_mp" and kind == "user":
+                total_new, author = await self._cw_mp_user(watch_id, identity, sec_uid,
+                                                           name, first_scan)
+            elif platform == "wechat_mp":   # 单条图文
+                total_new, author = await self._cw_mp_video(watch_id, identity, aweme_id,
                                                             name, first_scan)
             elif kind == "user" and mode == "creator":
                 total_new, author = await self._cw_creator(watch_id, identity, has_creator,
@@ -2384,6 +2401,110 @@ class MonitorEngine:
         return total, ({"nickname": author_dict["nickname"],
                         "avatar_thumb": {"url_list": [author_dict["avatar"]]}}
                        if author_dict else None)
+
+    # ── 微信公众号/视频号评论监控(浏览器自动化,仅本账号作品)──
+    async def _cw_mp_video(self, watch_id, identity, appmsg_id, name, first_scan):
+        cfg = self.cfg.engine
+        settings = self._comment_watch_settings(watch_id)
+        with get_session() as s:
+            known = set(s.exec(select(CommentRecord.comment_id)
+                               .where(CommentRecord.watch_id == watch_id)
+                               .where(CommentRecord.aweme_id == appmsg_id)).all())
+        raw, err = await fetch_mp_comments(self.browser, identity, appmsg_id, known,
+                                           max_scrolls=settings["max_scrolls"],
+                                           block_media=cfg.block_media_resources)
+        if err:
+            log.info("评论监控(公众号图文)%s: %s", appmsg_id, err)
+        fresh = [{k: c[k] for k in _RECORD_KEYS if k in c}
+                 for c in (parse_mp_comment(rc) for rc in flatten_mp_comments(raw)) if c]
+        n = await self._ingest(watch_id, appmsg_id, fresh, name, name, first_scan,
+                               platform="wechat_mp")
+        return n, None
+
+    async def _cw_mp_user(self, watch_id, identity, sec_uid, name, first_scan):
+        cfg = self.cfg.engine
+        settings = self._comment_watch_settings(watch_id)
+        items, author, err = await fetch_mp_works(self.browser, identity, set(),
+                                                  max_scrolls=4,
+                                                  block_media=cfg.block_media_resources)
+        if err:
+            log.info("评论监控(公众号账号)%s: %s", sec_uid, err)
+        cutoff = int(time.time()) - settings["recent_days"] * 86400
+        works = []
+        for it in items:
+            aw = parse_mp_feed(it)
+            if aw and (not aw.create_time or aw.create_time >= cutoff):
+                works.append((aw.aweme_id, aw.desc))
+                if len(works) >= settings["recent_works"]:
+                    break
+        total = 0
+        for pid, desc in works:
+            with get_session() as s:
+                known = set(s.exec(select(CommentRecord.comment_id)
+                                   .where(CommentRecord.watch_id == watch_id)
+                                   .where(CommentRecord.aweme_id == pid)).all())
+            raw, _e = await fetch_mp_comments(self.browser, identity, pid, known,
+                                              max_scrolls=settings["max_scrolls"],
+                                              block_media=cfg.block_media_resources)
+            fresh = [{k: c[k] for k in _RECORD_KEYS if k in c}
+                     for c in (parse_mp_comment(rc) for rc in flatten_mp_comments(raw)) if c]
+            total += await self._ingest(watch_id, pid, fresh, name, desc, first_scan,
+                                        platform="wechat_mp")
+        author_dict = parse_mp_self_user(author) if author else None
+        return total, ({"nickname": author_dict.get("nickname", ""),
+                        "avatar_thumb": {"url_list": [author_dict.get("avatar", "")]}}
+                       if author_dict else None)
+
+    async def _cw_channels_video(self, watch_id, identity, object_id, name, first_scan):
+        cfg = self.cfg.engine
+        settings = self._comment_watch_settings(watch_id)
+        with get_session() as s:
+            known = set(s.exec(select(CommentRecord.comment_id)
+                               .where(CommentRecord.watch_id == watch_id)
+                               .where(CommentRecord.aweme_id == object_id)).all())
+        raw, err = await fetch_channels_comments(self.browser, identity, object_id, known,
+                                                 max_scrolls=settings["max_scrolls"],
+                                                 block_media=cfg.block_media_resources)
+        if err:
+            log.info("评论监控(视频号作品)%s: %s", object_id, err)
+        fresh = [{k: c[k] for k in _RECORD_KEYS if k in c}
+                 for c in (parse_channels_comment(rc)
+                           for rc in flatten_channels_comments(raw)) if c]
+        n = await self._ingest(watch_id, object_id, fresh, name, name, first_scan,
+                               platform="shipinhao")
+        return n, None
+
+    async def _cw_channels_user(self, watch_id, identity, sec_uid, name, first_scan):
+        cfg = self.cfg.engine
+        settings = self._comment_watch_settings(watch_id)
+        items, _author, err = await fetch_channels_works(self.browser, identity, set(),
+                                                         max_scrolls=4,
+                                                         block_media=cfg.block_media_resources)
+        if err:
+            log.info("评论监控(视频号账号)%s: %s", sec_uid, err)
+        cutoff = int(time.time()) - settings["recent_days"] * 86400
+        works = []
+        for feed in items:
+            aw = parse_channels_feed(feed)
+            if aw and (not aw.create_time or aw.create_time >= cutoff):
+                works.append((aw.aweme_id, aw.desc))
+                if len(works) >= settings["recent_works"]:
+                    break
+        total = 0
+        for pid, desc in works:
+            with get_session() as s:
+                known = set(s.exec(select(CommentRecord.comment_id)
+                                   .where(CommentRecord.watch_id == watch_id)
+                                   .where(CommentRecord.aweme_id == pid)).all())
+            raw, _e = await fetch_channels_comments(self.browser, identity, pid, known,
+                                                    max_scrolls=settings["max_scrolls"],
+                                                    block_media=cfg.block_media_resources)
+            fresh = [{k: c[k] for k in _RECORD_KEYS if k in c}
+                     for c in (parse_channels_comment(rc)
+                               for rc in flatten_channels_comments(raw)) if c]
+            total += await self._ingest(watch_id, pid, fresh, name, desc, first_scan,
+                                        platform="shipinhao")
+        return total, None
 
     async def _cw_creator(self, watch_id, identity, has_creator, name, first_scan):
         if not has_creator:
@@ -2572,7 +2693,7 @@ class MonitorEngine:
         """从已下载作品创建发往目标平台(小红书/抖音/视频号)的发布任务。返回任务 id。
 
         只接收作品 id,内部自开会话取记录,避免跨会话传入已绑定的 ORM 对象。
-        target_platform: xhs / douyin / shipinhao。
+        target_platform: xhs / douyin / shipinhao / wechat_mp。
         title/desc/topics 为 None 时沿用作品原始内容;传了则用编辑后的值(发布前可改)。
         """
         with get_session() as s:
@@ -3268,6 +3389,80 @@ class MonitorEngine:
                     return [], comment_error
                 for rc in flatten_ks_comments(raw):
                     c = parse_ks_comment(rc)
+                    if not c or not c.get("comment_id"):
+                        continue
+                    if c.get("user_nickname") and c["user_nickname"] == acc_nick:
+                        continue
+                    cands.append({"aweme_id": pid, "xsec_token": "",
+                                  "target_comment_id": c["comment_id"],
+                                  "target_nick": c.get("user_nickname", ""),
+                                  "ctx": {"nick": c.get("user_nickname", "")},
+                                  "source_text": c.get("text", "")})
+            return cands, ""
+        # ── 微信公众号:浏览器自动化(公众平台接口,仅本账号作品)──
+        if platform == "wechat_mp":
+            works = []
+            if kind == "work" and rf["aweme_id"]:
+                works = [(rf["aweme_id"], "")]
+            else:
+                items, _a, err = await fetch_mp_works(
+                    self.browser, identity, set(), max_scrolls=4,
+                    block_media=self.cfg.engine.block_media_resources)
+                if err and classify_platform_error(err)[0] in {
+                        RiskCategory.RISK, RiskCategory.AUTH, RiskCategory.NETWORK}:
+                    return [], err
+                cutoff = int(time.time()) - max(0, self.cfg.engine.comment_recent_days) * 86400
+                for it in items[:self.cfg.engine.comment_recent_works]:
+                    aw = parse_mp_feed(it)
+                    if aw and (not cutoff or not aw.create_time or aw.create_time >= cutoff):
+                        works.append((aw.aweme_id, aw.desc))
+            for pid, _desc in works:
+                raw, comment_error = await fetch_mp_comments(
+                    self.browser, identity, pid, set(),
+                    max_scrolls=self.cfg.engine.comment_max_scrolls,
+                    block_media=self.cfg.engine.block_media_resources)
+                if comment_error and classify_platform_error(comment_error)[0] in {
+                        RiskCategory.RISK, RiskCategory.AUTH, RiskCategory.NETWORK}:
+                    return [], comment_error
+                for rc in flatten_mp_comments(raw):
+                    c = parse_mp_comment(rc)
+                    if not c or not c.get("comment_id"):
+                        continue
+                    if c.get("user_nickname") and c["user_nickname"] == acc_nick:
+                        continue   # 不回复自己
+                    cands.append({"aweme_id": pid, "xsec_token": "",
+                                  "target_comment_id": c["comment_id"],
+                                  "target_nick": c.get("user_nickname", ""),
+                                  "ctx": {"nick": c.get("user_nickname", "")},
+                                  "source_text": c.get("text", "")})
+            return cands, ""
+        # ── 视频号:浏览器自动化(助手端,仅本账号作品)──
+        if platform == "shipinhao":
+            works = []
+            if kind == "work" and rf["aweme_id"]:
+                works = [(rf["aweme_id"], "")]
+            else:
+                items, _a, err = await fetch_channels_works(
+                    self.browser, identity, set(), max_scrolls=4,
+                    block_media=self.cfg.engine.block_media_resources)
+                if err and classify_platform_error(err)[0] in {
+                        RiskCategory.RISK, RiskCategory.AUTH, RiskCategory.NETWORK}:
+                    return [], err
+                cutoff = int(time.time()) - max(0, self.cfg.engine.comment_recent_days) * 86400
+                for it in items[:self.cfg.engine.comment_recent_works]:
+                    aw = parse_channels_feed(it)
+                    if aw and (not cutoff or not aw.create_time or aw.create_time >= cutoff):
+                        works.append((aw.aweme_id, aw.desc))
+            for pid, _desc in works:
+                raw, comment_error = await fetch_channels_comments(
+                    self.browser, identity, pid, set(),
+                    max_scrolls=self.cfg.engine.comment_max_scrolls,
+                    block_media=self.cfg.engine.block_media_resources)
+                if comment_error and classify_platform_error(comment_error)[0] in {
+                        RiskCategory.RISK, RiskCategory.AUTH, RiskCategory.NETWORK}:
+                    return [], comment_error
+                for rc in flatten_channels_comments(raw):
+                    c = parse_channels_comment(rc)
                     if not c or not c.get("comment_id"):
                         continue
                     if c.get("user_nickname") and c["user_nickname"] == acc_nick:
