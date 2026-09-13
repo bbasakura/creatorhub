@@ -2412,8 +2412,9 @@ function workCard(w) {
       <div class="ncard-actions">
         ${w.platform === "douyin" ? '<button class="ghost sm" onclick="monitorOwnWorkDanmaku(\'' + esc(w.item_id) + '\',' + (w.account_id || "null") + ')">' + ic("i-msg") + '弹幕</button>' : ""}
         ${w.platform === "youtube"
-          ? `<button class="ghost sm" onclick="openWork('youtube','${esc(w.item_id)}')">${ic("i-play")}播放视频</button>`
+          ? `<button class="ghost sm" onclick="openWork('youtube','${esc(w.item_id)}')">${ic("i-play")}播放</button>`
           : `<button class="ghost sm" onclick="openWorkComments(${w.id},'${esc(w.platform)}','${title.replace(/'/g, "\'")}')">${ic("i-msg")}评论</button>`}
+        <button class="ghost sm danger" style="flex:0 0 34px;padding:0;display:grid;place-items:center" onclick="delAccountWork(${w.id}, event)" title="从本地列表中移除该作品记录">${ic("i-trash")}</button>
       </div>
     </div>
   </div>`;
@@ -2436,6 +2437,19 @@ async function syncMyWorks() {
   });
   refreshMyWorks();
 }
+
+async function delAccountWork(id, evt) {
+  if (evt) evt.stopPropagation();
+  if (!await uiConfirm({ title: "移除作品记录", message: "从本地列表中移除该作品记录？（仅清理本地数据库，不会影响平台线上视频）", okText: "移除", danger: true })) return;
+  try {
+    await api("/api/account-works/" + id, { method: "DELETE" });
+    toast("已从本地移除", "ok");
+    refreshMyWorks();
+  } catch (e) {
+    toast("移除失败: " + e.message, "err");
+  }
+}
+
 
 // ── 作品评论(弹窗:抖音直连分页 / 小红书客户端 / 快手拦截,落库后展示)──
 let WC_WORK = null;   // 当前查看评论的作品 {id, platform, title}
@@ -6783,7 +6797,7 @@ Object.assign(window, {
   syncMyWorks, syncFollows, syncDm, openHubAccountBrowser, sendDm, loadHubStats,
   hidePreview, hideRepost, submitRepost, hideCollectionComments, hideWorkComments,
   syncWorkComments, uiModalCancel, uiModalOk, hideRiskEvents,
-  authorizeYoutube, toggleYtConfig, saveYtConfig, resumeYoutube, disconnectYoutube, importD2YBatch, onMyWorksSort,
+  authorizeYoutube, toggleYtConfig, saveYtConfig, resumeYoutube, disconnectYoutube, importD2YBatch, onMyWorksSort, delAccountWork,
 });
 
 async function importD2YBatch() {

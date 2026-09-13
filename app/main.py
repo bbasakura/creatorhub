@@ -3148,6 +3148,10 @@ async def sync_account_works(account_id: int):
             now = datetime.utcnow()
             added = 0
             with get_session() as s:
+                fetched_ids = {w["item_id"] for w in items if w.get("item_id")}
+                for local_w in s.exec(select(AccountWork).where(AccountWork.account_id == account_id)).all():
+                    if local_w.item_id not in fetched_ids:
+                        s.delete(local_w)
                 for w in items:
                     existing = s.exec(select(AccountWork).where(
                         AccountWork.account_id == account_id,
@@ -3190,6 +3194,15 @@ async def sync_account_works(account_id: int):
     now = datetime.utcnow()
     added = 0
     with get_session() as s:
+        fetched_ids = {w["item_id"] for w in items if w.get("item_id")}
+        if fetched_ids:
+            local_works = s.exec(select(AccountWork).where(AccountWork.account_id == account_id)).all()
+            min_create_time = min((w.get("create_time", 0) for w in items if w.get("create_time")), default=0)
+            for lw in local_works:
+                if lw.item_id not in fetched_ids:
+                    # 如果该作品属于本次抓取覆盖的时间范围（晚于最旧的一条），或者本地总数不多，说明线上已被删除
+                    if (min_create_time > 0 and lw.create_time >= min_create_time) or len(local_works) <= len(items) + 5:
+                        s.delete(lw)
         for w in items:
             existing = s.exec(select(AccountWork).where(
                 AccountWork.account_id == account_id,
@@ -3205,6 +3218,17 @@ async def sync_account_works(account_id: int):
                 added += 1
         s.commit()
     return {"ok": True, "fetched": len(items), "added": added}
+
+
+@app.delete("/api/account-works/{work_id}")
+async def delete_account_work(work_id: int):
+    with get_session() as s:
+        w = s.get(AccountWork, work_id)
+        if not w:
+            raise HTTPException(404, "作品不存在")
+        s.delete(w)
+        s.commit()
+    return {"ok": True}
 
 
 # ─────────── 本账号数据分析(B4:粉丝/作品/互动趋势 + 单篇作品表)───────────
