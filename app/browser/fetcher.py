@@ -1269,6 +1269,37 @@ async def fetch_self_profile(mgr: BrowserManager, identity: Identity,
                 profile_user_seen = True
             elif isinstance(data, dict) and len(shapes) < 6:
                 shapes.append(f"refetch keys={sorted(data)[:12]}")
+
+        # 补充从页面 DOM 直接读取权威关注数/粉丝数/获赞数（避免接口缓存或不同步）
+        try:
+            dom_stats = await page.evaluate("""() => {
+                const parseNum = (txt) => {
+                    if (!txt) return null;
+                    const m = txt.match(/\\d+(\\.\\d+)?[wW万kK]?/);
+                    if (!m) return null;
+                    let s = m[0].toLowerCase();
+                    let mult = 1;
+                    if (s.endsWith('w') || s.endsWith('万')) { mult = 10000; s = s.slice(0, -1); }
+                    else if (s.endsWith('k')) { mult = 1000; s = s.slice(0, -1); }
+                    const val = parseFloat(s);
+                    return isNaN(val) ? null : Math.round(val * mult);
+                };
+                const res = {};
+                const f = document.querySelector('[data-e2e="user-info-follow"]');
+                if (f) { const v = parseNum(f.innerText); if (v !== null) res.following_count = v; }
+                const fans = document.querySelector('[data-e2e="user-info-fans"]');
+                if (fans) { const v = parseNum(fans.innerText); if (v !== null) res.follower_count = v; }
+                const like = document.querySelector('[data-e2e="user-info-like"]');
+                if (like) { const v = parseNum(like.innerText); if (v !== null) res.total_favorited = v; }
+                return res;
+            }""")
+            if dom_stats and isinstance(dom_stats, dict):
+                for k, v in dom_stats.items():
+                    if v is not None:
+                        result[k] = v
+        except Exception:
+            pass
+
         # 是否能看到“登录”按钮(看到=其实没登录进去)
         try:
             has_login_btn = await page.get_by_text("登录", exact=True).first.is_visible(

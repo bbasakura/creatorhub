@@ -199,6 +199,38 @@ async def _choose_radio(page, label: str) -> bool:
     return False
 
 
+async def _set_ai_declaration(page) -> bool:
+    """尝试勾选或设置「自主声明」为「内容由AI生成」(合规推荐，选不上不阻断发布)。"""
+    try:
+        entry = None
+        for txt in ["请选择声明类型", "请选择自主声明", "添加自主声明", "自主声明"]:
+            c = page.get_by_text(txt).first
+            if await c.count() and await c.is_visible():
+                entry = c
+                break
+        if entry is not None:
+            await entry.click(timeout=3000)
+            await page.wait_for_timeout(800)
+            ai_opt = page.locator('label.semi-radio, .semi-radio').filter(has_text="内容由AI生成").first
+            if await ai_opt.count() and await ai_opt.is_visible():
+                await ai_opt.click(timeout=3000)
+                await page.wait_for_timeout(400)
+            else:
+                ai_txt = page.get_by_text("内容由AI生成", exact=True).first
+                if await ai_txt.count() and await ai_txt.is_visible():
+                    await ai_txt.click(timeout=3000)
+                    await page.wait_for_timeout(400)
+            confirm_btn = page.locator('button.semi-button-primary').filter(has_text="确定").first
+            if await confirm_btn.count() and await confirm_btn.is_visible():
+                await confirm_btn.click(timeout=3000)
+                await page.wait_for_timeout(600)
+            _log("已设置自主声明为「内容由AI生成」")
+            return True
+    except Exception as e:
+        _log(f"设置自主声明提示: {e!r} (安全跳过)")
+    return False
+
+
 async def _apply_publish_settings(page, visibility: str, allow_save: bool) -> None:
     """设置「谁可以看」「保存权限」。公开 / 允许为抖音默认值,非默认才点,减少误点。"""
     vis_label = {"friends": "好友可见", "private": "仅自己可见"}.get(visibility, "")
@@ -206,6 +238,7 @@ async def _apply_publish_settings(page, visibility: str, allow_save: bool) -> No
         await _choose_radio(page, vis_label)
     if not allow_save:                  # 允许=默认,只在「不允许」时点
         await _choose_radio(page, "不允许")
+    await _set_ai_declaration(page)
 
 
 async def publish_douyin(mgr: BrowserManager, identity: Identity,
