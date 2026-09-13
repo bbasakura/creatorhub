@@ -1479,7 +1479,7 @@ async def list_accounts(platform: str | None = None):
                               .where(MonitorTarget.account_id == a.id)).all())
             environment = None
             environment_check = None
-            if browser is not None:
+            if browser is not None and a.platform != "youtube":
                 try:
                     account_identity = browser.identity_for(a)
                     environment = browser.environment_snapshot(
@@ -1499,6 +1499,8 @@ async def list_accounts(platform: str | None = None):
                 _xhs_has_read_login_state(a.storage_state)
                 if a.platform == "xhs" else bool(a.storage_state)
             )
+            if a.platform == "youtube":
+                has_creator = has_read_login = bool(a.credential_ref) and a.status == "active"
             out.append({
                 "id": a.id, "platform": a.platform, "nickname": a.nickname, "status": a.status,
                 "sec_uid": a.sec_uid, "douyin_id": a.douyin_id, "avatar": a.avatar,
@@ -1507,7 +1509,7 @@ async def list_accounts(platform: str | None = None):
                 "has_read_login": has_read_login,
                 "kind": "creator" if has_creator else "fetch",
                 "has_storage": has_read_login,
-                "login_type": "cookie" if a.cookie else "scan",
+                "login_type": "oauth" if a.platform == "youtube" else "cookie" if a.cookie else "scan",
                 "monitor_count": used,
                 # 风控隔离画像
                 "proxy": _mask_proxy(a.proxy),
@@ -2969,9 +2971,28 @@ async def refresh_account_profile(account_id: int):
         acc = s.get(DouyinAccount, account_id)
         if not acc:
             raise HTTPException(404, "账号不存在")
-        state = acc.storage_state or acc.creator_storage_state
         platform = acc.platform
+        state = acc.storage_state or acc.creator_storage_state
         creator_state = acc.creator_storage_state or ""
+        credential_ref = acc.credential_ref or ""
+
+    if platform == "youtube":
+        from .platforms.youtube.client import fetch_youtube_channel_stats
+        try:
+            stats = await fetch_youtube_channel_stats(credential_ref)
+            if stats:
+                with get_session() as s:
+                    a = s.get(DouyinAccount, account_id)
+                    if a:
+                        a.nickname = stats.get("nickname", a.nickname)
+                        a.avatar = stats.get("avatar", a.avatar)
+                        a.follower_count = stats.get("follower_count", a.follower_count)
+                        a.aweme_count = stats.get("aweme_count", a.aweme_count)
+                        s.add(a); s.commit()
+            return {"ok": True, "message": "YouTube 频道资料已刷新"}
+        except Exception as e:
+            raise HTTPException(400, f"YouTube 刷新失败: {e}")
+
     if not state:
         raise HTTPException(400, "该账号无浏览器登录态(Cookie 粘贴账号可能不含完整态),无法拉取资料")
 
@@ -3073,7 +3094,7 @@ def _work_dict(w: AccountWork) -> dict:
 
 
 @app.get("/api/account-works")
-async def list_account_works(account_id: int, limit: int = 200):
+async def list_account_works(account_id: int, limit: int = 500):
     with get_session() as s:
         q = (select(AccountWork).where(AccountWork.account_id == account_id)
              .order_by(AccountWork.create_time.desc()).limit(limit))
@@ -3083,21 +3104,73 @@ async def list_account_works(account_id: int, limit: int = 200):
 @app.post("/api/accounts/{account_id}/works/sync")
 async def sync_account_works(account_id: int):
     """打开账号自己的主页,拦截抓取本账号已发布作品,落库(upsert)。"""
-    if browser is None:
-        raise HTTPException(503, "浏览器未就绪")
-    if engine is None:
-        raise HTTPException(503, "引擎未就绪")
     with get_session() as s:
         acc = s.get(DouyinAccount, account_id)
         if not acc:
             raise HTTPException(404, "账号不存在")
         if acc.status == "invalid":
             raise HTTPException(400, "账号登录态已失效")
-        if engine._proxy_bad(acc):
-            raise HTTPException(400, "账号代理不可用")
         platform = acc.platform
         uid = acc.sec_uid or ""
-        identity = browser.identity_for(acc)
+        credential_ref = acc.credential_ref or ""
+
+    if platform == "youtube":
+        from .platforms.youtube.client import fetch_youtube_channel_stats, fetch_youtube_my_works
+        try:
+            stats = await fetch_youtube_channel_stats(credential_ref)
+            if stats:
+                with get_session() as s_acc:
+                    cur_acc = s_acc.get(DouyinAccount, account_id)
+                    if cur_acc:
+                        cur_acc.follower_count = stats.get("follower_count", cur_acc.follower_count)
+                        cur_acc.aweme_count = stats.get("aweme_count", cur_acc.aweme_count)
+                        if stats.get("avatar"):
+                            cur_acc.avatar = stats["avatar"]
+                        if stats.get("nickname"):
+                            cur_acc.nickname = stats["nickname"]
+                        s_acc.add(cur_acc)
+                        today_str = datetime.now().strftime("%Y-%m-%d")
+                        existing_snap = s_acc.exec(select(AccountStatSnapshot).where(
+                            AccountStatSnapshot.account_id == account_id,
+                            AccountStatSnapshot.date == today_str
+                        )).first()
+                        if not existing_snap:
+                            s_acc.add(AccountStatSnapshot(
+                                platform="youtube", account_id=account_id, date=today_str,
+                                follower_count=stats.get("follower_count", 0),
+                                aweme_count=stats.get("aweme_count", 0),
+                                total_play=stats.get("view_count", 0),
+                            ))
+                        s_acc.commit()
+            items = await fetch_youtube_my_works(credential_ref, max_results=500)
+            now = datetime.utcnow()
+            added = 0
+            with get_session() as s:
+                for w in items:
+                    existing = s.exec(select(AccountWork).where(
+                        AccountWork.account_id == account_id,
+                        AccountWork.item_id == w["item_id"])).first()
+                    if existing:
+                        for k, v in w.items():
+                            setattr(existing, k, v)
+                        existing.fetched_at = now
+                        s.add(existing)
+                    else:
+                        s.add(AccountWork(platform=platform, account_id=account_id,
+                                          fetched_at=now, **w))
+                        added += 1
+                s.commit()
+            return {"ok": True, "fetched": len(items), "added": added}
+        except Exception as e:
+            raise HTTPException(400, f"YouTube 视频同步失败: {e}")
+
+    if browser is None:
+        raise HTTPException(503, "浏览器未就绪")
+    if engine is None:
+        raise HTTPException(503, "引擎未就绪")
+    if engine._proxy_bad(acc):
+        raise HTTPException(400, "账号代理不可用")
+    identity = browser.identity_for(acc)
     async def _fetch():
         return await fetch_account_works(browser, identity, platform, uid)
 
@@ -3249,8 +3322,6 @@ async def list_follows(account_id: int, direction: str = "following", limit: int
 
 @app.post("/api/accounts/{account_id}/follows/sync")
 async def sync_follows(account_id: int, direction: str = "following"):
-    if browser is None:
-        raise HTTPException(503, "浏览器未就绪")
     if direction not in ("following", "fan"):
         raise HTTPException(400, "direction 仅支持 following | fan")
     with get_session() as s:
@@ -3259,6 +3330,31 @@ async def sync_follows(account_id: int, direction: str = "following"):
             raise HTTPException(404, "账号不存在")
         platform = acc.platform
         uid = acc.sec_uid or ""
+        credential_ref = acc.credential_ref or ""
+
+    if platform == "youtube":
+        if direction == "fan":
+            return {"ok": True, "fetched": 0, "added": 0, "message": "YouTube 因 Google 隐私政策不提供粉丝个人列表，总粉丝数已在「数据」与账号资料中展示"}
+        from .platforms.youtube.client import fetch_youtube_subscriptions
+        try:
+            users = await fetch_youtube_subscriptions(credential_ref, max_results=50)
+            now = datetime.utcnow()
+            with get_session() as s:
+                for old in s.exec(select(FollowEdge).where(
+                        FollowEdge.account_id == account_id,
+                        FollowEdge.direction == direction)).all():
+                    s.delete(old)
+                for u in users:
+                    s.add(FollowEdge(platform=platform, account_id=account_id,
+                                     direction=direction, fetched_at=now, **u))
+                s.commit()
+            return {"ok": True, "fetched": len(users), "added": len(users)}
+        except Exception as e:
+            raise HTTPException(400, f"YouTube 订阅频道同步失败: {e}")
+
+    if browser is None:
+        raise HTTPException(503, "浏览器未就绪")
+    with get_session() as s:
         identity = browser.identity_for(acc)
         known = {f.uid for f in s.exec(select(FollowEdge).where(
             FollowEdge.account_id == account_id,
@@ -3549,6 +3645,17 @@ async def fetch_dm_conversation_history(account_id: int, conv_id: str,
 @app.get("/api/hub/summary")
 async def hub_summary(account_id: int):
     with get_session() as s:
+        acc = s.get(DouyinAccount, account_id)
+        if acc and acc.platform == "youtube":
+            return {
+                "works": acc.aweme_count or len(s.exec(select(AccountWork.id)
+                            .where(AccountWork.account_id == account_id)).all()),
+                "following": len(s.exec(select(FollowEdge.id)
+                                .where(FollowEdge.account_id == account_id,
+                                       FollowEdge.direction == "following")).all()),
+                "fans": acc.follower_count or 0,
+                "dm": 0,
+            }
         def _n(q):
             return len(s.exec(q).all())
         return {
@@ -8190,6 +8297,10 @@ class PublishIn(BaseModel):
     location: str = ""                    # 视频号:位置 POI(可选)
     media_paths: list[str] = []
     visibility: str = "public"            # 抖音:public | friends | private
+    allow_duplicate: bool = False
+    youtube_category: str = "22"
+    made_for_kids: bool = False
+    thumbnail_path: str = ""
     allow_save: bool = True               # 抖音:是否允许他人保存
     scheduled_at: str | None = None       # ISO 时间(本地),空=尽快发
 
@@ -8210,6 +8321,8 @@ def _publish_dict(t: PublishTask) -> dict:
         "id": t.id, "platform": t.platform, "account_id": t.account_id,
         "media_type": t.media_type, "title": t.title, "desc": t.desc,
         "topics": t.topics, "location": t.location,
+        "operation": "draft" if t.platform == "wechat_mp" else t.operation,
+        "platform_result_id": t.platform_result_id,
         "status": t.status, "result_url": t.result_url,
         "visibility": t.visibility, "allow_save": t.allow_save,
         "error": t.error, "media_count": len(json.loads(t.media_json or "[]")),
@@ -8240,6 +8353,41 @@ async def list_publish(platform: str | None = None):
 
 @app.post("/api/publish")
 async def add_publish(body: PublishIn):
+    import hashlib
+    fingerprint = hashlib.sha256(json.dumps({"account": body.account_id,
+        "type": body.media_type, "title": body.title, "desc": body.desc,
+        "files": body.media_paths, "tags": body.topics}, sort_keys=True).encode()).hexdigest()
+    with get_session() as session:
+        previous = session.exec(select(PublishTask).where(PublishTask.content_fingerprint == fingerprint,
+            PublishTask.status.in_(["pending", "publishing", "uncertain", "done"]))).first()
+        if previous and not body.allow_duplicate:
+            raise HTTPException(409, "相同内容已有任务，请先核对结果；确需再次上传须明确允许重复")
+    with get_session() as session:
+        account = session.get(DouyinAccount, body.account_id)
+        if account and account.platform == "youtube":
+            if body.media_type != "video" or len(body.media_paths) != 1 or not Path(body.media_paths[0]).is_file():
+                raise HTTPException(400, "YouTube需要一个有效视频文件")
+            if not account.credential_ref or account.status != "active":
+                raise HTTPException(400, "请先完成YouTube频道授权")
+            visibility = body.visibility if "visibility" in body.model_fields_set else "private"
+            if visibility not in ("private", "unlisted", "public") or body.scheduled_at:
+                raise HTTPException(400, "可见性无效或使用了尚不支持的定时上传")
+            if not body.title.strip() or len(body.title) > 100 or len(body.desc) > 5000:
+                raise HTTPException(400, "YouTube标题须1至100字，描述最多5000字")
+            task = PublishTask(content_fingerprint=fingerprint, platform="youtube", account_id=account.id, media_type="video",
+                title=body.title, desc=body.desc, topics=body.topics,
+                visibility=visibility, operation="upload", media_json=json.dumps(body.media_paths),
+                youtube_category=body.youtube_category, made_for_kids=body.made_for_kids,
+                thumbnail_path=body.thumbnail_path)
+            session.add(task); session.commit(); session.refresh(task)
+            return _publish_dict(task)
+        if account and account.platform == "wechat_mp":
+            if body.media_type != "article":
+                raise HTTPException(400, "当前仅开放图文草稿；贴图和视频等待真实后台校准")
+            if not body.title.strip() or len(body.title) > 64:
+                raise HTTPException(400, "公众号图文标题须1至64字")
+            if any(not Path(p).is_file() for p in body.media_paths):
+                raise HTTPException(400, "配图不存在，不允许静默遗漏")
     paths = [p for p in body.media_paths if Path(p).exists()] if body.media_paths else []
     with get_session() as s:
         acc = s.get(DouyinAccount, body.account_id)
@@ -8261,6 +8409,8 @@ async def add_publish(body: PublishIn):
             raise HTTPException(400, "该账号不可发布:请对该号完成「小红书扫码登录」或「创作者登录」")
         vis = body.visibility if body.visibility in ("public", "friends", "private") else "public"
         t = PublishTask(
+            content_fingerprint=fingerprint,
+            operation="draft" if acc.platform == "wechat_mp" else "publish",
             platform=acc.platform, account_id=body.account_id, media_type=body.media_type,
             title=body.title.strip()[:64 if acc.platform == "wechat_mp" else 20], desc=body.desc, topics=body.topics,
             location=(body.location or "").strip()[:60],
@@ -8285,7 +8435,10 @@ async def update_publish(tid: int, body: PublishUpdate):
                 raise HTTPException(400, "发布账号不存在、登录态失效或与任务平台不匹配")
             t.account_id = body.account_id
         if body.title is not None:
-            t.title = body.title.strip()[:20]
+            cap = 100 if t.platform == "youtube" else 64 if t.platform == "wechat_mp" else 20
+            if len(body.title.strip()) > cap:
+                raise HTTPException(400, f"标题最多{cap}字，不会自动截断")
+            t.title = body.title.strip()
         if body.desc is not None:
             t.desc = body.desc
         if body.topics is not None:
@@ -8293,7 +8446,8 @@ async def update_publish(tid: int, body: PublishUpdate):
         if body.location is not None:
             t.location = body.location.strip()[:60]
         if body.visibility is not None:
-            if body.visibility not in ("public", "friends", "private"):
+            choices = ("public", "unlisted", "private") if t.platform == "youtube" else ("public", "friends", "private")
+            if body.visibility not in choices:
                 raise HTTPException(400, "可见范围须为 public、friends 或 private")
             t.visibility = body.visibility
         if body.allow_save is not None:
@@ -9246,3 +9400,196 @@ app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+class YoutubeConfigIn(BaseModel):
+    client_id: str
+    client_secret: str
+
+
+@app.get("/api/youtube/config")
+async def youtube_config(request: Request):
+    from .platforms.youtube.client import configured, get_client_credentials
+    host = request.headers.get("host") or "127.0.0.1:18888"
+    redirect_uri = f"http://{host}/api/youtube/callback"
+    cid, _ = get_client_credentials()
+    return {"configured": configured(), "redirect_uri": redirect_uri, "client_id": cid}
+
+
+@app.post("/api/youtube/config")
+async def save_youtube_config(body: YoutubeConfigIn, request: Request):
+    if not request.client or request.client.host not in ("127.0.0.1", "::1"):
+        raise HTTPException(403, "仅允许本机配置")
+    cid = body.client_id.strip()
+    csec = body.client_secret.strip()
+    if not cid or not csec:
+        raise HTTPException(400, "Client ID 和 Client Secret 均不能为空")
+    env_file = Path(__file__).resolve().parents[1] / ".env"
+    lines = []
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            if not line.startswith(("YOUTUBE_CLIENT_ID=", "YOUTUBE_CLIENT_SECRET=")):
+                lines.append(line)
+    lines.append(f"YOUTUBE_CLIENT_ID={cid}")
+    lines.append(f"YOUTUBE_CLIENT_SECRET={csec}")
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.environ["YOUTUBE_CLIENT_ID"] = cid
+    os.environ["YOUTUBE_CLIENT_SECRET"] = csec
+    return {"ok": True, "message": "Google 客户端配置已保存"}
+
+
+@app.post("/api/youtube/authorize")
+async def youtube_authorize(request: Request):
+    if not request.client or request.client.host not in ("127.0.0.1", "::1"):
+        raise HTTPException(403, "YouTube授权仅允许本机发起")
+    origin = request.headers.get("origin", "")
+    if origin:
+        from urllib.parse import urlsplit
+        parsed = urlsplit(origin)
+        if parsed.hostname not in ("127.0.0.1", "localhost"):
+            raise HTTPException(403, "授权来源不匹配")
+    _require_risk_admin(request)
+    from .platforms.youtube.client import start_oauth
+    host = request.headers.get("host") or "127.0.0.1:18888"
+    redirect_uri = f"http://{host}/api/youtube/callback"
+    try:
+        return {"url": start_oauth(redirect_uri=redirect_uri)}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.get("/api/youtube/callback")
+async def youtube_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    from fastapi.responses import HTMLResponse
+    from .platforms.youtube.client import finish_oauth
+
+    if error:
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>YouTube 授权失败</title>
+        <style>body{{font-family:-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}}
+        .card{{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:32px;max-width:480px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.5);}}
+        h2{{color:#f85149;margin-top:0;}}p{{line-height:1.6;color:#8b949e;}}a{{display:inline-block;margin-top:16px;background:#238636;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:600;}}</style></head>
+        <body><div class="card"><h2>❌ Google 授权已取消或失败</h2><p>Google 返回原因: {error}</p><a href="/#accounts">返回 CreatorHub 面板</a></div></body></html>"""
+        return HTMLResponse(content=html, status_code=400)
+
+    if not request.client or request.client.host not in ("127.0.0.1", "::1") or not code or not state:
+        html = """<!DOCTYPE html><html><head><meta charset="utf-8"><title>授权回调无效</title>
+        <style>body{font-family:-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
+        .card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:32px;max-width:480px;text-align:center;}
+        h2{color:#f85149;margin-top:0;}p{line-height:1.6;color:#8b949e;}a{display:inline-block;margin-top:16px;background:#238636;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:600;}</style></head>
+        <body><div class="card"><h2>❌ 缺少授权参数或非法访问</h2><p>回调参数中未包含 code 或 state，请重新发起授权。</p><a href="/#accounts">返回 CreatorHub 面板</a></div></body></html>"""
+        return HTMLResponse(content=html, status_code=400)
+
+    try:
+        result = await finish_oauth(code, state)
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>YouTube 授权失败</title>
+        <style>body{{font-family:-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}}
+        .card{{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:32px;max-width:520px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.5);}}
+        h2{{color:#f85149;margin-top:0;}}p{{line-height:1.6;color:#8b949e;text-align:left;background:#0d1117;padding:12px;border-radius:6px;word-break:break-all;}}
+        a{{display:inline-block;margin-top:16px;background:#238636;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:600;}}</style></head>
+        <body><div class="card"><h2>❌ 授权处理未完成</h2><p>{exc}</p><a href="/#accounts">返回 CreatorHub 重新授权</a></div></body></html>"""
+        return HTMLResponse(content=html, status_code=400)
+
+    with get_session() as session:
+        account = session.exec(select(DouyinAccount).where(
+            DouyinAccount.platform == "youtube", DouyinAccount.sec_uid == result["channel_id"])).first()
+        if not account:
+            account = DouyinAccount(platform="youtube", sec_uid=result["channel_id"])
+        account.nickname = result["nickname"]
+        account.credential_ref = result["credential_ref"]
+        account.status = "active"
+        session.add(account); session.commit()
+
+    channel_name = result['nickname']
+    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>YouTube 授权成功</title>
+    <style>body{{font-family:-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}}
+    .card{{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:32px;max-width:480px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.5);}}
+    h2{{color:#3fb950;margin-top:0;}}p{{line-height:1.6;color:#8b949e;}}a{{display:inline-block;margin-top:16px;background:#238636;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:600;}}</style>
+    <script>
+      try {{
+        if (window.opener && !window.opener.closed) {{
+          window.opener.location.reload();
+          setTimeout(() => window.close(), 1200);
+        }}
+      }} catch(e) {{}}
+    </script>
+    </head>
+    <body><div class="card"><h2>🎉 YouTube 授权成功！</h2><p>频道 <b>{channel_name}</b> 已成功绑定到 CreatorHub。</p><p>窗口即将自动关闭，或点击下方按钮直接返回。</p><a href="/#accounts">返回 CreatorHub 面板</a></div></body></html>"""
+    return HTMLResponse(content=html)
+
+
+@app.post("/api/youtube/accounts/{account_id}/disconnect")
+async def youtube_disconnect(account_id: int, request: Request):
+    if not request.client or request.client.host not in ("127.0.0.1", "::1"):
+        raise HTTPException(403, "仅允许本机操作")
+    _require_risk_admin(request)
+    from .platforms.youtube.client import _path
+    with get_session() as session:
+        account = session.get(DouyinAccount, account_id)
+        if not account or account.platform != "youtube":
+            raise HTTPException(404)
+        active = session.exec(select(PublishTask).where(PublishTask.account_id == account_id,
+            PublishTask.status == "publishing")).first()
+        if active:
+            raise HTTPException(409, "上传中不能解除本地关联")
+        if account.credential_ref:
+            _path(account.credential_ref).unlink(missing_ok=True)
+        account.credential_ref = ""
+        account.status = "invalid"
+        session.add(account); session.commit()
+    return {"ok": True, "message": "已解除本地关联；可在Google账号安全页撤销远端授权"}
+
+
+@app.post("/api/youtube/tasks/{task_id}/resume")
+async def youtube_resume(task_id: int, request: Request):
+    if not request.client or request.client.host not in ("127.0.0.1", "::1"):
+        raise HTTPException(403, "仅允许本机操作")
+    _require_risk_admin(request)
+    from .platforms.youtube.client import load
+    with get_session() as session:
+        task = session.get(PublishTask, task_id)
+        if not task or task.platform != "youtube" or task.status not in ("uncertain", "failed"):
+            raise HTTPException(409, "任务不可恢复")
+        try:
+            record = load("upload_" + str(task_id))
+        except Exception:
+            raise HTTPException(409, "没有可核验的上传会话，不允许新建上传代替恢复")
+        if not (record.get("session") or record.get("video_id")):
+            raise HTTPException(409, "上传会话无效")
+        task.status = "pending"
+        task.error = ""
+        session.add(task); session.commit()
+    return {"ok": True, "message": "已安排查询原会话并恢复，不新建视频"}
+
+
+class D2YImportIn(BaseModel):
+    batch_size: int = 20
+    visibility: str = "public"
+    interval_seconds: int = 150
+    account_id: int | None = None
+
+
+@app.post("/api/youtube/d2y/import-batch")
+async def import_d2y_batch(body: D2YImportIn = D2YImportIn()):
+    try:
+        import sys
+        d2y_pkg = r"D:\soft\Codex\ai-narrator"
+        if d2y_pkg not in sys.path:
+            sys.path.insert(0, d2y_pkg)
+        from src.douyin_to_youtube.d2y_to_creatorhub import schedule_d2y_batch_into_creatorhub
+        res = schedule_d2y_batch_into_creatorhub(
+            batch_size=body.batch_size,
+            visibility=body.visibility,
+            interval_seconds=body.interval_seconds,
+            account_id=body.account_id,
+        )
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("message", "导入失败"))
+        return res
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"D2Y 导入异常: {e}")
+

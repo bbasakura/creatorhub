@@ -323,7 +323,7 @@ class MonitorEngine:
                         and str(getattr(row, "error", "") or "")
                         .startswith(_BROWSER_SUBMIT_MARKER)
                     )
-                    if submitted:
+                    if submitted or (model is PublishTask and row.platform in ("wechat_mp", "youtube")):
                         row.status = "uncertain"
                         row.scheduled_at = None
                         if hasattr(row, "done_at"):
@@ -2759,7 +2759,7 @@ class MonitorEngine:
             t = s.get(PublishTask, task_id)
             if not t:
                 return {"ok": False, "error": "任务不存在"}
-            if t.status in ("done", "publishing"):
+            if t.status in ("done", "publishing", "uncertain", "canceled"):
                 return {"ok": False, "error": f"任务状态为 {t.status}"}
             acc = s.get(DouyinAccount, t.account_id) if t.account_id else None
             if not acc:
@@ -2771,6 +2771,19 @@ class MonitorEngine:
                 self._defer_row(t, "账号登录态已失效，等待重新登录", fallback_seconds=900)
                 s.add(t); s.commit()
                 return {"ok": False, "error": "account_invalid"}
+            if t.platform == "youtube":
+                if acc.platform != "youtube":
+                    return {"ok": False, "error": "账号平台不匹配"}
+                from ..platforms.youtube.client import upload_video
+                files = _loads_list(t.media_json)
+                if len(files) != 1:
+                    return {"ok": False, "error": "YouTube需要一个视频"}
+                t.status = "publishing"
+                s.add(t); s.commit()
+                ok, url, err = await upload_video(t.id, acc.credential_ref, acc.sec_uid,
+                    files[0], t.title, t.desc, [x.strip() for x in t.topics.split(",") if x.strip()],
+                    t.visibility, t.youtube_category, t.made_for_kids, t.thumbnail_path)
+                return await self._finish_publish(task_id, ok, url, err, platform="youtube")
             if self._proxy_bad(acc):
                 self._defer_row(t, "账号代理当前不可用", fallback_seconds=300)
                 s.add(t); s.commit()
@@ -2894,19 +2907,53 @@ class MonitorEngine:
                 account_id = t.account_id
                 if ok:
                     t.status = "done"
+                    if platform == "wechat_mp" and "#draft=" in url:
+                        t.platform_result_id = url.split("#draft=", 1)[1]
+                    elif platform == "youtube" and "watch?v=" in url:
+                        t.platform_result_id = url.split("watch?v=", 1)[1]
                     t.done_at = datetime.utcnow()
+                    if t.source_platform == "d2y" and t.source_content_id:
+                        try:
+                            import sys
+                            d2y_pkg = r"D:\soft\Codex\ai-narrator"
+                            if d2y_pkg not in sys.path:
+                                sys.path.insert(0, d2y_pkg)
+                            from src.douyin_to_youtube.d2y_to_creatorhub import sync_d2y_uploaded_result
+                            sync_d2y_uploaded_result(t.source_content_id, t.platform_result_id, success=True)
+                        except Exception as sync_exc:
+                            print(f"[monitor] d2y sync error: {sync_exc}")
                 elif uncertain:
                     # Submission crossed the click boundary but success evidence
                     # was lost.  Never enqueue it again automatically.
                     t.status = "uncertain"
                     t.scheduled_at = None
                     t.done_at = None
+                    if t.source_platform == "d2y" and t.source_content_id:
+                        try:
+                            import sys
+                            d2y_pkg = r"D:\soft\Codex\ai-narrator"
+                            if d2y_pkg not in sys.path:
+                                sys.path.insert(0, d2y_pkg)
+                            from src.douyin_to_youtube.d2y_to_creatorhub import sync_d2y_uploaded_result
+                            sync_d2y_uploaded_result(t.source_content_id, "", success=False, error_msg="uncertain")
+                        except Exception:
+                            pass
                 elif failure and failure.controlled and failure.category in {
                         RiskCategory.RISK, RiskCategory.NETWORK, RiskCategory.AUTH}:
                     self._defer_row(t, err, failure.next_allowed_at,
                                     signal=failure.signal)
                 else:
                     t.status = "failed"
+                    if t.source_platform == "d2y" and t.source_content_id:
+                        try:
+                            import sys
+                            d2y_pkg = r"D:\soft\Codex\ai-narrator"
+                            if d2y_pkg not in sys.path:
+                                sys.path.insert(0, d2y_pkg)
+                            from src.douyin_to_youtube.d2y_to_creatorhub import sync_d2y_uploaded_result
+                            sync_d2y_uploaded_result(t.source_content_id, "", success=False, error_msg=str(err))
+                        except Exception:
+                            pass
                 t.result_url = url or t.result_url
                 t.error = "" if ok else err
                 s.add(t); s.commit()

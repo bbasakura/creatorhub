@@ -44,6 +44,9 @@ def init_db(db_path: str):
     )
     SQLModel.metadata.create_all(_engine)
     _auto_migrate(_engine)
+    if inspect(_engine).has_table("publishtask"):
+        with _engine.begin() as conn:
+            conn.execute(text("UPDATE publishtask SET operation='draft' WHERE platform='wechat_mp' AND operation='publish'"))
     return _engine
 
 

@@ -104,8 +104,16 @@
   .pswitch button.active[data-pf="xhs"] { background:var(--xhs-soft); color:var(--xhs); border-color:var(--xhs-ring); }
   .pswitch button.active[data-pf="kuaishou"] { background:rgba(255,121,2,.16); color:#ff7902; border-color:rgba(255,121,2,.4); }
   .pswitch button.active[data-pf="shipinhao"] { background:rgba(7,193,96,.16); color:#07c160; border-color:rgba(7,193,96,.4); }
-.pswitch button.active[data-pf="wechat_mp"] { background:rgba(7,193,96,.16); color:#07c160; border-color:rgba(7,193,96,.4); }
+  .pswitch button.active[data-pf="wechat_mp"] { background:rgba(7,193,96,.16); color:#07c160; border-color:rgba(7,193,96,.4); }
+  .pswitch button.active[data-pf="youtube"] { background:rgba(255,34,34,.16); color:#ff3333; border-color:rgba(255,34,34,.4); }
   .hidden { display:none !important; }
+
+  body.pf-youtube {
+    --acc:#ff2222; --acc-hover:#e60000; --acc-active:#cc0000;
+    --acc-soft:rgba(255,34,34,.12); --acc-ring:rgba(255,34,34,.45);
+  }
+  body.pf-youtube .brand-mark { background:linear-gradient(135deg,#ff0000,#ff4444); box-shadow:0 4px 14px -4px rgba(255,0,0,.55); }
+  body.pf-youtube .badge-lite { color:var(--acc); background:var(--acc-soft); }
 
   /* ════ 小红书:浅色暖调主题(整页随平台切换;抖音保持深色) ════ */
   body.pf-xhs {
@@ -196,10 +204,10 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
   body.pf-shipinhao input[type=date]::-webkit-calendar-picker-indicator,
   body.pf-shipinhao input[type=datetime-local]::-webkit-calendar-picker-indicator { filter:invert(.7); }
 
-  /* ── 小红书笔记瀑布流卡片 ── */
-  .xhs-grid { columns:240px; column-gap:14px; }
+  /* ── 作品卡片网格布局（严格对齐） ── */
+  .xhs-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:14px; }
   .ncard {
-    position:relative; break-inside:avoid; margin:0 0 14px;
+    position:relative; margin:0; display:flex; flex-direction:column; height:100%;
     background:var(--surface); border:1px solid var(--line); border-radius:16px;
     overflow:hidden; box-shadow:var(--sh-sm);
     transition:transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease);
@@ -217,13 +225,13 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
   }
   .ncard-type svg { width:12px; height:12px; }
   .ncard-sel { position:absolute; top:8px; right:8px; width:18px; height:18px; accent-color:var(--acc); cursor:pointer; }
-  .ncard-body { padding:11px 12px 12px; }
+  .ncard-body { padding:11px 12px 12px; display:flex; flex-direction:column; flex:1; }
   .ncard-title { font-size:13px; line-height:1.45; color:var(--fg); margin:0 0 9px;
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:38px; }
   .ncard-foot { display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--mut); }
   .ncard-foot .like { margin-left:auto; display:inline-flex; align-items:center; gap:3px; }
   .ncard-foot .like svg { width:13px; height:13px; color:var(--acc); }
-  .ncard-actions { display:flex; gap:6px; margin-top:10px; padding-top:10px; border-top:1px solid var(--line-soft); }
+  .ncard-actions { display:flex; gap:6px; margin-top:auto; padding-top:10px; border-top:1px solid var(--line-soft); }
   .ncard-actions button { flex:1; }
   /* 作品评论弹窗条目 */
   .wc-item { padding:10px 2px; border-bottom:1px solid var(--line-soft); }
@@ -1815,6 +1823,7 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
     </div>
   </div>
   <div class="pswitch" role="tablist" aria-label="平台切换">
+    <button role="tab" data-pf="youtube" onclick="switchPlatform('youtube')">YouTube</button>
     <button role="tab" data-pf="douyin" onclick="switchPlatform('douyin')">抖音</button>
     <button role="tab" data-pf="xhs" onclick="switchPlatform('xhs')">小红书</button>
     <button role="tab" data-pf="kuaishou" onclick="switchPlatform('kuaishou')">快手</button>
@@ -1831,21 +1840,21 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
   <nav class="nav" aria-label="主导航">
     <button class="navitem" data-tab="overview" onclick="switchTab('overview', true)"><svg><use href="#i-bolt"/></svg><span class="nav-label">总览</span></button>
     <button class="navitem" data-tab="accounts" onclick="switchTab('accounts', true)"><svg><use href="#i-card"/></svg><span class="nav-label">账号</span><span class="nav-badge" id="tb-acc">0</span></button>
-    <button class="navitem notsh-only" data-tab="monitors" onclick="switchTab('monitors', true)"><svg><use href="#i-target"/></svg><span class="nav-label">作品监控</span><span class="nav-badge" id="tb-mon">0</span></button>
+    <button class="navitem notsh-only notyt-only" data-tab="monitors" onclick="switchTab('monitors', true)"><svg><use href="#i-target"/></svg><span class="nav-label">作品监控</span><span class="nav-badge" id="tb-mon">0</span></button>
     <button class="navitem collect-only" data-tab="collections" onclick="switchTab('collections', true)"><svg><use href="#i-hash"/></svg><span class="nav-label">关键词采集</span><span class="nav-badge" id="tb-col">0</span></button>
-    <button class="navitem notsh-only" data-tab="comments" onclick="switchTab('comments', true)"><svg><use href="#i-msg"/></svg><span class="nav-label">评论监控</span><span class="nav-badge" id="tb-watch">0</span></button>
+    <button class="navitem notsh-only notyt-only" data-tab="comments" onclick="switchTab('comments', true)"><svg><use href="#i-msg"/></svg><span class="nav-label">评论监控</span><span class="nav-badge" id="tb-watch">0</span></button>
     <button class="navitem dy-only" data-tab="danmaku" onclick="switchTab('danmaku', true)"><svg><use href="#i-msg"/></svg><span class="nav-label">弹幕监控</span><span class="nav-badge" id="tb-danmaku">0</span></button>
     <div class="nav-sep">本账号</div>
     <button class="navitem" data-tab="hub" onclick="switchTab('hub', true)"><svg><use href="#i-user"/></svg><span class="nav-label">账号管理</span></button>
     <div class="nav-sep">工具</div>
     <button class="navitem" data-tab="queue" onclick="switchTab('queue', true)"><svg><use href="#i-list"/></svg><span class="nav-label">任务队列</span><span class="nav-badge" id="tb-queue">0</span></button>
     <button class="navitem pub-only" data-tab="publish" onclick="switchTab('publish', true)"><svg><use href="#i-send"/></svg><span class="nav-label">发布</span><span class="nav-badge" id="tb-pub">0</span></button>
-    <button class="navitem notsh-only" data-tab="autocomment" onclick="switchTab('autocomment', true)"><svg><use href="#i-msg"/></svg><span class="nav-label">自动评论</span><span class="nav-badge" id="tb-ac">0</span></button>
+    <button class="navitem notsh-only notyt-only" data-tab="autocomment" onclick="switchTab('autocomment', true)"><svg><use href="#i-msg"/></svg><span class="nav-label">自动评论</span><span class="nav-badge" id="tb-ac">0</span></button>
     <button class="navitem" data-tab="share-download" onclick="switchTab('share-download', true)"><svg><use href="#i-download"/></svg><span class="nav-label">链接下载</span></button>
     <button class="navitem" data-tab="notifications" onclick="switchTab('notifications', true)"><svg><use href="#i-bell"/></svg><span class="nav-label">通知</span></button>
     <button class="navitem" data-tab="settings" onclick="switchTab('settings', true)"><svg><use href="#i-settings"/></svg><span class="nav-label">设置</span></button>
-    <div class="nav-sep">安全</div>
-    <button class="navitem" data-tab="risk-control" onclick="switchTab('risk-control', true)"><svg><use href="#i-shield"/></svg><span class="nav-label">风控中心</span><span class="nav-badge" id="tb-risk">0</span></button>
+    <div class="nav-sep notyt-only">安全</div>
+    <button class="navitem notyt-only" data-tab="risk-control" onclick="switchTab('risk-control', true)"><svg><use href="#i-shield"/></svg><span class="nav-label">风控中心</span><span class="nav-badge" id="tb-risk">0</span></button>
   </nav>
 </aside>
 <main id="main-content" tabindex="-1">
@@ -1929,9 +1938,32 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
         <button class="ghost ks-only" onclick="toggleCookie()">Cookie 粘贴</button>
         <button class="sh-only" onclick="startChannelsLogin()"><svg><use href="#i-logo"/></svg>视频号登录</button>
         <button class="mp-only" onclick="startMpLogin()"><svg><use href="#i-logo"/></svg>公众号扫码登录</button>
+        <button class="yt-only" onclick="authorizeYoutube()"><svg><use href="#i-play"/></svg>授权 YouTube 频道 (OAuth)</button>
+        <button class="ghost yt-only" onclick="toggleYtConfig()"><svg><use href="#i-shield"/></svg>配置 Google 客户端</button>
       </div>
       <div id="qrbox" style="display:none;margin-bottom:14px">
         <div class="mut" id="qrstatus">准备中…</div>
+      </div>
+      <div id="ytconfigbox" style="display:none;margin-bottom:14px" class="stack yt-only">
+        <div style="background:var(--surface-2,#1e2230);border:1px solid var(--line,#2b3245);border-radius:8px;padding:16px">
+          <div style="font-weight:600;font-size:14px;margin-bottom:8px">Google Cloud OAuth 客户端配置</div>
+          <p class="mut" style="font-size:12px;line-height:1.6;margin-bottom:12px">
+            在 <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--acc)">Google Cloud Console</a> 中创建 OAuth 2.0 Web 客户端，启用 YouTube Data API v3，将重定向 URI 设为：<br>
+            <code id="yt-redirect-uri" style="user-select:all;color:#ff3333;background:rgba(255,51,51,.1);padding:2px 6px;border-radius:4px">http://127.0.0.1:18888/api/youtube/callback</code>
+          </p>
+          <div style="margin-bottom:10px">
+            <label class="field" for="yt-cfg-client-id">Client ID</label>
+            <input id="yt-cfg-client-id" placeholder="例如：xxxx.apps.googleusercontent.com" style="width:100%">
+          </div>
+          <div style="margin-bottom:14px">
+            <label class="field" for="yt-cfg-client-secret">Client Secret</label>
+            <input id="yt-cfg-client-secret" type="password" placeholder="例如：GOCSPX-xxxx" style="width:100%">
+          </div>
+          <div class="row">
+            <button onclick="saveYtConfig()"><svg><use href="#i-check"/></svg>保存配置</button>
+            <button class="ghost" onclick="toggleYtConfig(false)">关闭</button>
+          </div>
+        </div>
       </div>
       <div id="cookiebox" style="display:none" class="stack">
         <div>
@@ -2541,6 +2573,19 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
           </div>
         </div>
         <div>
+          <div class="yt-only hidden" style="margin-bottom:12px;background:var(--surface-2,#1e2230);border:1px solid var(--line,#2b3245);border-radius:8px;padding:12px 14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+              <div style="font-weight:600;font-size:13px"><svg style="vertical-align:-2px;margin-right:4px;width:14px;height:14px"><use href="#i-bolt"/></svg>D2Y 搬运切片矩阵批量排期 (1.8万部源库)</div>
+              <button type="button" class="sm" style="background:#ff3333;color:#fff;border-color:transparent;font-weight:600" onclick="importD2YBatch()"><svg><use href="#i-play"/></svg>一键排期今日 20 条 Shorts</button>
+            </div>
+            <div class="row" style="gap:14px;font-size:12px;align-items:center;flex-wrap:wrap">
+              <label>可见性: <select id="yt-visibility" style="padding:2px 8px;font-size:12px"><option value="public">公开 (public)</option><option value="private">私密 (private)</option><option value="unlisted">不公开 (unlisted)</option></select></label>
+              <label>间隔: <input id="yt-interval" value="150" type="number" style="width:60px;padding:2px 6px;font-size:12px"> 秒</label>
+              <label><input type="checkbox" id="yt-kids"> 面向儿童</label>
+              <label>分类: <input id="yt-category" value="22" style="width:40px;padding:2px 6px;font-size:12px"></label>
+              <button type="button" class="ghost sm" onclick="disconnectYoutube()" style="margin-left:auto">解除频道绑定</button>
+            </div>
+          </div>
           <label class="field" for="pub-title">标题(≤20 字)</label>
           <input id="pub-title" maxlength="20" placeholder="给作品起个标题">
         </div>
@@ -3085,16 +3130,25 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
       </div>
       <div class="tabbar" style="position:static;margin-bottom:14px">
         <button class="tab active" data-hubtab="myworks" onclick="switchHubTab('myworks')"><svg><use href="#i-film"/></svg>我的作品 <span class="tab-badge" id="hb-myworks">0</span></button>
-        <button class="tab notsh-only" data-hubtab="following" onclick="switchHubTab('following')"><svg><use href="#i-user"/></svg>关注 <span class="tab-badge" id="hb-following">0</span></button>
+        <button class="tab notsh-only" data-hubtab="following" onclick="switchHubTab('following')"><svg><use href="#i-user"/></svg><span id="hb-following-label">关注</span> <span class="tab-badge" id="hb-following">0</span></button>
         <button class="tab notsh-only" data-hubtab="fans" onclick="switchHubTab('fans')"><svg><use href="#i-heart"/></svg>粉丝 <span class="tab-badge" id="hb-fans">0</span></button>
-        <button class="tab notsh-only" data-hubtab="dm" onclick="switchHubTab('dm')"><svg><use href="#i-send"/></svg>私信 <span class="tab-badge" id="hb-dm">0</span></button>
+        <button class="tab notsh-only notyt-only" data-hubtab="dm" onclick="switchHubTab('dm')"><svg><use href="#i-send"/></svg>私信 <span class="tab-badge" id="hb-dm">0</span></button>
         <button class="tab" data-hubtab="stats" onclick="switchHubTab('stats')"><svg><use href="#i-eye"/></svg>数据 <span class="tab-badge" id="hb-stats">0</span></button>
       </div>
 
       <div data-hubpanel="myworks">
-        <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:12px">
-          <div class="hint" style="margin:0;flex:1">点「同步作品」用该账号登录态打开其主页抓取作品列表(小红书/快手自动走站内「我」入口;小红书首屏笔记从页面内嵌数据直读)。计数只统计当前所选账号。</div>
-          <button class="ghost sm" style="flex:0 0 auto" onclick="syncMyWorks()"><svg><use href="#i-download"/></svg>同步作品</button>
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+          <div class="hint" style="margin:0;flex:1">支持按发布时间降序或观看/播放量降序排序。</div>
+          <div class="row" style="gap:8px;align-items:center">
+            <label for="mw-sort" style="font-size:12px;color:var(--mut)">排序方式:</label>
+            <select id="mw-sort" onchange="onMyWorksSort()" class="ghost sm" style="padding:4px 8px;font-size:12px">
+              <option value="time_desc" selected>时间降序 (最新发布)</option>
+              <option value="play_desc">观看数降序 (播放最高)</option>
+              <option value="like_desc">点赞数降序</option>
+              <option value="comment_desc">评论数降序</option>
+            </select>
+            <button class="ghost sm" style="flex:0 0 auto" onclick="syncMyWorks()"><svg><use href="#i-download"/></svg>同步作品</button>
+          </div>
         </div>
         <div id="mw-grid" class="xhs-grid"></div>
       </div>

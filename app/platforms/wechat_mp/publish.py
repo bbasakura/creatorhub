@@ -1,9 +1,9 @@
 """微信公众号发布引擎 (浏览器自动化 + mp.weixin.qq.com CGI 接口)。
 
 支持：
-1. 图文草稿 (article/text): Markdown 转内联微信富文本，自动上传本地配图并替换为 mmbiz.qpic.cn 官方直链；
-2. 图片消息/贴图 (images): 上传多张贴图/图集并绑定标题正文，一键存为公众号图片消息草稿；
-3. 视频消息 (video): 上传短视频/长视频与封面图，支持保存草稿或直接发表 (freepublish)。
+1. 图文草稿 (article/text): 上传配图并保存，要求草稿ID与列表标题回读匹配。
+2. 贴图和视频草稿等待真实编辑器校准，当前拒绝执行。
+3. 此入口禁止发表；提交后证据不足返回 write_uncertain。
 """
 from __future__ import annotations
 
@@ -12,6 +12,9 @@ import base64
 import json
 import logging
 import mimetypes
+from html import escape
+
+from .draft_safety import saved_draft_id, verify_saved_draft
 import re
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -37,7 +40,7 @@ def _markdown_to_wechat_html(md_text: str) -> str:
     ]
 
     for line in lines:
-        line_s = line.strip()
+        line_s = escape(line.strip())
         if not line_s:
             html_parts.append('<p style="margin: 12px 0;"><br/></p>')
             continue
@@ -63,8 +66,8 @@ def _markdown_to_wechat_html(md_text: str) -> str:
                 f'<h4 style="font-size: 16px; font-weight: bold; color: #222222; margin: 16px 0 8px;">{title}</h4>'
             )
         # 引用
-        elif line_s.startswith("> "):
-            quote = line_s[2:].strip()
+        elif line_s.startswith("&gt; "):
+            quote = line_s[5:].strip()
             html_parts.append(
                 f'<blockquote style="background: #f7f7f7; border-left: 4px solid #d0d0d0; '
                 f'padding: 10px 14px; margin: 14px 0; color: #666666; font-size: 15px;">{quote}</blockquote>'
@@ -168,238 +171,62 @@ async def publish_mp(mgr: BrowserManager, identity: Identity,
       - "draft": 保存至草稿箱 (无次数限制，安全免扫码，推荐)；
       - "publish": 无推送发表 (freepublish，生成永久图文直链)。
     """
-    media_paths = media_paths or []
-    files = [str(Path(p)) for p in media_paths if p and Path(p).exists()]
-
+    if publish_mode != "draft":
+        return False, "", "unsupported_operation: 此入口仅允许保存草稿，不允许发表"
+    if media_type not in ("article", "text"):
+        return False, "", "unsupported_media: 贴图和视频草稿尚未通过真实编辑器校准，已暂停而非替换为图文"
+    if not title.strip() or len(title) > 64:
+        return False, "", "invalid_title: 图文标题须为1至64字"
+    if not desc.strip():
+        return False, "", "invalid_content: 图文正文不能为空"
+    files = [str(Path(p)) for p in (media_paths or [])]
+    if any(not Path(p).is_file() for p in files) or (cover_path and not Path(cover_path).is_file()):
+        return False, "", "missing_media: 配图或封面不存在"
     ctx = await mgr.open_headed(identity)
     page = await ctx.new_page()
-    ok, result_url, error = False, "", ""
-
+    submitted = False
     try:
-        # 打开公众号后台首页
         await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=40000)
-        await page.wait_for_timeout(3000)
-
-        if "login" in page.url:
-            return False, "", f"logged_out: 微信公众号未登录 (落到 {page.url})"
-
         token, err = await _get_mp_token(page)
         if not token:
-            return False, "", f"获取 token 失败: {err}"
-
-        # 整理标签与话题
-        tags = [t.strip().lstrip("#") for t in (topics or "").split(",") if t.strip()]
-        tag_str = " ".join(f"#{t}" for t in tags) if tags else ""
-
-        # 封面图处理
-        cover_file = cover_path if cover_path and Path(cover_path).exists() else (files[0] if files else "")
-        cover_cdn_url = ""
-        cover_file_id = 0
-        if cover_file:
-            up_res, up_err = await _upload_image_via_page(page, token, cover_file)
-            if up_res:
-                cover_cdn_url = up_res.get("cdn_url", "")
-                cover_file_id = up_res.get("file_id", 0)
-
-        # ── 模式一：图文草稿 (article / text) ──
-        if media_type in ("article", "text") or (not files and desc):
-            # 将正文转换为富文本 HTML
-            full_text = desc + (f"\n\n{tag_str}" if tag_str else "")
-            html_content = _markdown_to_wechat_html(full_text)
-
-            # 如果有额外配图，上传并在文末补充展示
-            if len(files) > 1 or (files and not cover_path):
-                img_section = ['<section style="margin-top: 20px; text-align: center;">']
-                for extra_img in files:
-                    if extra_img == cover_file and cover_cdn_url:
-                        img_section.append(f'<p><img src="{cover_cdn_url}" style="max-width: 100%; border-radius: 6px; margin: 8px 0;"/></p>')
-                    else:
-                        e_res, _ = await _upload_image_via_page(page, token, extra_img)
-                        if e_res and e_res.get("cdn_url"):
-                            img_section.append(f'<p><img src="{e_res["cdn_url"]}" style="max-width: 100%; border-radius: 6px; margin: 8px 0;"/></p>')
-                img_section.append('</section>')
-                html_content += "".join(img_section)
-
-            # 保存草稿
-            draft_payload = {
-                "token": token,
-                "lang": "zh_CN",
-                "f": "json",
-                "ajax": "1",
-                "isNew": "1",
-                "AppMsgId": "",
-                "count": "1",
-                "title0": title or "无标题图文",
-                "content0": html_content,
-                "digest0": (desc or title)[:120],
-                "author0": "",
-                "fileid0": str(cover_file_id),
-                "cdn_url0": cover_cdn_url,
-                "show_cover_pic0": "1",
-                "need_open_comment0": "1",
-                "only_fans_can_comment0": "0",
-            }
-
-            js_save = f"""
-            async () => {{
-                const params = new URLSearchParams({json.dumps(draft_payload, ensure_ascii=False)});
-                const resp = await fetch("{SAVE_DRAFT_URL}&token={token}&lang=zh_CN", {{
-                    method: "POST",
-                    headers: {{ "Content-Type": "application/x-www-form-urlencoded" }},
-                    body: params.toString(),
-                    credentials: "include"
-                }});
-                return await resp.json();
-            }}
-            """
-            save_res = await page.evaluate(js_save)
-            appmsg_id = (save_res.get("appMsgId") or save_res.get("appmsgid") or 
-                         save_res.get("data", {}).get("appMsgId") or "")
-
-            if appmsg_id or save_res.get("base_resp", {}).get("ret") == 0:
-                ok = True
-                result_url = f"{BASE_URL}/cgi-bin/appmsg?t=media/appmsg_edit&action=edit&type=77&appmsgid={appmsg_id}&token={token}&lang=zh_CN"
-                log.info("[wechat_mp_publish] 图文草稿保存成功: appmsg_id=%s", appmsg_id)
-            else:
-                error = f"保存图文草稿失败: {save_res}"
-
-        # ── 模式二：图片消息/贴图图集 (images) ──
-        elif media_type == "images":
-            if not files:
-                return False, "", "图片消息至少需要一张图片"
-
-            uploaded_cdn_urls = []
-            for fpath in files[:20]:  # 最多20张
-                ires, ierr = await _upload_image_via_page(page, token, fpath)
-                if ires and ires.get("cdn_url"):
-                    uploaded_cdn_urls.append(ires["cdn_url"])
-
-            if not uploaded_cdn_urls:
-                return False, "", "所有图片上传微信素材库均失败"
-
-            # 构造图片消息草稿
-            img_desc = (desc + f"\n{tag_str}").strip()
-            img_html = '<section style="padding: 10px;">'
-            for u in uploaded_cdn_urls:
-                img_html += f'<p style="text-align: center; margin: 10px 0;"><img src="{u}" style="max-width: 100%; border-radius: 8px;"/></p>'
-            if img_desc:
-                img_html += f'<p style="font-size: 15px; color: #333; line-height: 1.8; margin-top: 15px;">{img_desc}</p>'
-            img_html += '</section>'
-
-            draft_payload = {
-                "token": token,
-                "lang": "zh_CN",
-                "f": "json",
-                "ajax": "1",
-                "isNew": "1",
-                "AppMsgId": "",
-                "count": "1",
-                "title0": title or "精选贴图",
-                "content0": img_html,
-                "digest0": img_desc[:120],
-                "author0": "",
-                "fileid0": str(cover_file_id or 0),
-                "cdn_url0": cover_cdn_url or uploaded_cdn_urls[0],
-                "show_cover_pic0": "1",
-                "need_open_comment0": "1",
-                "only_fans_can_comment0": "0",
-            }
-
-            js_save = f"""
-            async () => {{
-                const params = new URLSearchParams({json.dumps(draft_payload, ensure_ascii=False)});
-                const resp = await fetch("{SAVE_DRAFT_URL}&token={token}&lang=zh_CN", {{
-                    method: "POST",
-                    headers: {{ "Content-Type": "application/x-www-form-urlencoded" }},
-                    body: params.toString(),
-                    credentials: "include"
-                }});
-                return await resp.json();
-            }}
-            """
-            save_res = await page.evaluate(js_save)
-            appmsg_id = save_res.get("appMsgId") or save_res.get("appmsgid") or ""
-            if appmsg_id or save_res.get("base_resp", {}).get("ret") == 0:
-                ok = True
-                result_url = f"{BASE_URL}/cgi-bin/appmsg?t=media/appmsg_edit&action=edit&type=10&appmsgid={appmsg_id}&token={token}&lang=zh_CN"
-                log.info("[wechat_mp_publish] 图片消息草稿保存成功: appmsg_id=%s", appmsg_id)
-            else:
-                error = f"保存图片消息失败: {save_res}"
-
-        # ── 模式三：视频消息 (video) ──
-        elif media_type == "video":
-            if not files:
-                return False, "", "视频发布缺少本地 .mp4 视频文件"
-
-            video_file = files[0]
-            create_video_url = f"{BASE_URL}/cgi-bin/appmsg?t=media/appmsg_edit_v2&action=edit&isNew=1&type=15&token={token}&lang=zh_CN"
-            await page.goto(create_video_url, wait_until="domcontentloaded", timeout=30000)
-            await page.wait_for_timeout(3000)
-
-            # 寻找视频上传 input
-            video_input = page.locator('input[type="file"][accept*="video"], input[type="file"]').first
-            if await video_input.count():
-                await video_input.set_input_files(video_file)
-                await page.wait_for_timeout(5000)
-            else:
-                log.warning("[wechat_mp_publish] 未找到视频直接上传 input，尝试拦截选择器")
-
-            # 填入标题与简介
-            try:
-                title_inp = page.locator('input[placeholder*="标题"], .weui-desktop-form__input').first
-                if await title_inp.count():
-                    await title_inp.fill(title[:60])
-                desc_inp = page.locator('textarea, div[contenteditable="true"]').first
-                if await desc_inp.count():
-                    await desc_inp.fill(desc[:500])
-            except Exception:
-                pass
-
-            # 点击保存为草稿
-            save_btn = page.locator('button:has-text("保存为草稿"), button:has-text("保存")').first
-            if await save_btn.count():
-                await save_btn.click(timeout=5000)
-                await page.wait_for_timeout(3000)
-                ok = True
-                result_url = page.url
-            else:
-                ok = True
-                result_url = create_video_url
-
-        # 如果指定了发表模式且支持无推送发表
-        if ok and publish_mode == "publish" and "appmsg_id" in locals() and appmsg_id:
-            try:
-                js_pub = f"""
-                async () => {{
-                    const params = new URLSearchParams({{
-                        token: "{token}",
-                        lang: "zh_CN",
-                        f: "json",
-                        appmsgid: "{appmsg_id}"
-                    }});
-                    const resp = await fetch("{FREEPUBLISH_URL}&token={token}&lang=zh_CN", {{
-                        method: "POST",
-                        headers: {{ "Content-Type": "application/x-www-form-urlencoded" }},
-                        body: params.toString(),
-                        credentials: "include"
-                    }});
-                    return await resp.json();
-                }}
-                """
-                pub_res = await page.evaluate(js_pub)
-                if pub_res.get("base_resp", {}).get("ret") == 0:
-                    publish_id = pub_res.get("publish_id", "")
-                    log.info("[wechat_mp_publish] 无推送发表成功: publish_id=%s", publish_id)
-            except Exception as e:
-                log.warning("[wechat_mp_publish] 尝试无推送发表异常: %r", e)
-
-    except Exception as e:
-        error = f"公众号发布异常: {e!r}"
+            return False, "", "logged_out: 请重新登录公众号后台"
+        cover_file = cover_path or (files[0] if files else "")
+        if not cover_file:
+            return False, "", "missing_cover: 请选择封面图片"
+        uploaded = {}
+        for file in dict.fromkeys([cover_file, *files]):
+            result, error = await _upload_image_via_page(page, token, file)
+            if error or not result.get("cdn_url") or not result.get("file_id"):
+                return False, "", "media_upload_failed: 配图未全部上传，未提交草稿"
+            uploaded[file] = result
+        cover = uploaded[cover_file]
+        tags = " ".join("#" + tag.strip().lstrip("#") for tag in topics.split(",") if tag.strip())
+        html = _markdown_to_wechat_html(desc + (chr(10) * 2 + tags if tags else ""))
+        for file in files:
+            html += '<p><img src="' + escape(uploaded[file]["cdn_url"], quote=True) + '" style="max-width:100%"/></p>'
+        payload = {"token": token, "lang": "zh_CN", "f": "json", "ajax": "1",
+                   "isNew": "1", "AppMsgId": "", "count": "1", "title0": title,
+                   "content0": html, "digest0": desc[:120], "author0": "",
+                   "fileid0": str(cover["file_id"]), "cdn_url0": cover["cdn_url"],
+                   "show_cover_pic0": "1", "need_open_comment0": "1", "only_fans_can_comment0": "0"}
+        submitted = True
+        response = await page.evaluate("""async ({url, payload}) => {
+            const response = await fetch(url, {method:'POST', credentials:'include',
+                headers:{'Content-Type':'application/x-www-form-urlencoded'},
+                body:new URLSearchParams(payload).toString()});
+            return await response.json();
+        }""", {"url": SAVE_DRAFT_URL + "&token=" + token + "&lang=zh_CN", "payload": payload})
+        draft_id = saved_draft_id(response)
+        if not draft_id:
+            return False, "", "write_uncertain: 已提交保存但未取得可核验草稿ID，请到草稿箱核对，禁止自动重试"
+        for attempt in range(3):
+            if await verify_saved_draft(page, token, draft_id, title):
+                return True, "https://mp.weixin.qq.com/#draft=" + draft_id, ""
+            if attempt < 2:
+                await asyncio.sleep(1)
+        return False, "", "write_uncertain: 保存已提交但草稿箱未回读确认，请人工核对"
+    except Exception:
+        return False, "", ("write_uncertain: 保存提交后连接中断，请核对草稿箱" if submitted
+                            else "draft_failed: 草稿准备失败，请检查登录或媒体上传")
     finally:
-        try:
-            await ctx.close()
-        except Exception:
-            pass
-
-    return ok, result_url, error
-
+        await page.close()

@@ -821,7 +821,7 @@ async function exportModuleReport(module, full = false, explicitBtn = null) {
 }
 
 let PLATFORM = "douyin";
-const PF_NAME = { douyin: "抖音", xhs: "小红书", kuaishou: "快手", shipinhao: "视频号", wechat_mp: "微信公众号" };
+const PF_NAME = { youtube: "YouTube", douyin: "抖音", xhs: "小红书", kuaishou: "快手", shipinhao: "视频号", wechat_mp: "微信公众号" };
 let CURRENT_TAB = "overview";
 const PAGE_META = {
   overview: {
@@ -876,11 +876,11 @@ function updatePageContext(name = CURRENT_TAB) {
   document.title = `${meta.title} · ${PF_NAME[PLATFORM] || ""} | CreatorHub`;
 }
 // 是否支持「发布」面板(四平台均有)
-function pfHasPublish(pf) { return pf === "xhs" || pf === "kuaishou" || pf === "douyin" || pf === "shipinhao" || pf === "wechat_mp"; }
+function pfHasPublish(pf) { return pf === "youtube" || pf === "xhs" || pf === "kuaishou" || pf === "douyin" || pf === "shipinhao" || pf === "wechat_mp"; }
 // 视频号只有「本账号」数据(助手接口本账号),不支持监控他人作品/评论
 function pfIsChannels(pf) { return pf === "shipinhao"; }
 function switchPlatform(pf) {
-  if (!["douyin", "xhs", "kuaishou", "shipinhao", "wechat_mp"].includes(pf)) pf = "douyin";
+  if (!["douyin", "xhs", "kuaishou", "shipinhao", "wechat_mp", "youtube"].includes(pf)) pf = "douyin";
   PLATFORM = pf;
   CONTENT_SRC = CONTENT_GROUP = CONTENT_TAG = "";
   COMMENT_SRC = COMMENT_GROUP = COMMENT_TAG = "";
@@ -906,10 +906,13 @@ function switchPlatform(pf) {
   if (pfHasPublish(PLATFORM)) refreshPublish();
 }
 function applyPlatformUI() {
+  document.querySelectorAll(".yt-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "youtube"));
   document.body.classList.toggle("pf-douyin", PLATFORM === "douyin");
   document.body.classList.toggle("pf-xhs", PLATFORM === "xhs");
   document.body.classList.toggle("pf-kuaishou", PLATFORM === "kuaishou");
   document.body.classList.toggle("pf-shipinhao", PLATFORM === "shipinhao");
+  document.body.classList.toggle("pf-wechat_mp", PLATFORM === "wechat_mp");
+  document.body.classList.toggle("pf-youtube", PLATFORM === "youtube");
   // 视频号:只有本账号数据,隐藏「监控他人作品/评论」相关入口(.notsh-only)
   document.body.classList.toggle("pf-channels", pfIsChannels(PLATFORM));
   if (PLATFORM !== "douyin" && CURRENT_TAB === "danmaku") switchTab("overview");
@@ -935,6 +938,10 @@ function applyPlatformUI() {
     }
   }
   document.querySelectorAll(".notsh-only").forEach(e => e.classList.toggle("hidden", pfIsChannels(PLATFORM)));
+  document.querySelectorAll(".notyt-only").forEach(e => e.classList.toggle("hidden", PLATFORM === "youtube"));
+  if (PLATFORM === "youtube" && HUB_TAB === "dm") switchHubTab("myworks");
+  const fLabel = $("hb-following-label");
+  if (fLabel) fLabel.textContent = PLATFORM === "youtube" ? "订阅频道" : "关注";
   document.querySelectorAll(".collect-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "douyin"));
   document.querySelectorAll(".meta-scope").forEach(e => {
     e.textContent = (PF_NAME[PLATFORM] || "当前平台") + "内独立";
@@ -962,6 +969,21 @@ function applyPlatformUI() {
     const copy = pubHint.querySelector("span");
     if (copy) copy.textContent = pubHintText;
     else pubHint.textContent = pubHintText;
+  }
+  if (PLATFORM === "youtube" || mp) {
+    $("pub-type").value = mp ? "article" : "video";
+    $("pub-type").disabled = true;
+    $("pub-when").disabled = PLATFORM === "youtube";
+    if (PLATFORM === "youtube") $("pub-when").value = "";
+    $("pub-head-lead").textContent = mp ? "保存公众号草稿" : "YouTube 上传";
+    $("pub-head-sub").textContent = mp ? "图文草稿；贴图和视频待校准" : "官方API上传，默认私密";
+    const hint = $("pub-hint").querySelector("span");
+    if (hint) hint.textContent = mp ? "必须选择封面；保存后核对草稿ID与标题，不自动发表。" : "需Google OAuth授权；未审核API项目可能仅允许私密上传。";
+    onPubType();
+    $("pub-title").maxLength = mp ? 64 : 100;
+  } else {
+    $("pub-type").disabled = false;
+    $("pub-when").disabled = false;
   }
   // 评论监控「类型」下拉随平台改写文案
   const wk = $("w-kind");
@@ -1863,7 +1885,7 @@ async function refreshAccounts() {
         <button class="ghost sm danger" onclick="delAccount(${a.id})" aria-label="删除账号">${ic("i-trash")}删除</button>
       </td>
     </tr>`;
-  }).join("") || empty(3, "还没有账号", "i-user", "用上方按钮扫码登录,或粘贴 Cookie 添加一个账号");
+  }).join("") || empty(3, "还没有账号", "i-user", PLATFORM === "youtube" ? "点击上方「授权 YouTube 频道」或「配置 Google 客户端」" : (PLATFORM === "wechat_mp" ? "点击上方「公众号扫码登录」绑定账号" : "用上方按钮扫码登录,或粘贴 Cookie 添加一个账号"));
   if ($("tb-acc")) $("tb-acc").textContent = accs.length;
   populateAccountSelect();
   populateWatchAccount();
@@ -2232,6 +2254,7 @@ function populateHubAccounts() {
   sel.value = HUB_ACC;
   if (sel._csSync) sel._csSync();
   refreshHubSummary();   // 账号列表/选中账号变了(含切平台)→ 立刻刷新计数徽章
+  refreshHubPanel();
 }
 function onHubAcc() {
   const sel = $("hub-acc"); if (!sel) return;
@@ -2320,18 +2343,41 @@ function hubGridEmpty(text, sub = "") {
 }
 
 // ── 我的作品 ──
+let MY_WORKS_LIST = [];
 async function refreshMyWorks() {
   const grid = $("mw-grid"); if (!grid) return;
   if (!HUB_ACC) { grid.innerHTML = hubGridEmpty("请先选择已登录账号"); return; }
   try {
     const list = await api("/api/account-works?account_id=" + HUB_ACC);
-    if ($("hb-myworks")) $("hb-myworks").textContent = list.length;
-    grid.innerHTML = list.length ? list.map(workCard).join("")
-      : hubGridEmpty("暂无作品", "点右上「同步作品」抓取本账号已发布作品");
+    MY_WORKS_LIST = list || [];
+    renderMyWorks();
   } catch (e) { grid.innerHTML = hubGridEmpty("加载失败:" + e.message); }
+}
+
+function onMyWorksSort() {
+  renderMyWorks();
+}
+
+function renderMyWorks() {
+  const grid = $("mw-grid"); if (!grid) return;
+  const sort = $("mw-sort") ? $("mw-sort").value : "time_desc";
+  let list = [...MY_WORKS_LIST];
+  if (sort === "play_desc") {
+    list.sort((a, b) => ((b.play_count || 0) - (a.play_count || 0)) || ((b.create_time || 0) - (a.create_time || 0)));
+  } else if (sort === "like_desc") {
+    list.sort((a, b) => ((b.like_count || 0) - (a.like_count || 0)) || ((b.create_time || 0) - (a.create_time || 0)));
+  } else if (sort === "comment_desc") {
+    list.sort((a, b) => ((b.comment_count || 0) - (a.comment_count || 0)) || ((b.create_time || 0) - (a.create_time || 0)));
+  } else {
+    list.sort((a, b) => ((b.create_time || 0) - (a.create_time || 0)) || ((b.id || 0) - (a.id || 0)));
+  }
+  if ($("hb-myworks")) $("hb-myworks").textContent = list.length;
+  grid.innerHTML = list.length ? list.map(workCard).join("")
+    : hubGridEmpty("暂无作品", "点右上「同步作品」抓取本账号已发布作品");
 }
 function workLink(platform, id) {
   id = encodeURIComponent(id);
+  if (platform === "youtube") return "https://www.youtube.com/watch?v=" + id;
   if (platform === "xhs") return "https://www.xiaohongshu.com/explore/" + id;
   if (platform === "kuaishou") return "https://www.kuaishou.com/short-video/" + id;
   if (platform === "shipinhao") return "https://channels.weixin.qq.com/platform/post/list";
@@ -2346,20 +2392,25 @@ function workCard(w) {
          onerror="this.onerror=null;this.removeAttribute('src');this.style.visibility='hidden'">`
     : `<div class="ncard-cover ph" ${oc}>${ic("i-image")}</div>`;
   const title = esc(w.desc || "无描述");
+  const ytBadge = (w.platform === "youtube" && w.status)
+    ? `<span class="pill ${w.status === "public" ? "active" : "bare"}" style="font-size:10px;padding:1px 6px;margin-left:4px;border-radius:4px">${w.status === "public" ? "公开" : w.status === "private" ? "私密" : "不公开"}</span>`
+    : "";
   return `<div class="ncard">
     ${cover}
-    <span class="ncard-type">${ic(w.media_type === "video" ? "i-play" : "i-image")}${w.media_type === "video" ? "视频" : "图文"}</span>
+    <span class="ncard-type">${ic(w.media_type === "video" ? "i-play" : "i-image")}${w.media_type === "video" ? "视频" : "图文"}${ytBadge}</span>
     <div class="ncard-body">
       <p class="ncard-title" style="cursor:pointer" title="${title}" ${oc}>${title}</p>
       <div class="ncard-foot">
         <span class="metric like">${ic("i-heart")}${fmtNum(w.like_count)}</span>
         <span class="metric">${ic("i-msg")}${fmtNum(w.comment_count)}</span>
-        ${w.play_count ? `<span class="metric">${ic("i-play")}${fmtNum(w.play_count)}</span>` : ""}
+        ${(w.play_count !== undefined && w.play_count !== null) ? `<span class="metric">${ic("i-play")}${fmtNum(w.play_count)}</span>` : ""}
         <span class="like">${fmtTime(w.create_time)}</span>
       </div>
       <div class="ncard-actions">
         ${w.platform === "douyin" ? '<button class="ghost sm" onclick="monitorOwnWorkDanmaku(\'' + esc(w.item_id) + '\',' + (w.account_id || "null") + ')">' + ic("i-msg") + '弹幕</button>' : ""}
-        <button class="ghost sm" onclick="openWorkComments(${w.id},'${esc(w.platform)}','${title.replace(/'/g, "\'")}')">${ic("i-msg")}评论</button>
+        ${w.platform === "youtube"
+          ? `<button class="ghost sm" onclick="openWork('youtube','${esc(w.item_id)}')">${ic("i-play")}播放视频</button>`
+          : `<button class="ghost sm" onclick="openWorkComments(${w.id},'${esc(w.platform)}','${title.replace(/'/g, "\'")}')">${ic("i-msg")}评论</button>`}
       </div>
     </div>
   </div>`;
@@ -2432,6 +2483,20 @@ async function syncWorkComments() {
 const XHS_FOLLOW_NA = "小红书网页端不提供关注 / 粉丝列表(仅 App 可见),无法同步。抖音 / 快手可正常同步。";
 async function refreshFollows(direction) {
   const tbody = $(direction === "fan" ? "fans-table" : "following-table"); if (!tbody) return;
+  if (PLATFORM === "youtube" && direction === "fan") {
+    const a = ACCOUNTS.find(x => x.id === +HUB_ACC);
+    const count = a ? a.follower_count : 0;
+    const badge = $("hb-fans");
+    if (badge) badge.textContent = fmtNum(count);
+    tbody.innerHTML = `<tr><td colspan="3" style="padding:0"><div class="card" style="padding:32px 24px;text-align:center;background:var(--surface-2,#1e2230);border-radius:12px;margin:8px 0;border:1px solid var(--line,#2b3245)">
+      <div style="font-size:42px;font-weight:900;color:var(--acc,#ff2222);line-height:1.2;margin-bottom:8px">${fmtNum(count)}</div>
+      <div style="font-size:15px;font-weight:700;color:var(--fg,#fff);margin-bottom:12px">YouTube 频道订阅粉丝总数</div>
+      <div class="mut" style="font-size:12.5px;line-height:1.7;max-width:540px;margin:0 auto;color:var(--mut,#8b949e)">
+        根据 Google 与 YouTube 官方隐私保护政策，平台仅向创作者提供订阅者总数实时统计，不向第三方开放单个订阅者的个人隐私列表。当前总数已通过官方 API 与你的 YouTube Studio 实时对齐同步。
+      </div>
+    </div></td></tr>`;
+    return;
+  }
   if (PLATFORM === "xhs") {
     const badge = $(direction === "fan" ? "hb-fans" : "hb-following");
     if (badge) badge.textContent = "—";
@@ -3416,7 +3481,7 @@ function filterShareAccounts() {
   const old = sel.value;
   const platform = shareAccountPlatform();
   const hasDetectedLink = !!SHARE_LINKS.length;
-  const knownAccountPlatform = ["douyin", "xhs", "kuaishou", "shipinhao", "wechat_mp"].includes(platform);
+  const knownAccountPlatform = ["douyin", "xhs", "kuaishou", "shipinhao", "wechat_mp", "youtube"].includes(platform);
   const rows = knownAccountPlatform
     ? SHARE_ACCOUNTS.filter(a => a.platform === platform)
     : [];
@@ -5752,7 +5817,7 @@ let pubFilesDT = new DataTransfer();
 function onPubType() {
   const v = $("pub-type").value, inp = $("pub-files"), lbl = $("pub-files-label");
   if (!inp) return;
-  if (v === "article") { inp.accept = ""; inp.multiple = true; lbl.textContent = "选择封面/插图(可选)"; $("pub-title").maxLength = 64; $("pub-title").previousElementSibling.textContent = "标题(≤ 64 字)"; }
+  if (v === "article") { inp.accept = ""; inp.multiple = true; lbl.textContent = "选择封面/插图（第一张为封面，必选）"; $("pub-title").maxLength = 64; $("pub-title").previousElementSibling.textContent = "标题(≤ 64 字)"; }
   else if (v === "video") { inp.accept = "video/*"; inp.multiple = false; lbl.textContent = "选择视频文件(单个)"; $("pub-title").maxLength = 64; $("pub-title").previousElementSibling.textContent = "标题"; }
   else { inp.accept = "image/*"; inp.multiple = true; lbl.textContent = "选择图片(可多选,最多 18 张)"; $("pub-title").maxLength = 64; $("pub-title").previousElementSibling.textContent = "标题"; }
   pubFilesClear();
@@ -5814,11 +5879,12 @@ async function addPublish() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ account_id: +acc, media_type: $("pub-type").value, title: $("pub-title").value.trim(), desc: $("pub-desc").value, topics: $("pub-topics").value.trim(), media_paths: paths, scheduled_at: when,
           location: $("pub-location") ? $("pub-location").value.trim() : "",
-          visibility: $("pub-visibility") ? $("pub-visibility").value : "public",
+          visibility: PLATFORM === "youtube" ? $("yt-visibility").value : ($("pub-visibility") ? $("pub-visibility").value : "public"),
+          youtube_category: $("yt-category").value, made_for_kids: $("yt-kids").checked,
           allow_save: $("pub-allowsave") ? $("pub-allowsave").value !== "0" : true }),
       });
       pubFilesClear(); $("pub-title").value = ""; $("pub-desc").value = ""; $("pub-topics").value = ""; $("pub-when").value = ""; if ($("pub-location")) $("pub-location").value = ""; dtSyncAll();
-      $("pub-msg").textContent = when ? "已加入定时队列 ✓" : "已加入队列,即将发布 ✓";
+      $("pub-msg").textContent = when ? "已加入定时队列 ✓" : (PLATFORM === "wechat_mp" ? "已加入存草稿队列 ✓" : "已加入上传队列 ✓");
       toast("已加入发布队列", "ok");
     } catch (e) { $("pub-msg").textContent = "失败: " + e.message; toast("发布失败:" + e.message, "err"); }
   });
@@ -5893,10 +5959,11 @@ async function refreshPublish() {
     <td class="num">${t.media_count}</td>
     <td>${t.source_platform ? esc(t.source_platform) + " 转发" : "手动"}</td>
     <td class="mut num">${t.scheduled_at ? new Date(t.scheduled_at).toLocaleString() : "尽快"}</td>
-    <td><span class="pill ${PUB_PILL[t.status] || "pending"}">${PUB_ST[t.status] || t.status}</span>${t.error ? ` <span class="warn-ic" title="${esc(t.error)}">${ic("i-info")}</span>` : ""}${t.result_url ? (t.platform === "shipinhao" ? ` <a href="javascript:void(0)" onclick="openPubInBrowser(${t.account_id}, '${esc(t.result_url)}')">查看</a>` : ` <a href="${esc(t.result_url)}" target="_blank">查看</a>`) : ""}</td>
+    <td><span class="pill ${PUB_PILL[t.status] || "pending"}">${t.status === "done" && t.platform === "wechat_mp" ? "已存草稿" : t.status === "done" && t.platform === "youtube" ? "已上传（查看平台状态）" : PUB_ST[t.status] || t.status}</span>${t.error ? ` <span class="warn-ic" title="${esc(t.error)}">${ic("i-info")}</span>` : ""}${t.result_url ? (t.platform === "shipinhao" ? ` <a href="javascript:void(0)" onclick="openPubInBrowser(${t.account_id}, '${esc(t.result_url)}')">查看</a>` : ` <a href="${esc(t.result_url)}" target="_blank">查看</a>`) : ""}</td>
     <td class="acttd">
       ${["pending", "failed", "canceled"].includes(t.status) ? `<button class="ghost sm" onclick="editPublish(${t.id})">编辑</button>` : ""}
       ${["pending", "failed"].includes(t.status) ? `<button class="ghost sm" onclick="runPublish(${t.id})">立即发布</button>` : ""}
+      ${t.platform === "youtube" && ["uncertain", "failed"].includes(t.status) ? `<button class="ghost sm" onclick="resumeYoutube(${t.id})">恢复原上传</button>` : ""}
       <button class="ghost sm danger" onclick="delPublish(${t.id})">${ic("i-trash")}删除</button>
     </td></tr>`).join("") || empty(7, "暂无发布任务", "i-send",
       PLATFORM === "kuaishou" ? "上传图集/视频加入队列(发布到快手创作平台)"
@@ -6634,7 +6701,7 @@ switchTab((() => {
 switchHubTab(HUB_TAB);   // 恢复上次停留的子标签(我的作品/关注/粉丝/私信)
 
 // restore last-selected platform (default: 抖音)
-PLATFORM = (() => { try { const p = localStorage.getItem("dym-pf"); return ["xhs", "douyin", "kuaishou", "shipinhao", "wechat_mp"].includes(p) ? p : "douyin"; } catch (e) { return "douyin"; } })();
+PLATFORM = (() => { try { const p = localStorage.getItem("dym-pf"); return ["xhs", "douyin", "kuaishou", "shipinhao", "wechat_mp", "youtube"].includes(p) ? p : "douyin"; } catch (e) { return "douyin"; } })();
 applyPlatformUI();
 updateTaskQueuePlatformLabel();
 
@@ -6704,4 +6771,86 @@ Object.assign(window, {
   syncMyWorks, syncFollows, syncDm, openHubAccountBrowser, sendDm, loadHubStats,
   hidePreview, hideRepost, submitRepost, hideCollectionComments, hideWorkComments,
   syncWorkComments, uiModalCancel, uiModalOk, hideRiskEvents,
+  authorizeYoutube, toggleYtConfig, saveYtConfig, resumeYoutube, disconnectYoutube, importD2YBatch, onMyWorksSort,
 });
+
+async function importD2YBatch() {
+  const vis = $("yt-visibility") ? $("yt-visibility").value : "public";
+  const interval = +($("yt-interval") ? $("yt-interval").value : 150) || 150;
+  const btn = evtBtn();
+  await withBusy(btn, "正在导入切片", async () => {
+    try {
+      const res = await api("/api/youtube/d2y/import-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batch_size: 20,
+          visibility: vis,
+          interval_seconds: interval
+        })
+      });
+      toast(res.message || "已成功排期 20 条 Shorts 视频", "ok");
+      await refreshPublish();
+    } catch(e) {
+      toast("导入排期失败: " + e.message, "err");
+    }
+  });
+}
+
+
+async function toggleYtConfig(force) {
+  const box = $("ytconfigbox");
+  if (!box) return;
+  const show = typeof force === "boolean" ? force : box.style.display === "none";
+  box.style.display = show ? "" : "none";
+  if (show) {
+    try {
+      const cfg = await api("/api/youtube/config");
+      if ($("yt-redirect-uri") && cfg.redirect_uri) $("yt-redirect-uri").textContent = cfg.redirect_uri;
+      if ($("yt-cfg-client-id") && cfg.client_id) $("yt-cfg-client-id").value = cfg.client_id;
+    } catch (e) {}
+  }
+}
+
+async function saveYtConfig() {
+  const cid = $("yt-cfg-client-id").value.trim();
+  const csec = $("yt-cfg-client-secret").value.trim();
+  if (!cid || !csec) { toast("Client ID 和 Client Secret 均不能为空", "err"); return; }
+  try {
+    const res = await api("/api/youtube/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: cid, client_secret: csec })
+    });
+    toast(res.message || "配置已保存", "ok");
+    toggleYtConfig(false);
+  } catch (e) {
+    toast("保存失败: " + e.message, "err");
+  }
+}
+
+async function authorizeYoutube() {
+  try {
+    const cfg = await api("/api/youtube/config");
+    if (!cfg.configured) {
+      toggleYtConfig(true);
+      toast("请先填写并保存 Google 客户端配置", "warn");
+      return;
+    }
+    const result = await api('/api/youtube/authorize', {method:'POST'});
+    window.open(result.url, '_blank', 'noopener');
+  } catch(e) {
+    toast(e.message, 'err');
+  }
+}
+
+async function resumeYoutube(id) {
+  try { await api('/api/youtube/tasks/' + id + '/resume', {method:'POST'}); await refreshPublish(); }
+  catch(e) { toast(e.message, 'err'); }
+}
+async function disconnectYoutube() {
+  const id = $("pub-acc").value;
+  if (!id || !window.confirm('解除此频道的本地授权关联？不会删除视频。')) return;
+  try { await api('/api/youtube/accounts/' + id + '/disconnect', {method:'POST'}); await refreshAccounts(); }
+  catch(e) { toast(e.message, 'err'); }
+}

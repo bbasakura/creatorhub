@@ -12,6 +12,7 @@ class DouyinAccount(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     platform: str = Field(default="douyin", index=True)  # douyin | xhs
     nickname: str = ""
+    credential_ref: str = ""
     sec_uid: str = ""              # 抖音 sec_uid / 小红书 user_id
     uid: str = ""                  # 抖音数字 uid(= IM device_id,用于 frontier-im WS 接收)
     douyin_id: str = ""            # 抖音号 / 小红书号(red_id)
@@ -265,6 +266,12 @@ class PublishTask(SQLModel, table=True):
     media_json: str = ""                               # 本地文件路径列表(JSON)
     visibility: str = "public"                         # 抖音:public 公开 | friends 好友可见 | private 仅自己可见
     allow_save: bool = True                            # 抖音:是否允许他人保存(下载)
+    operation: str = "publish"
+    content_fingerprint: str = Field(default="", index=True)
+    platform_result_id: str = ""
+    youtube_category: str = "22"
+    made_for_kids: bool = False
+    thumbnail_path: str = ""
     scheduled_at: Optional[datetime] = None            # 定时发布时间(空=尽快发)
     status: str = "pending"        # pending | publishing | uncertain | done | failed | canceled
     result_url: str = ""           # 发布成功后的笔记链接(能取到则填)
