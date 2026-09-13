@@ -8310,6 +8310,7 @@ class PublishIn(BaseModel):
     youtube_category: str = "22"
     made_for_kids: bool = False
     thumbnail_path: str = ""
+    collection_name: str = ""
     allow_save: bool = True               # 抖音:是否允许他人保存
     scheduled_at: str | None = None       # ISO 时间(本地),空=尽快发
 
@@ -8320,6 +8321,7 @@ class PublishUpdate(BaseModel):
     desc: str | None = None
     topics: str | None = None
     location: str | None = None
+    collection_name: str | None = None
     visibility: str | None = None
     allow_save: bool | None = None
     scheduled_at: str | None = None
@@ -8330,6 +8332,7 @@ def _publish_dict(t: PublishTask) -> dict:
         "id": t.id, "platform": t.platform, "account_id": t.account_id,
         "media_type": t.media_type, "title": t.title, "desc": t.desc,
         "topics": t.topics, "location": t.location,
+        "collection_name": getattr(t, "collection_name", "") or "",
         "operation": "draft" if t.platform == "wechat_mp" else t.operation,
         "platform_result_id": t.platform_result_id,
         "status": t.status, "result_url": t.result_url,
@@ -8429,6 +8432,7 @@ async def add_publish(body: PublishIn):
             platform=acc.platform, account_id=body.account_id, media_type=body.media_type,
             title=body.title.strip()[:64 if acc.platform == "wechat_mp" else 20], desc=body.desc, topics=body.topics,
             location=(body.location or "").strip()[:60],
+            collection_name=(body.collection_name or "").strip()[:50],
             visibility=vis, allow_save=bool(body.allow_save),
             media_json=json.dumps(paths), scheduled_at=_parse_when(body.scheduled_at),
         )
@@ -8460,6 +8464,8 @@ async def update_publish(tid: int, body: PublishUpdate):
             t.topics = body.topics.strip()
         if body.location is not None:
             t.location = body.location.strip()[:60]
+        if body.collection_name is not None:
+            t.collection_name = body.collection_name.strip()[:50]
         if body.visibility is not None:
             choices = ("public", "unlisted", "private") if t.platform == "youtube" else ("public", "friends", "private")
             if body.visibility not in choices:

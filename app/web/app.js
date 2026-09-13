@@ -5905,11 +5905,12 @@ async function addPublish() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ account_id: +acc, media_type: $("pub-type").value, title: $("pub-title").value.trim(), desc: $("pub-desc").value, topics: $("pub-topics").value.trim(), media_paths: paths, scheduled_at: when,
           location: $("pub-location") ? $("pub-location").value.trim() : "",
+          collection_name: $("pub-collection") ? $("pub-collection").value.trim() : "",
           visibility: PLATFORM === "youtube" ? $("yt-visibility").value : ($("pub-visibility") ? $("pub-visibility").value : "public"),
           youtube_category: $("yt-category").value, made_for_kids: $("yt-kids").checked,
           allow_save: $("pub-allowsave") ? $("pub-allowsave").value !== "0" : true }),
       });
-      pubFilesClear(); $("pub-title").value = ""; $("pub-desc").value = ""; $("pub-topics").value = ""; $("pub-when").value = ""; if ($("pub-location")) $("pub-location").value = ""; dtSyncAll();
+      pubFilesClear(); $("pub-title").value = ""; $("pub-desc").value = ""; $("pub-topics").value = ""; $("pub-when").value = ""; if ($("pub-location")) $("pub-location").value = ""; if ($("pub-collection")) $("pub-collection").value = ""; dtSyncAll();
       $("pub-msg").textContent = when ? "已加入定时队列 ✓" : (PLATFORM === "wechat_mp" ? "已加入存草稿队列 ✓" : "已加入上传队列 ✓");
       toast("已加入发布队列", "ok");
     } catch (e) { $("pub-msg").textContent = "失败: " + e.message; toast("发布失败:" + e.message, "err"); }

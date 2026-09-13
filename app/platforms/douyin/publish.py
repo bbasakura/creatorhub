@@ -341,6 +341,39 @@ async def _set_douyin_thumbnail(page, thumbnail_path: str) -> bool:
         return False
 
 
+async def _set_douyin_collection(page, collection_name: str) -> bool:
+    """在抖音发布页选择指定合集（若未创建该合集则优雅跳过，不阻断发布流程）。"""
+    if not collection_name or not collection_name.strip():
+        return False
+    name = collection_name.strip()
+    try:
+        trigger = page.locator('[class*="select-collection-"]').first
+        if not await trigger.count() or not await trigger.is_visible():
+            return False
+        await trigger.scroll_into_view_if_needed(timeout=2000)
+        await trigger.click(timeout=3000)
+        await page.wait_for_timeout(800)
+
+        # 查找匹配的合集选项
+        opt = page.locator('.semi-select-option, [role="option"]').filter(has_text=name).first
+        if await opt.count() and await opt.is_visible():
+            await opt.click(timeout=3000)
+            await page.wait_for_timeout(500)
+            _log(f"已选择抖音合集: {name}")
+            return True
+        else:
+            _log(f"⚠️ 抖音账号暂未创建合集「{name}」，跳过归集继续发布")
+            await page.keyboard.press("Escape")
+            await page.wait_for_timeout(300)
+    except Exception as e:
+        _log(f"设置合集提示: {e!r} (继续发布)")
+        try:
+            await page.keyboard.press("Escape")
+        except Exception:
+            pass
+    return False
+
+
 async def _apply_publish_settings(page, visibility: str, allow_save: bool) -> None:
     """设置「谁可以看」「保存权限」。公开 / 允许为抖音默认值,非默认才点,减少误点。"""
     vis_label = {"friends": "好友可见", "private": "仅自己可见"}.get(visibility, "")
@@ -356,7 +389,7 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
                          desc: str, media_paths: List[str], topics: str = "",
                          visibility: str = "public", allow_save: bool = True,
                          headed: bool = True, timeout_seconds: int = 180,
-                         thumbnail_path: str = ""
+                         thumbnail_path: str = "", collection_name: str = ""
                          ) -> Tuple[bool, str, str]:
     """发布一条抖音作品。返回 (ok, result_url, error)。
     storage_state_json 仅用于校验(实际登录态在该账号持久 profile 里)。
@@ -450,6 +483,18 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
         # 发布设置:谁可以看 / 保存权限(公开、允许为默认,仅非默认才点)
         await _apply_publish_settings(page, visibility, allow_save)
         await page.wait_for_timeout(600)
+
+        # 归集设置：优先显式指定合集，或从文案中自动提取【xxx】合集
+        if media_type == "video":
+            target_coll = (collection_name or "").strip()
+            if not target_coll:
+                import re
+                m_coll = re.search(r"【(.*?)】合集", body or "")
+                if m_coll:
+                    target_coll = m_coll.group(1).strip()
+            if target_coll:
+                await _set_douyin_collection(page, target_coll)
+                await page.wait_for_timeout(600)
 
         # 轮询等「发布」按钮可用(视频未处理完时按钮 disabled),最多 ~90s
         btn = None

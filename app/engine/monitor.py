@@ -2820,6 +2820,7 @@ class MonitorEngine:
             visibility, allow_save = t.visibility, t.allow_save
             location = getattr(t, "location", "") or ""
             thumbnail_path = getattr(t, "thumbnail_path", "") or ""
+            collection_name = getattr(t, "collection_name", "") or ""
             platform = t.platform
             files = _loads_list(t.media_json)
             t.status = "publishing"; t.error = ""
@@ -2868,7 +2869,8 @@ class MonitorEngine:
                                                     media_type, title, desc, files,
                                                     topics=topics, visibility=visibility,
                                                     allow_save=allow_save, headed=True,
-                                                    thumbnail_path=thumbnail_path)
+                                                    thumbnail_path=thumbnail_path,
+                                                    collection_name=collection_name)
             except Exception as e:
                 ok, url, err = False, "", f"发布异常: {e!r}"
             return await self._finish_publish(task_id, ok, url, err, platform="douyin")

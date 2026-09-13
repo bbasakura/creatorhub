@@ -273,6 +273,7 @@ class PublishTask(SQLModel, table=True):
     youtube_category: str = "22"
     made_for_kids: bool = False
     thumbnail_path: str = ""
+    collection_name: str = ""                          # 抖音/视频号等作品合集名称(可选)
     scheduled_at: Optional[datetime] = None            # 定时发布时间(空=尽快发)
     status: str = "pending"        # pending | publishing | uncertain | done | failed | canceled
     result_url: str = ""           # 发布成功后的笔记链接(能取到则填)
