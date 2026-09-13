@@ -2737,7 +2737,7 @@ class MonitorEngine:
         for tid in due:
             await self.publish_task(tid)
 
-    async def publish_task(self, task_id: int) -> dict:
+    async def publish_task(self, task_id: int, manual: bool = False) -> dict:
         if task_id in self._publishing:
             return {"ok": False, "error": "正在发布中"}
         self._publishing.add(task_id)
@@ -2750,11 +2750,11 @@ class MonitorEngine:
                 async with self._operation_guard(
                         account_id, OperationKind.PUBLISH,
                         fallback_key=f"pub:{task_id}"):
-                    return await self._publish_task_locked(task_id)
+                    return await self._publish_task_locked(task_id, manual=manual)
         finally:
             self._publishing.discard(task_id)
 
-    async def _publish_task_locked(self, task_id: int) -> dict:
+    async def _publish_task_locked(self, task_id: int, manual: bool = False) -> dict:
         with get_session() as s:
             t = s.get(PublishTask, task_id)
             if not t:
@@ -2794,23 +2794,24 @@ class MonitorEngine:
                 self._defer_row(t, environment_error, fallback_seconds=300)
                 s.add(t); s.commit()
                 return {"ok": False, "error": environment_error}
-            pause_error = self._write_pause_error(t.account_id)
-            if pause_error:
+            if not manual:
+                pause_error = self._write_pause_error(t.account_id)
+                if pause_error:
+                    decision = self.risk.preflight(t.account_id, OperationKind.PUBLISH)
+                    self._defer_row(t, pause_error, decision.next_allowed_at,
+                                    signal=decision.signal)
+                    s.add(t); s.commit()
+                    return {"ok": False, "error": pause_error}
+                if not self._in_active_window(t.account_id):
+                    self._defer_row(t, "当前处于非活跃时段，发布任务已保留在队列")
+                    s.add(t); s.commit()
+                    return {"ok": False, "error": t.error}
                 decision = self.risk.preflight(t.account_id, OperationKind.PUBLISH)
-                self._defer_row(t, pause_error, decision.next_allowed_at,
-                                signal=decision.signal)
-                s.add(t); s.commit()
-                return {"ok": False, "error": pause_error}
-            if not self._in_active_window(t.account_id):
-                self._defer_row(t, "当前处于非活跃时段，发布任务已保留在队列")
-                s.add(t); s.commit()
-                return {"ok": False, "error": t.error}
-            decision = self.risk.preflight(t.account_id, OperationKind.PUBLISH)
-            if not decision.allowed:
-                self._defer_row(t, decision.reason, decision.next_allowed_at,
-                                signal=decision.signal)
-                s.add(t); s.commit()
-                return {"ok": False, "error": decision.reason}
+                if not decision.allowed:
+                    self._defer_row(t, decision.reason, decision.next_allowed_at,
+                                    signal=decision.signal)
+                    s.add(t); s.commit()
+                    return {"ok": False, "error": decision.reason}
             # 发布用创作平台态;一次扫码已把创作 cookie 并入 storage_state,故回退它
             state = acc.creator_storage_state or acc.storage_state or ""
             native_mode = acc.identity_mode == "native"
@@ -2818,6 +2819,7 @@ class MonitorEngine:
             media_type, title, desc, topics = t.media_type, t.title, t.desc, t.topics
             visibility, allow_save = t.visibility, t.allow_save
             location = getattr(t, "location", "") or ""
+            thumbnail_path = getattr(t, "thumbnail_path", "") or ""
             platform = t.platform
             files = _loads_list(t.media_json)
             t.status = "publishing"; t.error = ""
@@ -2866,7 +2868,7 @@ class MonitorEngine:
                                                     media_type, title, desc, files,
                                                     topics=topics, visibility=visibility,
                                                     allow_save=allow_save, headed=True,
-                                                    thumbnail_path=getattr(t, "thumbnail_path", ""))
+                                                    thumbnail_path=thumbnail_path)
             except Exception as e:
                 ok, url, err = False, "", f"发布异常: {e!r}"
             return await self._finish_publish(task_id, ok, url, err, platform="douyin")

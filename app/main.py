@@ -8452,7 +8452,7 @@ async def update_publish(tid: int, body: PublishUpdate):
 async def run_publish(tid: int):
     if not engine:
         raise HTTPException(503, "引擎未就绪")
-    return await engine.publish_task(tid)
+    return await engine.publish_task(tid, manual=True)
 
 
 @app.delete("/api/publish/{tid}")
