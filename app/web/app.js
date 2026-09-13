@@ -1813,6 +1813,7 @@ async function refreshAccounts() {
           : "无登录态"];
     const detail = [
       a.aweme_count ? a.aweme_count + (isXhs ? " 笔记" : " 作品") : null,
+      a.following_count ? fmtNum(a.following_count) + " 关注" : null,
       a.follower_count ? fmtNum(a.follower_count) + " 粉丝" : null,
       isXhs ? "扫码登录" : (a.login_type === "cookie" ? "Cookie 登录" : "扫码登录"),
       ...loginDetails,
@@ -2371,7 +2372,9 @@ function renderMyWorks() {
   } else {
     list.sort((a, b) => ((b.create_time || 0) - (a.create_time || 0)) || ((b.id || 0) - (a.id || 0)));
   }
-  if ($("hb-myworks")) $("hb-myworks").textContent = list.length;
+  const a = ACCOUNTS.find(x => x.id === +HUB_ACC);
+  const authWorks = a && a.aweme_count;
+  if ($("hb-myworks")) $("hb-myworks").textContent = fmtNum((authWorks !== undefined && authWorks !== null) ? authWorks : list.length);
   grid.innerHTML = list.length ? list.map(workCard).join("")
     : hubGridEmpty("暂无作品", "点右上「同步作品」抓取本账号已发布作品");
 }
@@ -2507,10 +2510,13 @@ async function refreshFollows(direction) {
   if (!HUB_ACC) { tbody.innerHTML = empty(3, "请先选择已登录账号", "i-user"); return; }
   try {
     const list = await api(`/api/follows?account_id=${HUB_ACC}&direction=${direction}`);
+    const a = ACCOUNTS.find(x => x.id === +HUB_ACC);
+    const authTotal = direction === "fan" ? (a && a.follower_count) : (a && a.following_count);
     const badge = $(direction === "fan" ? "hb-fans" : "hb-following");
-    if (badge) badge.textContent = list.length;
+    if (badge) badge.textContent = fmtNum((authTotal !== undefined && authTotal !== null) ? authTotal : list.length);
     tbody.innerHTML = list.length ? list.map(f => followRow(f, direction)).join("")
-      : empty(3, direction === "fan" ? "暂无粉丝数据" : "暂无关注数据", "i-user", "点右上「同步」抓取");
+      : empty(3, direction === "fan" ? "暂无粉丝明细" : "暂无关注数据", "i-user",
+        direction === "fan" && authTotal ? `该账号在平台共有 ${fmtNum(authTotal)} 位粉丝；明细列表可点右上「同步粉丝」抓取` : "点右上「同步」抓取");
   } catch (e) { tbody.innerHTML = empty(3, "加载失败:" + e.message, "i-info"); }
 }
 function followRow(f, direction) {

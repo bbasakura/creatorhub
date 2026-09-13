@@ -242,6 +242,7 @@ def parse_self_user(u: dict) -> dict:
         "douyin_id": str(u.get("unique_id") or u.get("short_id") or "") or "",
         "avatar": avatar[0] if avatar else "",
         "follower_count": int(u.get("follower_count") or 0),
+        "following_count": int(u.get("following_count") or 0),
         "aweme_count": int(u.get("aweme_count") or 0),
     }
 

@@ -18,6 +18,7 @@ class DouyinAccount(SQLModel, table=True):
     douyin_id: str = ""            # 抖音号 / 小红书号(red_id)
     avatar: str = ""              # 头像
     follower_count: int = 0
+    following_count: int = 0
     aweme_count: int = 0
     cookie: str = ""               # 原始 Cookie 串(粘贴登录时填,仅展示/兜底)
     storage_state: str = ""        # Patchright storage_state JSON(浏览器登录态)

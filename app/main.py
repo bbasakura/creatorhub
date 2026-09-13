@@ -752,6 +752,8 @@ async def _enrich_account_profile(account_id: int, state: str, *,
             acc.douyin_id = p.get("douyin_id") or acc.douyin_id
             acc.avatar = p.get("avatar") or acc.avatar
             acc.follower_count = p.get("follower_count") or acc.follower_count
+            if p.get("following_count") is not None:
+                acc.following_count = p["following_count"]
             acc.aweme_count = p.get("aweme_count") or acc.aweme_count
             acc.status = "active"
             s.add(acc); s.commit()
@@ -1504,7 +1506,7 @@ async def list_accounts(platform: str | None = None):
             out.append({
                 "id": a.id, "platform": a.platform, "nickname": a.nickname, "status": a.status,
                 "sec_uid": a.sec_uid, "douyin_id": a.douyin_id, "avatar": a.avatar,
-                "follower_count": a.follower_count, "aweme_count": a.aweme_count,
+                "follower_count": a.follower_count, "following_count": getattr(a, "following_count", 0) or 0, "aweme_count": a.aweme_count,
                 "has_creator": has_creator,
                 "has_read_login": has_read_login,
                 "kind": "creator" if has_creator else "fetch",
@@ -3646,29 +3648,28 @@ async def fetch_dm_conversation_history(account_id: int, conv_id: str,
 async def hub_summary(account_id: int):
     with get_session() as s:
         acc = s.get(DouyinAccount, account_id)
-        if acc and acc.platform == "youtube":
-            return {
-                "works": acc.aweme_count or len(s.exec(select(AccountWork.id)
-                            .where(AccountWork.account_id == account_id)).all()),
-                "following": len(s.exec(select(FollowEdge.id)
-                                .where(FollowEdge.account_id == account_id,
-                                       FollowEdge.direction == "following")).all()),
-                "fans": acc.follower_count or 0,
-                "dm": 0,
-            }
         def _n(q):
             return len(s.exec(q).all())
+        following_scraped = _n(select(FollowEdge.id)
+                               .where(FollowEdge.account_id == account_id,
+                                      FollowEdge.direction == "following"))
+        fans_scraped = _n(select(FollowEdge.id)
+                          .where(FollowEdge.account_id == account_id,
+                                 FollowEdge.direction == "fan"))
+        works_scraped = _n(select(AccountWork.id)
+                           .where(AccountWork.account_id == account_id))
+        dm_count = 0 if (acc and acc.platform == "youtube") else _n(select(DmConversation.id)
+                         .where(DmConversation.account_id == account_id))
+
+        works = acc.aweme_count if (acc and acc.aweme_count > 0) else works_scraped
+        following = getattr(acc, "following_count", 0) if (acc and getattr(acc, "following_count", 0) > 0) else following_scraped
+        fans = acc.follower_count if (acc and acc.follower_count > 0) else fans_scraped
+
         return {
-            "works": _n(select(AccountWork.id)
-                        .where(AccountWork.account_id == account_id)),
-            "following": _n(select(FollowEdge.id)
-                            .where(FollowEdge.account_id == account_id,
-                                   FollowEdge.direction == "following")),
-            "fans": _n(select(FollowEdge.id)
-                       .where(FollowEdge.account_id == account_id,
-                              FollowEdge.direction == "fan")),
-            "dm": _n(select(DmConversation.id)
-                     .where(DmConversation.account_id == account_id)),
+            "works": works,
+            "following": following,
+            "fans": fans,
+            "dm": dm_count,
         }
 
 
