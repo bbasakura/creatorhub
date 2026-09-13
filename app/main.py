@@ -3361,39 +3361,16 @@ async def sync_follows(account_id: int, direction: str = "following"):
         known = {f.uid for f in s.exec(select(FollowEdge).where(
             FollowEdge.account_id == account_id,
             FollowEdge.direction == direction)).all()}
-    # 抖音关注优先直连(比弹窗滚动全); 粉丝列表因平台高风控直连必空，直接走浏览器拦截
+    # 抖音关注与粉丝统一走真实浏览器拦截（带弹层滚动与JS真实签名，可抓全量104人；直连接口常在44条截断）
     users, err = [], ""
-    attempted_direct = platform == "douyin" and direction == "following" and engine is not None
-    if attempted_direct:
-        try:
-            users, derr = await engine.fetch_douyin_follows_direct(account_id, direction)
-        except Exception as e:
-            users, derr = [], repr(e)
-        if derr.startswith("risk_deferred:"):
-            return {"ok": True, "fetched": 0, "added": 0, "skipped": True,
-                    "reason": derr.split(":", 1)[-1]}
-        if not users:
-            print(f"[follow] douyin direct 无数据({derr})，自动回退到浏览器拦截模式")
-    allow_browser_fallback = (not attempted_direct or not users)
-    if not users and allow_browser_fallback:
-        if engine is not None:
-            async def _fetch_browser_follows():
-                return await fetch_follows(
-                    browser, identity, platform, uid, direction, known)
-
-            if attempted_direct:
-                users, err = await _fetch_browser_follows()
-            else:
-                users, err = await engine.guarded_read_pair(
-                    account_id, OperationKind.READ_HEAVY,
-                    f"follows-browser:{account_id}:{direction}",
-                    _fetch_browser_follows, empty_result=[])
-            if str(err or "").startswith("risk_deferred:"):
-                return {"ok": True, "fetched": 0, "added": 0,
-                        "skipped": True, "reason": err.split(":", 1)[-1]}
-        else:
-            users, err = await fetch_follows(
+    if engine is not None:
+        async def _fetch_browser_follows():
+            return await fetch_follows(
                 browser, identity, platform, uid, direction, known)
+        users, err = await _fetch_browser_follows()
+    else:
+        users, err = await fetch_follows(
+            browser, identity, platform, uid, direction, known)
     # 仅在登录态/缺 id 这类硬错误时报错;抓到 0 条不报错(可能确实没有,或接口待标定)
     if err and err.startswith("missing_uid"):
         raise HTTPException(400, err.split(":", 1)[-1])
