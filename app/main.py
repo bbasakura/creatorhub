@@ -3664,15 +3664,19 @@ async def hub_summary(account_id: int):
         dm_count = 0 if (acc and acc.platform == "youtube") else _n(select(DmConversation.id)
                          .where(DmConversation.account_id == account_id))
 
-        works = acc.aweme_count if (acc and acc.aweme_count > 0) else works_scraped
-        following = getattr(acc, "following_count", 0) if (acc and getattr(acc, "following_count", 0) > 0) else following_scraped
-        fans = acc.follower_count if (acc and acc.follower_count > 0) else fans_scraped
+        is_yt = acc and acc.platform == "youtube"
+        works = works_scraped
+        following = following_scraped
+        fans = (acc.follower_count or 0) if is_yt else fans_scraped
 
         return {
             "works": works,
             "following": following,
             "fans": fans,
             "dm": dm_count,
+            "total_works": acc.aweme_count or 0 if acc else 0,
+            "total_following": getattr(acc, "following_count", 0) or 0 if acc else 0,
+            "total_fans": acc.follower_count or 0 if acc else 0,
         }
 
 

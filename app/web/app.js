@@ -2374,7 +2374,7 @@ function renderMyWorks() {
   }
   const a = ACCOUNTS.find(x => x.id === +HUB_ACC);
   const authWorks = a && a.aweme_count;
-  if ($("hb-myworks")) $("hb-myworks").textContent = fmtNum((authWorks !== undefined && authWorks !== null) ? authWorks : list.length);
+  if ($("hb-myworks")) $("hb-myworks").textContent = fmtNum(list.length);
   grid.innerHTML = list.length ? list.map(workCard).join("")
     : hubGridEmpty("暂无作品", "点右上「同步作品」抓取本账号已发布作品");
 }
@@ -2513,7 +2513,13 @@ async function refreshFollows(direction) {
     const a = ACCOUNTS.find(x => x.id === +HUB_ACC);
     const authTotal = direction === "fan" ? (a && a.follower_count) : (a && a.following_count);
     const badge = $(direction === "fan" ? "hb-fans" : "hb-following");
-    if (badge) badge.textContent = fmtNum((authTotal !== undefined && authTotal !== null) ? authTotal : list.length);
+    if (badge) badge.textContent = fmtNum(list.length);
+    const hintEl = $(direction === "fan" ? "hb-fans-hint" : "hb-following-hint");
+    if (hintEl && authTotal) {
+      hintEl.innerHTML = direction === "fan"
+        ? `粉丝总数 <b>${fmtNum(authTotal)}</b> 位，当前已同步本地明细 <b>${list.length}</b> 位。可对未回关的粉丝发起「回关」。`
+        : `点「同步关注」从该账号主页抓取已关注用户列表。关注总数 <b>${fmtNum(authTotal)}</b> 人，当前已同步本地明细 <b>${list.length}</b> 位。`;
+    }
     tbody.innerHTML = list.length ? list.map(f => followRow(f, direction)).join("")
       : empty(3, direction === "fan" ? "暂无粉丝明细" : "暂无关注数据", "i-user",
         direction === "fan" && authTotal ? `该账号在平台共有 ${fmtNum(authTotal)} 位粉丝；明细列表可点右上「同步粉丝」抓取` : "点右上「同步」抓取");
