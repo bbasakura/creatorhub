@@ -167,7 +167,8 @@ async def publish_xhs_browser(
         mgr: BrowserManager, identity: Identity, media_type: str,
         title: str, desc: str, topics: Sequence[str], files: Sequence[str],
         *, timeout_seconds: int = 180,
-        on_submit: Any = None) -> XhsWriteOutcome:
+        on_submit: Any = None,
+        thumbnail_path: str = "") -> XhsWriteOutcome:
     """Submit one note once; never retry or switch transport after submission."""
     paths = [str(Path(path)) for path in files if path and Path(path).exists()]
     if not paths:
@@ -194,7 +195,14 @@ async def publish_xhs_browser(
     try:
         async with mgr.visible_page(identity, url=PUBLISH_URL) as page:
             if "login" in page.url or "passport" in page.url:
-                return XhsWriteOutcome("failed", error="logged_out:创作平台未登录")
+                return XhsWriteOutcome("failed", error="logged_out:小红书创作平台未登录，请先在「账号」页点击「小红书创作者登录」")
+
+            try:
+                login_container = page.locator(".login-container, .login-box, [class*='login-container']").first
+                if await login_container.count() and await login_container.is_visible():
+                    return XhsWriteOutcome("failed", error="logged_out:小红书创作平台登录态已过期，请在「账号」页点击「小红书创作者登录」完成扫码")
+            except Exception:
+                pass
 
             tab, _ = await find_visible(
                 page,
@@ -202,20 +210,79 @@ async def publish_xhs_browser(
                 else "publish.kind.image",
             )
             if tab is not None:
-                await interaction.click_visible(tab)
-                await interaction.pause(0.2, 0.45)
+                is_active = False
+                try:
+                    is_active = await tab.evaluate("""el => {
+                        const p = el.closest('.creator-tab') || el.closest('[role="tab"]') || el;
+                        return p.classList.contains('active') || p.getAttribute('aria-selected') === 'true';
+                    }""")
+                except Exception:
+                    pass
+                if not is_active:
+                    try:
+                        await interaction.click_visible(tab)
+                    except Exception:
+                        try:
+                            await tab.click(force=True)
+                        except Exception:
+                            pass
+                    await interaction.pause(0.2, 0.45)
 
-            file_input, _ = await find_present(page, "publish.file")
+            file_input = None
+            for _ in range(45):
+                file_input, _ = await find_present(page, "publish.file")
+                if file_input is not None:
+                    break
+                await interaction.pause(0.2, 0.4)
             if file_input is None:
                 diagnostic = await selector_diagnostic(page, "publish.file")
                 return XhsWriteOutcome(
                     "failed", error=f"未找到媒体上传控件(发布页可能改版)；{diagnostic}")
             await file_input.set_input_files(paths, timeout=15_000)
+
             if not await _wait_upload_complete(page, interaction):
                 return XhsWriteOutcome("failed", error="媒体上传在限定时间内未完成")
 
+            # 封面处理：若有自定义封面，自动设置为主封面
+            if media_type == "video" and thumbnail_path and Path(thumbnail_path).is_file():
+                try:
+                    await interaction.pause(1.0, 2.0)
+                    clicked = await page.evaluate('''() => {
+                        const el = document.querySelector('.cover-edit-entry') || 
+                                   document.querySelector('.operator') ||
+                                   document.querySelector('.cover-edit-stack') ||
+                                   document.querySelector('.default--ai-cover-layout');
+                        if (el) {
+                            el.click();
+                            return true;
+                        }
+                        return false;
+                    }''')
+                    if clicked:
+                        modal = page.locator('.main-cover-editor-modal').first
+                        await modal.wait_for(state="visible", timeout=10_000)
+                        cover_inp = modal.locator('input[type="file"]').first
+                        await cover_inp.wait_for(state="attached", timeout=5_000)
+                        await cover_inp.set_input_files(thumbnail_path)
+                        await interaction.pause(2.0, 3.0)
+                        done_btn = modal.locator('button:has-text("完成")').first
+                        if await done_btn.count():
+                            await done_btn.click()
+                            try:
+                                await modal.wait_for(state="hidden", timeout=10_000)
+                            except Exception:
+                                pass
+                            await interaction.pause(1.0, 2.0)
+                except Exception:
+                    pass
+
             if title:
-                title_input, _ = await find_visible(page, "publish.title")
+                title_input = None
+                for _ in range(30):
+                    title_input, _ = await find_visible(page, "publish.title")
+                    if title_input is not None:
+                        break
+                    await interaction.pause(0.2, 0.4)
                 if title_input is None:
                     diagnostic = await selector_diagnostic(
                         page, "publish.title")
@@ -223,7 +290,12 @@ async def publish_xhs_browser(
                         "failed", error=f"未找到标题输入框(发布页可能改版)；{diagnostic}")
                 await interaction.type_short(title_input, title)
             if body:
-                body_input, _ = await find_visible(page, "publish.body")
+                body_input = None
+                for _ in range(30):
+                    body_input, _ = await find_visible(page, "publish.body")
+                    if body_input is not None:
+                        break
+                    await interaction.pause(0.2, 0.4)
                 if body_input is None:
                     diagnostic = await selector_diagnostic(
                         page, "publish.body")

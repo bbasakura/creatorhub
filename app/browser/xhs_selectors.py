@@ -36,6 +36,7 @@ SELECTOR_GROUPS: Mapping[str, tuple[SelectorCandidate, ...]] = MappingProxyType(
         _text("video_text", "视频"),
     ),
     "publish.file": (
+        _css("publish_file_upload_input", 'input[type="file"].upload-input'),
         _css("publish_file_input", 'input[type="file"]'),
     ),
     "publish.title": (

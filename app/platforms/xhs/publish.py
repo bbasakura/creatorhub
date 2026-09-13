@@ -86,7 +86,8 @@ async def publish_xhs(mgr: BrowserManager, identity: Identity, storage_state_jso
                       topics: str = "", headed: bool = True,
                       timeout_seconds: int = 180,
                       mode: str = "browser",
-                      on_submit=None) -> Tuple[bool, str, str]:
+                      on_submit=None,
+                      thumbnail_path: str = "") -> Tuple[bool, str, str]:
     """发布一条小红书笔记。返回 (ok, result_url, error)。
     页面模式使用账号持久 Profile；API 仅为显式兼容模式。"""
     files = [str(Path(p)) for p in media_paths if p and Path(p).exists()]
@@ -98,13 +99,29 @@ async def publish_xhs(mgr: BrowserManager, identity: Identity, storage_state_jso
     desc = (desc or "")[:1000]
     tags = [t.strip().lstrip("#") for t in (topics or "").split(",") if t.strip()]
 
+    # 封面处理：若未显式传入封面，自动在视频同目录探测专属封面（如 封面_第01集_xxx.jpg）
+    if media_type == "video" and files and (not thumbnail_path or not Path(thumbnail_path).is_file()):
+        vp = Path(files[0])
+        for cand in [
+            vp.parent / f"封面_{vp.stem}.jpg",
+            vp.parent / f"封面_{vp.stem}.png",
+            vp.parent / f"{vp.stem}_封面.jpg",
+            vp.parent / f"{vp.stem}_封面.png",
+            vp.parent / f"{vp.stem}.jpg",
+            vp.parent / f"{vp.stem}.png",
+        ]:
+            if cand.is_file():
+                thumbnail_path = str(cand)
+                break
+
     mode = str(mode or "browser").strip().lower()
     if mode not in {"browser", "api"}:
         mode = "browser"
     if mode == "browser":
         outcome = await publish_xhs_browser(
             mgr, identity, media_type, title, desc, tags, files,
-            timeout_seconds=timeout_seconds, on_submit=on_submit)
+            timeout_seconds=timeout_seconds, on_submit=on_submit,
+            thumbnail_path=thumbnail_path)
         return outcome.legacy()
 
     # 显式 API 兼容模式；失败后不切换到浏览器，避免一次任务被重复提交。

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import random
+import re
 import sys
 from contextlib import asynccontextmanager
 from typing import Any, Awaitable, Callable
@@ -139,8 +140,12 @@ class XhsInteractionPolicy:
         except Exception:
             actual = await locator.evaluate(
                 "el => el.value ?? el.innerText ?? el.textContent ?? ''")
-        if str(actual) != expected:
-            raise RuntimeError("小红书文本输入结果与预期不一致")
+        act_s = re.sub(r"[\r\n\s\u200b\uFEFF]+", "", str(actual or ""))
+        exp_s = re.sub(r"[\r\n\s\u200b\uFEFF]+", "", str(expected or ""))
+        if act_s != exp_s:
+            head = exp_s[:15]
+            if not act_s or (head and head not in act_s and act_s[:15] not in exp_s):
+                raise RuntimeError("小红书文本输入结果与预期不一致")
 
     async def scroll_step(self, page: Any, *, direction: int = 1) -> int:
         # Triangular sampling avoids a flat machine-like distribution while

@@ -8423,8 +8423,8 @@ async def add_publish(body: PublishIn):
             # 抖音 / 快手 / 视频号发布走浏览器自动化,登录态在该账号持久 profile 里
             if not (acc.creator_storage_state or acc.storage_state):
                 raise HTTPException(400, f"该{pname}账号不可发布:请先在账号页完成登录")
-        elif not (acc.creator_storage_state or has_creator_cookies(acc.storage_state)):
-            raise HTTPException(400, "该账号不可发布:请对该号完成「小红书扫码登录」或「创作者登录」")
+        elif not (has_creator_cookies(acc.creator_storage_state) or has_creator_cookies(acc.storage_state)):
+            raise HTTPException(400, "该账号小红书创作者登录态已过期，请在「账号」页点击「小红书创作者登录」完成扫码")
         vis = body.visibility if body.visibility in ("public", "friends", "private") else "public"
         t = PublishTask(
             content_fingerprint=fingerprint,
@@ -8434,6 +8434,7 @@ async def add_publish(body: PublishIn):
             location=(body.location or "").strip()[:60],
             collection_name=(body.collection_name or "").strip()[:50],
             visibility=vis, allow_save=bool(body.allow_save),
+            thumbnail_path=(body.thumbnail_path or "").strip(),
             media_json=json.dumps(paths), scheduled_at=_parse_when(body.scheduled_at),
         )
         s.add(t); s.commit(); s.refresh(t)
@@ -8898,8 +8899,8 @@ async def _repost_content(cid: int, body: RepostIn, target_platform: str):
                 pname = "微信公众号" if target_platform == "wechat_mp" else ("视频号" if target_platform == "shipinhao" else "抖音")
                 action = "公众号登录" if target_platform == "wechat_mp" else ("视频号登录" if target_platform == "shipinhao" else "创作者登录")
                 raise HTTPException(400, f"该{pname}账号不可发布:请先在账号页完成「{action}」")
-        elif not (acc.creator_storage_state or has_creator_cookies(acc.storage_state)):
-            raise HTTPException(400, "该账号不可发布:请对该号完成「小红书扫码登录」或「创作者登录」")
+        elif not (has_creator_cookies(acc.creator_storage_state) or has_creator_cookies(acc.storage_state)):
+            raise HTTPException(400, "该账号小红书创作者登录态已过期，请在「账号」页点击「小红书创作者登录」完成扫码")
     # 2) 退出会话后再创建发布任务(create_relay_publish 内部自开会话)
     #    若前端传了编辑后的标题/正文/话题,则用编辑值覆盖作品原始内容
     vis = body.visibility if body.visibility in ("public", "friends", "private") else "public"

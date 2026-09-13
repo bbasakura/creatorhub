@@ -41,7 +41,7 @@ from ..platforms.xhs import (parse_note_brief, parse_note_detail,
                    parse_comment as parse_xhs_comment,
                    flatten_comments as flatten_xhs_comments,
                    parse_self_user as parse_xhs_self_user,
-                   XhsApiClient, XhsApiError, cookie_str_from_state, has_a1,
+                   XhsApiClient, XhsApiError, cookie_str_from_state, has_a1, has_creator_cookies,
                    publish_xhs, creator_check, comment_xhs_browser)
 from ..platforms.kuaishou import (parse_ks_feed, parse_ks_comment,
                    flatten_ks_comments, parse_self_user as parse_ks_self_user,
@@ -2875,9 +2875,9 @@ class MonitorEngine:
                 ok, url, err = False, "", f"发布异常: {e!r}"
             return await self._finish_publish(task_id, ok, url, err, platform="douyin")
 
-        if not state:
+        if not state or not has_creator_cookies(state):
             return await self._finish_publish(
-                task_id, False, "", "该账号未完成小红书「创作者登录」,请先在账号页点「创作者登录」")
+                task_id, False, "", "该账号小红书「创作者登录」已过期，请在账号页点击「小红书创作者登录」重新扫码")
 
         xhs_mode = ("browser" if native_mode
                     else self._xhs_publish_mode())
@@ -2889,7 +2889,8 @@ class MonitorEngine:
                                              on_submit=(
                                                  lambda: self._mark_browser_submit(
                                                      PublishTask, task_id)
-                                                 if xhs_mode == "browser" else None))
+                                                 if xhs_mode == "browser" else None),
+                                             thumbnail_path=thumbnail_path)
         except Exception as e:
             ok, url, err = False, "", f"发布异常: {e!r}"
         return await self._finish_publish(task_id, ok, url, err)

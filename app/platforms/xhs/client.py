@@ -75,12 +75,20 @@ _CREATOR_COOKIE_NAMES = ("customerClientId", "galaxy_creator_session_id",
 
 
 def has_creator_cookies(storage_state_json: str) -> bool:
-    """登录态里是否含创作平台会话 cookie(可用于发布)。"""
+    """登录态里是否含创作平台有效会话 cookie(可用于发布，且未过期)。"""
     try:
         state = json.loads(storage_state_json or "{}")
     except Exception:
         return False
-    return any(c.get("name") in _CREATOR_COOKIE_NAMES for c in state.get("cookies", []))
+    import time
+    now = time.time()
+    for c in state.get("cookies", []):
+        name = c.get("name")
+        if name in _CREATOR_COOKIE_NAMES:
+            exp = c.get("expires", -1)
+            if exp == -1 or exp > now:
+                return True
+    return False
 
 
 class XhsApiError(Exception):
