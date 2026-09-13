@@ -2865,7 +2865,8 @@ class MonitorEngine:
                 ok, url, err = await publish_douyin(self.browser, identity, state,
                                                     media_type, title, desc, files,
                                                     topics=topics, visibility=visibility,
-                                                    allow_save=allow_save, headed=True)
+                                                    allow_save=allow_save, headed=True,
+                                                    thumbnail_path=getattr(t, "thumbnail_path", ""))
             except Exception as e:
                 ok, url, err = False, "", f"发布异常: {e!r}"
             return await self._finish_publish(task_id, ok, url, err, platform="douyin")

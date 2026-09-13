@@ -231,6 +231,116 @@ async def _set_ai_declaration(page) -> bool:
     return False
 
 
+async def _set_douyin_thumbnail(page, thumbnail_path: str) -> bool:
+    """设置抖音视频自定义封面（支持 9:16 竖版高清封面）。"""
+    if not thumbnail_path or not Path(thumbnail_path).is_file():
+        return False
+    try:
+        cover_area = page.locator('[class*="cover-"]').filter(has=page.locator("img")).first
+        if not await cover_area.count():
+            cover_area = page.locator('[class*="cover"]').first
+        if not await cover_area.count():
+            _log("未找到封面区域，跳过自定义封面")
+            return False
+
+        cover_locator_str = 'div.dy-creator-content-modal'
+        cover_locator = page.locator(cover_locator_str).first
+        opened = False
+        try:
+            await cover_area.wait_for(state="visible", timeout=6000)
+        except Exception:
+            pass
+
+        for attempt in range(4):
+            trigger = None
+            for _ in range(2):
+                try:
+                    await cover_area.hover(force=True)
+                    await page.wait_for_timeout(400)
+                except Exception:
+                    pass
+                for txt in ["编辑封面", "选择封面", "设置封面"]:
+                    t = page.get_by_text(txt, exact=True).first
+                    if await t.count() and await t.is_visible():
+                        trigger = t
+                        break
+                if trigger is not None:
+                    break
+            trigger = trigger or cover_area
+            try:
+                await trigger.click(timeout=4000)
+            except Exception:
+                try:
+                    await trigger.click(force=True, timeout=3000)
+                except Exception:
+                    pass
+            try:
+                await page.wait_for_selector(cover_locator_str, timeout=4000)
+                opened = True
+                break
+            except Exception:
+                await page.wait_for_timeout(800)
+
+        if not opened:
+            _log("⚠️ 封面弹窗未打开，继续发布")
+            return False
+
+        await page.wait_for_timeout(1000)
+        cover_upload = cover_locator.locator(
+            '.semi-upload:has(.semi-upload-drag-area-main-text) input.semi-upload-hidden-input'
+        ).first
+        if await cover_upload.count() == 0:
+            cover_upload = cover_locator.locator("input.semi-upload-hidden-input").last
+
+        try:
+            vert_tab = cover_locator.get_by_text("设置竖封面", exact=True).first
+            if await vert_tab.count() and await vert_tab.is_visible():
+                await vert_tab.click(timeout=2000)
+                await page.wait_for_timeout(400)
+        except Exception:
+            pass
+
+        await cover_upload.set_input_files(thumbnail_path)
+        _log(f"已上传自定义封面: {Path(thumbnail_path).name}")
+        await page.wait_for_timeout(2500)
+
+        finish_btn = cover_locator.get_by_role("button", name="完成", exact=True).first
+        for _ in range(20):
+            if await finish_btn.count():
+                cls = await finish_btn.get_attribute("class") or ""
+                if "semi-button-disabled" not in cls:
+                    break
+            await page.wait_for_timeout(500)
+
+        for _ in range(3):
+            if await finish_btn.count():
+                try:
+                    await finish_btn.click(timeout=3000)
+                except Exception:
+                    pass
+            await page.wait_for_timeout(1000)
+            if await cover_locator.count() == 0:
+                break
+            for cname in ["确定", "确认", "仍然完成", "继续"]:
+                cf = page.locator(".semi-modal-content").get_by_role("button", name=cname, exact=True).first
+                if await cf.count() and await cf.is_visible():
+                    try:
+                        await cf.click(timeout=2000)
+                    except Exception:
+                        pass
+                    break
+            if await cover_locator.count() == 0:
+                break
+            await page.keyboard.press("Escape")
+            await page.wait_for_timeout(500)
+
+        _log("视频封面设置完成")
+        return True
+    except Exception as e:
+        _log(f"设置封面提示: {e!r} (继续发布)")
+        return False
+
+
 async def _apply_publish_settings(page, visibility: str, allow_save: bool) -> None:
     """设置「谁可以看」「保存权限」。公开 / 允许为抖音默认值,非默认才点,减少误点。"""
     vis_label = {"friends": "好友可见", "private": "仅自己可见"}.get(visibility, "")
@@ -245,7 +355,8 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
                          storage_state_json: str, media_type: str, title: str,
                          desc: str, media_paths: List[str], topics: str = "",
                          visibility: str = "public", allow_save: bool = True,
-                         headed: bool = True, timeout_seconds: int = 180
+                         headed: bool = True, timeout_seconds: int = 180,
+                         thumbnail_path: str = ""
                          ) -> Tuple[bool, str, str]:
     """发布一条抖音作品。返回 (ok, result_url, error)。
     storage_state_json 仅用于校验(实际登录态在该账号持久 profile 里)。
@@ -303,6 +414,26 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
                                "请在弹出的窗口里查看,或到抖音创作平台重试。")
         _log(f"已进入编辑页 url={page.url}")
         await page.wait_for_timeout(1500)
+
+        # 封面处理：若未显式传入封面，自动在视频同目录探测专属封面（如 封面_第01集_xxx.jpg）
+        if media_type == "video" and files and (not thumbnail_path or not Path(thumbnail_path).is_file()):
+            vp = Path(files[0])
+            for cand in [
+                vp.parent / f"封面_{vp.stem}.jpg",
+                vp.parent / f"封面_{vp.stem}.png",
+                vp.parent / f"{vp.stem}_封面.jpg",
+                vp.parent / f"{vp.stem}_封面.png",
+                vp.parent / f"{vp.stem}.jpg",
+                vp.parent / f"{vp.stem}.png",
+            ]:
+                if cand.is_file():
+                    thumbnail_path = str(cand)
+                    _log(f"自动发现同目录专属封面: {cand.name}")
+                    break
+
+        if media_type == "video" and thumbnail_path and Path(thumbnail_path).is_file():
+            await _set_douyin_thumbnail(page, thumbnail_path)
+            await page.wait_for_timeout(800)
 
         if title:
             await _fill_first(page, _TITLE_SEL, title.strip()[:30])
