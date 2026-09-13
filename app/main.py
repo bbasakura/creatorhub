@@ -8336,8 +8336,8 @@ def _publish_dict(t: PublishTask) -> dict:
         "visibility": t.visibility, "allow_save": t.allow_save,
         "error": t.error, "media_count": len(json.loads(t.media_json or "[]")),
         "source_platform": t.source_platform, "source_content_id": t.source_content_id,
-        "scheduled_at": t.scheduled_at.isoformat() if t.scheduled_at else None,
-        "created_at": t.created_at.isoformat() if t.created_at else None,
+        "scheduled_at": (t.scheduled_at.isoformat() + "Z") if t.scheduled_at else None,
+        "created_at": (t.created_at.isoformat() + "Z") if t.created_at else None,
     }
 
 
@@ -8345,7 +8345,13 @@ def _parse_when(s: str | None) -> datetime | None:
     if not s:
         return None
     try:
-        return datetime.fromisoformat(s.replace("Z", ""))
+        if s.endswith("Z"):
+            return datetime.fromisoformat(s[:-1])
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is not None:
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        # 本地时间(默认按东八区 UTC+8)转换为 UTC 存储，以便与 monitor.py 中的 utcnow() 对齐
+        return dt - timedelta(hours=8)
     except Exception:
         return None
 

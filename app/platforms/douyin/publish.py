@@ -369,7 +369,11 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
     body = ((desc or "") + ("\n" + " ".join(f"#{t}" for t in tags) if tags else "")).strip()[:2000]
 
     ctx = await mgr.open_headed(identity)
-    page = await ctx.new_page()
+    page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+    try:
+        await page.set_viewport_size({"width": 1280, "height": 900})
+    except Exception:
+        pass
 
     # 保险:媒体上传我们全用 set_input_files(不触发 filechooser),故任何 filechooser
     # 事件都是意外(比如误点了「继续添加/封面」的 <input type=file>),自动取消避免卡死。
