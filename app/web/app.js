@@ -825,10 +825,10 @@ const PF_NAME = { youtube: "YouTube", douyin: "抖音", xhs: "小红书", kuaish
 let CURRENT_TAB = "overview";
 const PAGE_META = {
   overview: {
-    title: "总览", desc: "集中查看账号状态、采集规模与近 7 天数据变化。"
+    title: "总览看板", desc: "集中查看账号状态、发布统计与近 7 天数据变化。"
   },
   accounts: {
-    title: "账号与网络", desc: "管理登录状态、账号资料与独立代理绑定。"
+    title: "账号授权", desc: "管理多平台登录状态、授权凭据与独立代理配置。"
   },
   "risk-control": {
     title: "风控中心", desc: "统一管理风控规则，查看账号状态、触发原因、恢复进度与事件记录。"
@@ -846,10 +846,10 @@ const PAGE_META = {
     title: "弹幕监控", desc: "监控短视频播放器内的弹幕，保留每条弹幕在视频中的时间点。"
   },
   hub: {
-    title: "本账号管理", desc: "同步自己的作品、关系、私信与账号数据。"
+    title: "我的作品", desc: "查看与同步各平台已发布作品、粉丝、数据与线上表现。"
   },
   publish: {
-    title: "内容发布", desc: "准备素材与文案，创建立即或定时发布任务。"
+    title: "发布作品", desc: "准备素材与文案，创建立即或定时发布任务。"
   },
   queue: {
     title: "任务队列", desc: "统一查看采集、发布、评论、账号动作与下载任务的排队、执行和阻塞状态。"
@@ -1079,7 +1079,11 @@ function switchTab(name, pushHistory = false) {
   document.querySelectorAll(".navitem").forEach(t => {
     const active = t.dataset.tab === name;
     t.classList.toggle("active", active);
-    if (active) t.setAttribute("aria-current", "page");
+    if (active) {
+      t.setAttribute("aria-current", "page");
+      const pDetails = t.closest("details");
+      if (pDetails) pDetails.open = true;
+    }
     else t.removeAttribute("aria-current");
   });
   try { localStorage.setItem("dym-tab", name); } catch (e) {}
