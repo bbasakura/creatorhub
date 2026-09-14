@@ -383,20 +383,27 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
             except Exception as e:
                 return False, "", f"点保存草稿失败: {e!r}"
         else:
-            pub, _pf = await _find_in_frames(page, _PUBLISH_BTN)
-            if pub is None:
+            pub = page.locator('button.weui-desktop-btn_primary:has-text("发表"), button:has-text("发表")').first
+            if not await pub.count():
+                pub, _pf = await _find_in_frames(page, _PUBLISH_BTN)
+            if pub is None or not await pub.count():
                 diag = await _collect_diag(page, "no-publish-btn")
                 return False, "", (f"上传/填写已完成但未找到发表按钮。DOM诊断: {diag}")
             try:
                 await pub.click(timeout=5000)
-            except Exception as e:
-                return False, "", f"点发表失败: {e!r}"
+            except Exception:
+                try:
+                    await pub.evaluate("el => el.click()")
+                except Exception as e:
+                    return False, "", f"点发表失败: {e!r}"
 
-            # 等成功:视频号发表后会**跳到「图文/视频管理」列表页**(URL 含 PostList),
-            # 或短暂弹「发表成功」toast。以跳列表页为主判据(实测 finderNewLifePostList)。
+            # 等成功:
+            # 1. 跳管理列表页 (URL含 postlist 或 /post/list) 或离开 /post/create
+            # 2. 出现「发表成功」toast
+            # 3. 原发表按钮已消失或页面跳转
             for _ in range(int(timeout_seconds / 2)):
                 url_l = page.url.lower()
-                if "postlist" in url_l or "/post/list" in url_l:
+                if "postlist" in url_l or "/post/list" in url_l or ("/post/create" not in url_l and "channels.weixin.qq.com" in url_l):
                     ok = True
                     break
                 for fr in page.frames:
@@ -408,6 +415,12 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
                         pass
                 if ok:
                     break
+                try:
+                    if not await pub.count() or not await pub.is_visible():
+                        ok = True
+                        break
+                except Exception:
+                    pass
                 await page.wait_for_timeout(2000)
             result_url = page.url if ok else ""
             if not ok:
