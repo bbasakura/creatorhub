@@ -2821,6 +2821,7 @@ class MonitorEngine:
             location = getattr(t, "location", "") or ""
             thumbnail_path = getattr(t, "thumbnail_path", "") or ""
             collection_name = getattr(t, "collection_name", "") or ""
+            operation = getattr(t, "operation", "") or "publish"
             platform = t.platform
             files = _loads_list(t.media_json)
             t.status = "publishing"; t.error = ""
@@ -2854,7 +2855,9 @@ class MonitorEngine:
                 ok, url, err = await publish_channels(self.browser, identity, state,
                                                       media_type, title, desc, files,
                                                       topics=topics, headed=True,
-                                                      location=location)
+                                                      location=location,
+                                                      thumbnail_path=thumbnail_path,
+                                                      operation=operation)
             except Exception as e:
                 ok, url, err = False, "", f"发布异常: {e!r}"
             return await self._finish_publish(task_id, ok, url, err, platform="shipinhao")

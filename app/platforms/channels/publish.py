@@ -198,15 +198,37 @@ async def _collect_diag(page, tag: str) -> str:
     return summary
 
 
+async def _dismiss_switch_account_dialog(page):
+    """视频号上传或进入页面后偶发弹出「切换视频号」遮罩对话框，需点取消或右上角关闭。"""
+    cancel = page.locator('.changeAccount-dialog button:has-text("取消"), div.weui-desktop-dialog:has-text("切换视频号") button:has-text("取消")').first
+    closeb = page.locator('.changeAccount-dialog .weui-desktop-dialog__close-btn, div.weui-desktop-dialog:has-text("切换视频号") .weui-desktop-dialog__close-btn').first
+    for cand in (cancel, closeb):
+        try:
+            if await cand.count() and await cand.is_visible():
+                await cand.click(timeout=2000)
+                await page.wait_for_timeout(500)
+                return
+        except Exception:
+            continue
+    try:
+        await page.keyboard.press("Escape")
+        await page.wait_for_timeout(400)
+    except Exception:
+        pass
+
+
 async def publish_channels(mgr: BrowserManager, identity: Identity,
                            storage_state_json: str, media_type: str, title: str,
                            desc: str, media_paths: List[str], topics: str = "",
                            headed: bool = True, timeout_seconds: int = 180,
-                           location: str = ""
+                           location: str = "",
+                           thumbnail_path: str = "",
+                           operation: str = "publish"
                            ) -> Tuple[bool, str, str]:
-    """发布一条视频号作品。返回 (ok, result_url, error)。
+    """发布一条视频号作品或保存为草稿。返回 (ok, result_url, error)。
     location:可选,视频号位置 POI(best-effort,设不上不影响发布)。
-    storage_state_json 仅校验用,实际登录态在该账号持久 profile 里。"""
+    thumbnail_path:可选,自定义立轴封面。若为空且为视频，自动探测同目录下封面。
+    operation: 'publish' (发布) 或 'draft' (保存草稿)。"""
     files = [str(Path(p)) for p in media_paths if p and Path(p).exists()]
     if not files:
         return False, "", "没有可用的本地媒体文件(路径不存在)"
@@ -215,18 +237,47 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
     body = ((desc or "")
             + ("\n" + " ".join(f"#{t}" for t in tags) if tags else "")).strip()[:1000]
 
+    # 封面自动探测: 若未显式传入封面, 自动在视频同目录探测专属封面（如 封面_{stem}.jpg）
+    if media_type == "video" and files and (not thumbnail_path or not Path(thumbnail_path).is_file()):
+        vp = Path(files[0])
+        for cand in [
+            vp.parent / f"封面_{vp.stem}.jpg",
+            vp.parent / f"封面_{vp.stem}.png",
+            vp.parent / f"{vp.stem}_封面.jpg",
+            vp.parent / f"{vp.stem}_封面.png",
+            vp.parent / f"{vp.stem}.jpg",
+            vp.parent / f"{vp.stem}.png",
+        ]:
+            if cand.is_file():
+                thumbnail_path = str(cand)
+                break
+
     ctx = await mgr.open_headed(identity)
     page = await ctx.new_page()
     ok, result_url, error = False, "", ""
     try:
-        # 视频号发布入口就是 create 页;图文/视频靠点左侧导航切换(finderNewLifeCreateg 会 302 回 create)
-        await page.goto(CREATE_URL_VIDEO, wait_until="domcontentloaded", timeout=40000)
-        await page.wait_for_timeout(4000)
+        await page.set_viewport_size({"width": 1600, "height": 960})
+        # 视频号发布入口先打开平台首页或发布页
+        await page.goto("https://channels.weixin.qq.com/platform", wait_until="domcontentloaded", timeout=40000)
+        await page.wait_for_timeout(3000)
         if "login.html" in page.url or page.url.rstrip("/").endswith("/login"):
             return False, "", f"logged_out:视频号助手未登录(落到 {page.url})"
 
+        await _dismiss_switch_account_dialog(page)
+
+        # 若不在发布页，点击「发表视频」按钮进入创建页
+        if "post/create" not in page.url and media_type == "video":
+            create_btn = page.locator('button:has-text("发表视频"), a:has-text("发表视频")').first
+            try:
+                await create_btn.wait_for(state="visible", timeout=15000)
+                await create_btn.click()
+                await page.wait_for_timeout(3000)
+            except Exception:
+                pass
+
+        await _dismiss_switch_account_dialog(page)
+
         # 图文:点左侧「图文」→ 图文列表页 → 点「发表图文」→ 图文发布表单
-        # (视频号 UI 在 micro/content iframe 里,按钮要跨 frame 点)
         if media_type == "images":
             await _click_in_frames(page, _IMAGE_NAV, timeout=4000)
             await page.wait_for_timeout(2000)
@@ -238,7 +289,6 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
 
         want = files if media_type == "images" else files[:1]
         uploaded = False
-        # 首选:直接给隐藏 <input type=file> 塞文件(不弹原生对话框,最稳)
         up, _fr = await _find_in_frames(page, _FILE_SEL)
         if up is not None:
             try:
@@ -246,8 +296,6 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
                 uploaded = True
             except Exception:
                 uploaded = False
-        # 兜底:input 是点击时按需创建 —— 用 expect_file_chooser 拦截原生文件框(关键!
-        # 裸点上传区会弹 Windows「打开」对话框把 Patchright 卡死,必须这样接管)
         if not uploaded:
             try:
                 async with page.expect_file_chooser(timeout=10000) as fc_info:
@@ -262,61 +310,110 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
             diag = await _collect_diag(page, "upload-failed")
             return False, "", (f"上传失败(未找到可用上传入口/文件选择器)。DOM诊断: {diag}")
 
-        # 等待转码/上传(视频较久)
-        await page.wait_for_timeout(8000 if media_type == "video" else 4000)
+        # 等待视频抽帧与封面渲染完毕（约5-6秒）
+        await page.wait_for_timeout(6000 if media_type == "video" else 3000)
+        await _dismiss_switch_account_dialog(page)
 
+        # 设置自定义竖版封面（3:4 个人主页与分享卡片）
+        if media_type == "video" and thumbnail_path and Path(thumbnail_path).is_file():
+            try:
+                ed = page.get_by_text("编辑", exact=True).first
+                if await ed.count() and await ed.is_visible():
+                    await ed.click(force=True)
+                    dialog = page.locator('.weui-desktop-dialog:visible').filter(has_text="编辑封面").first
+                    await dialog.wait_for(state="visible", timeout=8000)
+                    cover_inp = dialog.locator('input[type="file"]').first
+                    if await cover_inp.count():
+                        await cover_inp.set_input_files(thumbnail_path)
+                        await page.wait_for_timeout(2500)
+                        # 裁剪确认（若出现）
+                        crop_btn = page.locator('button.weui-desktop-btn_primary:visible').filter(has_text="确定").first
+                        if await crop_btn.count():
+                            await crop_btn.click()
+                            await page.wait_for_timeout(1000)
+                        confirm_btn = page.locator('button.weui-desktop-btn_primary:visible').filter(has_text="确认").first
+                        if await confirm_btn.count():
+                            await confirm_btn.click()
+                            await page.wait_for_timeout(1500)
+            except Exception as exc:
+                log.warning("[channels_publish] 设置封面异常(已跳过): %r", exc)
+
+        # 填写短标题
         if title:
+            # 短标题限16字内，去除前缀标签
+            short_t = title.split("·")[-1].strip() if "·" in title else title
+            short_t = short_t[:16]
             el, _tf = await _find_in_frames(page, _SHORT_TITLE_SEL)
             if el is not None:
                 try:
-                    await el.fill(title[:16])
+                    await el.fill(short_t)
                 except Exception:
                     pass
+
+        # 填写正文描述与话题
         if body:
             el, _df = await _find_in_frames(page, _DESC_SEL)
             if el is not None:
                 try:
                     await el.click()
-                    await page.keyboard.type(body, delay=20)
+                    await page.keyboard.type(body, delay=15)
                 except Exception:
                     pass
+
         # 位置 POI(可选,best-effort)
         await _set_location(page, location)
         await page.wait_for_timeout(1000)
 
-        pub, _pf = await _find_in_frames(page, _PUBLISH_BTN)
-        if pub is None:
-            diag = await _collect_diag(page, "no-publish-btn")
-            return False, "", (f"上传/填写已完成但未找到发表按钮。DOM诊断: {diag}")
-        try:
-            await pub.click(timeout=5000)
-        except Exception as e:
-            return False, "", f"点发表失败: {e!r}"
-
-        # 等成功:视频号发表后会**跳到「图文/视频管理」列表页**(URL 含 PostList),
-        # 或短暂弹「发表成功」toast。以跳列表页为主判据(实测 finderNewLifePostList)。
-        for _ in range(int(timeout_seconds / 2)):
-            url_l = page.url.lower()
-            # finderNewLifePostList / post/list 等管理列表页 -> 发表成功后的落点
-            if "postlist" in url_l or "/post/list" in url_l:
-                ok = True
-                break
-            # toast 可能在主页面或 micro/content iframe 里
-            for fr in page.frames:
-                try:
-                    if any([await fr.get_by_text(t, exact=False).count() for t in _OK_TEXTS]):
-                        ok = True
+        # 区分存草稿与正式发表
+        if operation == "draft":
+            draft_btn = page.locator('button:has-text("保存草稿"), .weui-desktop-btn:has-text("保存草稿")').first
+            if not await draft_btn.count():
+                return False, "", "未找到「保存草稿」按钮"
+            try:
+                await draft_btn.click(timeout=5000)
+                # 等待「已保存」提示
+                saved = False
+                for _ in range(10):
+                    await page.wait_for_timeout(1000)
+                    if await page.locator('text="已保存"').count():
+                        saved = True
                         break
-                except Exception:
-                    pass
-            if ok:
-                break
-            await page.wait_for_timeout(2000)
-        result_url = page.url if ok else ""
-        if not ok:
-            diag = await _collect_diag(page, "no-success")
-            error = ("已点发表但未确认成功(视频号可能要求封面/实名/过脸验证,请到助手确认)。"
-                     f"当前页: {page.url}; DOM诊断: {diag}")
+                ok = True
+                result_url = "https://channels.weixin.qq.com/platform/post/draftListManager"
+            except Exception as e:
+                return False, "", f"点保存草稿失败: {e!r}"
+        else:
+            pub, _pf = await _find_in_frames(page, _PUBLISH_BTN)
+            if pub is None:
+                diag = await _collect_diag(page, "no-publish-btn")
+                return False, "", (f"上传/填写已完成但未找到发表按钮。DOM诊断: {diag}")
+            try:
+                await pub.click(timeout=5000)
+            except Exception as e:
+                return False, "", f"点发表失败: {e!r}"
+
+            # 等成功:视频号发表后会**跳到「图文/视频管理」列表页**(URL 含 PostList),
+            # 或短暂弹「发表成功」toast。以跳列表页为主判据(实测 finderNewLifePostList)。
+            for _ in range(int(timeout_seconds / 2)):
+                url_l = page.url.lower()
+                if "postlist" in url_l or "/post/list" in url_l:
+                    ok = True
+                    break
+                for fr in page.frames:
+                    try:
+                        if any([await fr.get_by_text(t, exact=False).count() for t in _OK_TEXTS]):
+                            ok = True
+                            break
+                    except Exception:
+                        pass
+                if ok:
+                    break
+                await page.wait_for_timeout(2000)
+            result_url = page.url if ok else ""
+            if not ok:
+                diag = await _collect_diag(page, "no-success")
+                error = ("已点发表但未确认成功(视频号可能要求封面/实名/过脸验证,请到助手确认)。"
+                         f"当前页: {page.url}; DOM诊断: {diag}")
     except Exception as e:
         error = f"发布异常: {e!r}"
     finally:

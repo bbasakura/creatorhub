@@ -8311,6 +8311,7 @@ class PublishIn(BaseModel):
     made_for_kids: bool = False
     thumbnail_path: str = ""
     collection_name: str = ""
+    operation: str = "publish"            # publish | draft
     allow_save: bool = True               # 抖音:是否允许他人保存
     scheduled_at: str | None = None       # ISO 时间(本地),空=尽快发
 
@@ -8428,7 +8429,7 @@ async def add_publish(body: PublishIn):
         vis = body.visibility if body.visibility in ("public", "friends", "private") else "public"
         t = PublishTask(
             content_fingerprint=fingerprint,
-            operation="draft" if acc.platform == "wechat_mp" else "publish",
+            operation=body.operation if body.operation in ("draft", "publish") else ("draft" if acc.platform == "wechat_mp" else "publish"),
             platform=acc.platform, account_id=body.account_id, media_type=body.media_type,
             title=body.title.strip()[:64 if acc.platform == "wechat_mp" else 20], desc=body.desc, topics=body.topics,
             location=(body.location or "").strip()[:60],
