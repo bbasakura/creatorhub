@@ -19,7 +19,7 @@ from .manager import BrowserManager
 log = logging.getLogger("creatorhub.wechat_mp")
 
 BASE = "https://mp.weixin.qq.com"
-HOME_URL = f"{BASE}/cgi-bin/home"
+HOME_URL = f"{BASE}/"
 APPMSG_LIST_URL = f"{BASE}/cgi-bin/appmsg?begin=0&count=20&type=77&action=list_ex"
 PUBLISHED_LIST_URL = f"{BASE}/cgi-bin/freepublish?action=get_publication_records&offset=0&count=20"
 COMMENT_LIST_URL = f"{BASE}/cgi-bin/comment?action=list"
@@ -80,12 +80,12 @@ async def fetch_mp_self_profile(mgr: BrowserManager, identity: Identity,
         # 2. 兜底：从 DOM 节点中读取账号昵称和头像
         if not result or not result.get("nickname"):
             try:
-                nick_el = page.locator(".weui-desktop-account__nickname, .account_name, .meta_content").first
+                nick_el = page.locator(".weui-desktop_name, .acount_box-nickname, .weui-desktop-account__nickname, .account_name, .meta_content").first
                 if await nick_el.count():
                     nick = (await nick_el.text_content() or "").strip()
                     if nick:
                         result["nickname"] = nick
-                avatar_el = page.locator(".weui-desktop-account__avatar img, .account_avatar img").first
+                avatar_el = page.locator(".weui-desktop-account__thumb, .account_box-panel-head__thumb, .weui-desktop-account__avatar img, .account_avatar img").first
                 if await avatar_el.count():
                     av = await avatar_el.get_attribute("src") or ""
                     if av:
@@ -98,19 +98,27 @@ async def fetch_mp_self_profile(mgr: BrowserManager, identity: Identity,
             token = _extract_token_from_url_or_obj(page.url, result)
             if token:
                 result["token"] = token
-                # 尝试调用粉丝分析概览
-                analysis_url = f"{BASE}/cgi-bin/user_analysis?action=trend&token={token}&lang=zh_CN&f=json"
-                js_fetch = f"""
-                async () => {{
-                    try {{
-                        const r = await fetch("{analysis_url}", {{ credentials: "include" }});
-                        return await r.json();
-                    }} catch (e) {{ return null; }}
-                }}
-                """
-                stat_data = await page.evaluate(js_fetch)
-                if isinstance(stat_data, dict) and stat_data.get("total_user"):
-                    result["total_user"] = stat_data.get("total_user")
+                # 优先从页面用户数卡片读取
+                user_num_el = page.locator(".weui-desktop-user_num, .user_num").first
+                if await user_num_el.count():
+                    num_text = (await user_num_el.text_content() or "").strip()
+                    m = re.search(r"(\d[\d,]*)", num_text)
+                    if m:
+                        result["total_user"] = int(m.group(1).replace(",", ""))
+                if not result.get("total_user"):
+                    # 尝试调用粉丝分析概览
+                    analysis_url = f"{BASE}/cgi-bin/user_analysis?action=trend&token={token}&lang=zh_CN&f=json"
+                    js_fetch = f"""
+                    async () => {{
+                        try {{
+                            const r = await fetch("{analysis_url}", {{ credentials: "include" }});
+                            return await r.json();
+                        }} catch (e) {{ return null; }}
+                    }}
+                    """
+                    stat_data = await page.evaluate(js_fetch)
+                    if isinstance(stat_data, dict) and stat_data.get("total_user"):
+                        result["total_user"] = stat_data.get("total_user")
         except Exception:
             pass
 

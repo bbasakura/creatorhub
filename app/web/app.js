@@ -927,14 +927,18 @@ function applyPlatformUI() {
   document.querySelectorAll(".ks-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "kuaishou"));
   document.querySelectorAll(".sh-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "shipinhao"));
   document.querySelectorAll(".mp-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "wechat_mp"));
-  // 公众号文章选项只在 wechat_mp 平台显示
+  // 公众号文章与贴图选项在 wechat_mp 平台显示
   const pubType = $("pub-type");
   if (pubType) {
     const artOpt = pubType.querySelector('option[value="article"]');
     if (artOpt) artOpt.remove();
+    const imgOpt = pubType.querySelector('option[value="images"]');
     if (PLATFORM === "wechat_mp") {
       const vidOpt = pubType.querySelector('option[value="video"]');
-      if (vidOpt) vidOpt.insertAdjacentHTML("afterend", '<option value="article">公众号文章</option>');
+      if (vidOpt) vidOpt.insertAdjacentHTML("afterend", '<option value="article">公众号文章 (图文)</option>');
+      if (imgOpt) imgOpt.textContent = "公众号贴图 (图片消息)";
+    } else {
+      if (imgOpt) imgOpt.textContent = "图集 (多图)";
     }
   }
   document.querySelectorAll(".notsh-only").forEach(e => e.classList.toggle("hidden", pfIsChannels(PLATFORM)));
@@ -970,17 +974,28 @@ function applyPlatformUI() {
     if (copy) copy.textContent = pubHintText;
     else pubHint.textContent = pubHintText;
   }
-  if (PLATFORM === "youtube" || mp) {
-    $("pub-type").value = mp ? "article" : "video";
+  if (PLATFORM === "youtube") {
+    $("pub-type").value = "video";
     $("pub-type").disabled = true;
-    $("pub-when").disabled = PLATFORM === "youtube";
-    if (PLATFORM === "youtube") $("pub-when").value = "";
-    $("pub-head-lead").textContent = mp ? "保存公众号草稿" : "YouTube 上传";
-    $("pub-head-sub").textContent = mp ? "图文草稿；贴图和视频待校准" : "官方API上传，默认私密";
+    $("pub-when").disabled = true;
+    $("pub-when").value = "";
+    $("pub-head-lead").textContent = "YouTube 上传";
+    $("pub-head-sub").textContent = "官方API上传，默认私密";
     const hint = $("pub-hint").querySelector("span");
-    if (hint) hint.textContent = mp ? "必须选择封面；保存后核对草稿ID与标题，不自动发表。" : "需Google OAuth授权；未审核API项目可能仅允许私密上传。";
+    if (hint) hint.textContent = "需Google OAuth授权；未审核API项目可能仅允许私密上传。";
     onPubType();
-    $("pub-title").maxLength = mp ? 64 : 100;
+    $("pub-title").maxLength = 100;
+  } else if (mp) {
+    $("pub-type").disabled = false;
+    $("pub-when").disabled = false;
+    if ($("pub-type").value !== "images" && $("pub-type").value !== "article") {
+      $("pub-type").value = "article";
+    }
+    $("pub-head-lead").textContent = "保存公众号草稿";
+    $("pub-head-sub").textContent = "支持图文文章与贴图草稿入库（存入草稿箱）";
+    const hint = $("pub-hint").querySelector("span");
+    if (hint) hint.textContent = "保存草稿后系统自动回读草稿箱核验真实状态；群发推送强制微信手机扫码，系统默认保存为草稿。";
+    onPubType();
   } else {
     $("pub-type").disabled = false;
     $("pub-when").disabled = false;
@@ -5847,9 +5862,23 @@ let pubFilesDT = new DataTransfer();
 function onPubType() {
   const v = $("pub-type").value, inp = $("pub-files"), lbl = $("pub-files-label");
   if (!inp) return;
-  if (v === "article") { inp.accept = ""; inp.multiple = true; lbl.textContent = "选择封面/插图（第一张为封面，必选）"; $("pub-title").maxLength = 64; $("pub-title").previousElementSibling.textContent = "标题(≤ 64 字)"; }
-  else if (v === "video") { inp.accept = "video/*"; inp.multiple = false; lbl.textContent = "选择视频文件(单个)"; $("pub-title").maxLength = 64; $("pub-title").previousElementSibling.textContent = "标题"; }
-  else { inp.accept = "image/*"; inp.multiple = true; lbl.textContent = "选择图片(可多选,最多 18 张)"; $("pub-title").maxLength = 64; $("pub-title").previousElementSibling.textContent = "标题"; }
+  const isMp = PLATFORM === "wechat_mp";
+  if (v === "article") {
+    inp.accept = ""; inp.multiple = true;
+    lbl.textContent = "选择封面/插图（第一张为封面，必选）";
+    $("pub-title").maxLength = 64;
+    $("pub-title").previousElementSibling.textContent = "标题(≤ 64 字)";
+  } else if (v === "video") {
+    inp.accept = "video/*"; inp.multiple = false;
+    lbl.textContent = "选择视频文件(单个)";
+    $("pub-title").maxLength = 64;
+    $("pub-title").previousElementSibling.textContent = "标题";
+  } else {
+    inp.accept = "image/*"; inp.multiple = true;
+    lbl.textContent = isMp ? "选择贴图图片(可多选)" : "选择图片(可多选,最多 18 张)";
+    $("pub-title").maxLength = isMp ? 20 : 64;
+    $("pub-title").previousElementSibling.textContent = isMp ? "标题(≤ 20 字)" : "标题";
+  }
   pubFilesClear();
 }
 function pubFilesClear() { pubFilesDT = new DataTransfer(); _pubSync(); }

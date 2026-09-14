@@ -8401,10 +8401,12 @@ async def add_publish(body: PublishIn):
             session.add(task); session.commit(); session.refresh(task)
             return _publish_dict(task)
         if account and account.platform == "wechat_mp":
-            if body.media_type != "article":
-                raise HTTPException(400, "当前仅开放图文草稿；贴图和视频等待真实后台校准")
-            if not body.title.strip() or len(body.title) > 64:
+            if body.media_type not in ("article", "images"):
+                raise HTTPException(400, "公众号当前支持图文草稿(article)与贴图草稿(images)")
+            if body.media_type == "article" and (not body.title.strip() or len(body.title) > 64):
                 raise HTTPException(400, "公众号图文标题须1至64字")
+            if body.media_type == "images" and (not body.title.strip() or len(body.title) > 20):
+                raise HTTPException(400, "公众号贴图标题须1至20字")
             if any(not Path(p).is_file() for p in body.media_paths):
                 raise HTTPException(400, "配图不存在，不允许静默遗漏")
     paths = [p for p in body.media_paths if Path(p).exists()] if body.media_paths else []
@@ -8412,10 +8414,10 @@ async def add_publish(body: PublishIn):
         acc = s.get(DouyinAccount, body.account_id)
         if not acc or acc.platform not in ("xhs", "kuaishou", "douyin", "shipinhao", "wechat_mp"):
             raise HTTPException(400, "请选择一个已登录的抖音 / 小红书 / 快手 / 视频号账号")
-        is_mp_article = acc.platform == "wechat_mp" and body.media_type == "article"
-        if is_mp_article:
+        is_mp_item = acc.platform == "wechat_mp" and body.media_type in ("article", "images")
+        if is_mp_item:
             if not body.title.strip():
-                raise HTTPException(400, "公众号文章需要标题")
+                raise HTTPException(400, "公众号作品需要标题")
         elif body.media_type not in ("images", "video"):
             raise HTTPException(400, "media_type 须为 images 或 video")
         pname = {"kuaishou": "快手", "douyin": "抖音",
@@ -8431,7 +8433,7 @@ async def add_publish(body: PublishIn):
             content_fingerprint=fingerprint,
             operation=body.operation if body.operation in ("draft", "publish") else ("draft" if acc.platform == "wechat_mp" else "publish"),
             platform=acc.platform, account_id=body.account_id, media_type=body.media_type,
-            title=body.title.strip()[:64 if acc.platform == "wechat_mp" else 20], desc=body.desc, topics=body.topics,
+            title=body.title.strip()[:(20 if body.media_type == "images" else 64) if acc.platform == "wechat_mp" else 20], desc=body.desc, topics=body.topics,
             location=(body.location or "").strip()[:60],
             collection_name=(body.collection_name or "").strip()[:50],
             visibility=vis, allow_save=bool(body.allow_save),

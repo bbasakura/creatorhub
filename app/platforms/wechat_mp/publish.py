@@ -25,7 +25,7 @@ from ...browser.manager import BrowserManager
 log = logging.getLogger("creatorhub.wechat_mp")
 
 BASE_URL = "https://mp.weixin.qq.com"
-HOME_URL = f"{BASE_URL}/cgi-bin/home"
+HOME_URL = f"{BASE_URL}/"
 UPLOAD_URL = f"{BASE_URL}/cgi-bin/filetransfer?action=upload_material&f=json&use_clienturl=1"
 SAVE_DRAFT_URL = f"{BASE_URL}/cgi-bin/appmsg?t=media/appmsg_edit_v2&action=edit&isNew=1&f=json"
 FREEPUBLISH_URL = f"{BASE_URL}/cgi-bin/freepublish?action=publish&f=json"
@@ -165,68 +165,167 @@ async def publish_mp(mgr: BrowserManager, identity: Identity,
     
     media_type:
       - "article" / "text": 图文草稿，将 desc 解析为 Markdown 富文本并上传配图；
-      - "images": 贴图/图片消息草稿 (小红书瀑布流形态)；
+      - "images": 贴图/图片消息草稿；
       - "video": 视频消息草稿。
     publish_mode:
       - "draft": 保存至草稿箱 (无次数限制，安全免扫码，推荐)；
-      - "publish": 无推送发表 (freepublish，生成永久图文直链)。
+      - "publish": 此入口禁止自动发表 (微信强制管理员手机扫码验证)。
     """
     if publish_mode != "draft":
-        return False, "", "unsupported_operation: 此入口仅允许保存草稿，不允许发表"
-    if media_type not in ("article", "text"):
-        return False, "", "unsupported_media: 贴图和视频草稿尚未通过真实编辑器校准，已暂停而非替换为图文"
-    if not title.strip() or len(title) > 64:
-        return False, "", "invalid_title: 图文标题须为1至64字"
+        return False, "", "unsupported_operation: 此入口仅允许保存草稿，不允许发表 (微信群发强制管理员手机扫码)"
+    is_tietu = media_type in ("images", "tietu")
+    if not is_tietu and media_type not in ("article", "text"):
+        return False, "", "unsupported_media: 公众号当前支持图文草稿(article)与贴图草稿(images)"
+    title_max = 20 if is_tietu else 64
+    if not title.strip() or len(title) > title_max:
+        return False, "", f"invalid_title: {'贴图' if is_tietu else '图文'}标题须为1至{title_max}字"
     if not desc.strip():
-        return False, "", "invalid_content: 图文正文不能为空"
+        return False, "", "invalid_content: 正文描述不能为空"
     files = [str(Path(p)) for p in (media_paths or [])]
     if any(not Path(p).is_file() for p in files) or (cover_path and not Path(cover_path).is_file()):
         return False, "", "missing_media: 配图或封面不存在"
+
     ctx = await mgr.open_headed(identity)
     page = await ctx.new_page()
     submitted = False
     try:
+        await page.set_viewport_size({"width": 1600, "height": 960})
         await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=40000)
         token, err = await _get_mp_token(page)
         if not token:
             return False, "", "logged_out: 请重新登录公众号后台"
+
         cover_file = cover_path or (files[0] if files else "")
-        if not cover_file:
-            return False, "", "missing_cover: 请选择封面图片"
-        uploaded = {}
-        for file in dict.fromkeys([cover_file, *files]):
-            result, error = await _upload_image_via_page(page, token, file)
-            if error or not result.get("cdn_url") or not result.get("file_id"):
-                return False, "", "media_upload_failed: 配图未全部上传，未提交草稿"
-            uploaded[file] = result
-        cover = uploaded[cover_file]
+        if not cover_file and not files:
+            return False, "", "missing_cover: 请选择图片或封面"
+
+        # 打开公众号草稿编辑器 (贴图为 createType=8, 图文为普通富文本)
+        if is_tietu:
+            edit_url = f"{BASE_URL}/cgi-bin/appmsg?t=media/appmsg_edit_v2&action=edit&isNew=1&type=77&createType=8&token={token}&lang=zh_CN"
+        else:
+            edit_url = f"{BASE_URL}/cgi-bin/appmsg?t=media/appmsg_edit_v2&action=edit&isNew=1&type=77&token={token}&lang=zh_CN"
+        await page.goto(edit_url, wait_until="domcontentloaded", timeout=40000)
+        await page.wait_for_timeout(3500)
+
+        # 监听保存草稿网络响应
+        save_state = {"saved": False, "appmsg_id": ""}
+        def on_response(res):
+            u = res.url
+            if "operate_appmsg" in u and ("sub=create" in u or "sub=update" in u):
+                asyncio.create_task(handle_body(res))
+        async def handle_body(res):
+            try:
+                text = await res.text()
+                if "appMsgId" in text or "appmsgid" in text:
+                    d = json.loads(text)
+                    aid = str(d.get("appMsgId") or d.get("appmsgid") or d.get("data", {}).get("appMsgId") or "")
+                    if aid:
+                        save_state["saved"] = True
+                        save_state["appmsg_id"] = aid
+            except Exception:
+                pass
+        page.on("response", on_response)
+
         tags = " ".join("#" + tag.strip().lstrip("#") for tag in topics.split(",") if tag.strip())
-        html = _markdown_to_wechat_html(desc + (chr(10) * 2 + tags if tags else ""))
-        for file in files:
-            html += '<p><img src="' + escape(uploaded[file]["cdn_url"], quote=True) + '" style="max-width:100%"/></p>'
-        payload = {"token": token, "lang": "zh_CN", "f": "json", "ajax": "1",
-                   "isNew": "1", "AppMsgId": "", "count": "1", "title0": title,
-                   "content0": html, "digest0": desc[:120], "author0": "",
-                   "fileid0": str(cover["file_id"]), "cdn_url0": cover["cdn_url"],
-                   "show_cover_pic0": "1", "need_open_comment0": "1", "only_fans_can_comment0": "0"}
+
+        if is_tietu:
+            # ── 贴图模式 ──
+            # 1. 注入图片
+            img_inp = page.locator('.image-selector__add input[type="file"], input[type="file"]').first
+            if await img_inp.count():
+                await img_inp.set_input_files(files or [cover_file])
+                await page.wait_for_timeout(2500)
+
+            # 2. 填写标题 (<= 20 字)
+            short_t = title.strip()[:20]
+            await page.evaluate("""(val) => {
+                const el = document.querySelector('#title');
+                if (el) {
+                    el.value = val;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }""", short_t)
+            await page.wait_for_timeout(400)
+
+            # 3. 填写正文
+            body_text = (desc + (chr(10) * 2 + tags if tags else "")).strip()
+            await page.evaluate("""(text) => {
+                const pm = document.querySelector('.share-text__input .ProseMirror') || document.querySelector('.ProseMirror');
+                if (pm) {
+                    pm.focus();
+                    pm.innerText = text;
+                    pm.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }""", body_text)
+            await page.wait_for_timeout(400)
+        else:
+            # ── 图文文章模式 ──
+            # 1. 填写标题 (<= 64 字)
+            await page.evaluate("""(val) => {
+                const el = document.querySelector('#title');
+                if (el) {
+                    el.value = val;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }""", title)
+            await page.wait_for_timeout(400)
+
+            # 2. 填写正文 HTML
+            html = _markdown_to_wechat_html(desc + (chr(10) * 2 + tags if tags else ""))
+            await page.evaluate("""(html) => {
+                const pm = document.querySelector('#ueditor_0 .ProseMirror') || document.querySelector('.rich_media_content .ProseMirror') || document.querySelector('.ProseMirror');
+                if (pm) {
+                    pm.focus();
+                    pm.innerHTML = html;
+                    pm.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }""", html)
+            await page.wait_for_timeout(400)
+
+            # 3. 上传封面图片
+            cover_inp = page.locator('input[type="file"]').first
+            if await cover_inp.count() and cover_file:
+                await cover_inp.set_input_files(cover_file)
+                await page.wait_for_timeout(2500)
+                crop_confirm = page.locator('button.weui-desktop-btn_primary:visible').filter(has_text="确定").first
+                if await crop_confirm.count():
+                    await crop_confirm.click()
+                    await page.wait_for_timeout(1500)
+
+        # 4. 点击 保存为草稿
+        submit_btn = page.locator('#js_submit, button:has-text("保存为草稿")').first
+        if not await submit_btn.count():
+            return False, "", "draft_failed: 未找到「保存为草稿」按钮"
+
         submitted = True
-        response = await page.evaluate("""async ({url, payload}) => {
-            const response = await fetch(url, {method:'POST', credentials:'include',
-                headers:{'Content-Type':'application/x-www-form-urlencoded'},
-                body:new URLSearchParams(payload).toString()});
-            return await response.json();
-        }""", {"url": SAVE_DRAFT_URL + "&token=" + token + "&lang=zh_CN", "payload": payload})
-        draft_id = saved_draft_id(response)
+        await submit_btn.click()
+
+        # 等待草稿保存响应
+        for _ in range(30):
+            await page.wait_for_timeout(500)
+            if save_state["saved"] and save_state["appmsg_id"]:
+                break
+
+        draft_id = save_state["appmsg_id"]
         if not draft_id:
-            return False, "", "write_uncertain: 已提交保存但未取得可核验草稿ID，请到草稿箱核对，禁止自动重试"
+            return False, "", "write_uncertain: 已点击保存但未取得草稿ID响应，请到草稿箱核对，禁止自动重试"
+
+        # 5. 回读草稿箱核验，杜绝假成功
         for attempt in range(3):
             if await verify_saved_draft(page, token, draft_id, title):
-                return True, "https://mp.weixin.qq.com/#draft=" + draft_id, ""
+                return True, f"https://mp.weixin.qq.com/#draft={draft_id}", ""
             if attempt < 2:
                 await asyncio.sleep(1)
-        return False, "", "write_uncertain: 保存已提交但草稿箱未回读确认，请人工核对"
-    except Exception:
-        return False, "", ("write_uncertain: 保存提交后连接中断，请核对草稿箱" if submitted
-                            else "draft_failed: 草稿准备失败，请检查登录或媒体上传")
+
+        return False, "", "write_uncertain: 草稿已保存但草稿箱未回读确认，请人工核对"
+    except Exception as e:
+        return False, "", ("write_uncertain: 保存提交后页面异常，请核对草稿箱" if submitted
+                            else f"draft_failed: 草稿保存失败: {e!r}")
     finally:
+        try:
+            page.remove_listener("response", on_response)
+        except Exception:
+            pass
         await page.close()
