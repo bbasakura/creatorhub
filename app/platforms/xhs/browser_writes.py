@@ -141,11 +141,14 @@ async def _consume_publish_responses(evidence: dict) -> bool:
             payload = await response.json()
         except Exception:
             continue
+        url_str = str(getattr(response, "url", "") or "")
+        print(f"[xhs_publish] Intercepted response from {url_str}: {payload}")
         if _publish_payload_accepted(payload):
             evidence["accepted"] = True
-            evidence["url"] = str(getattr(response, "url", "") or "")
+            evidence["url"] = url_str
             return True
         evidence["business_rejected"] = True
+        evidence["reject_msg"] = str(payload.get("msg") or payload.get("message") or payload)
     return bool(evidence["accepted"])
 
 
@@ -340,8 +343,9 @@ async def publish_xhs_browser(
                 except Exception:
                     break
                 await interaction.pause(0.25, 0.55)
+            rej = evidence.get("reject_msg")
             detail = (
-                "平台返回了业务拒绝结果，但提交状态仍需核对"
+                f"平台返回了业务拒绝结果({rej})，但提交状态仍需核对"
                 if evidence["business_rejected"]
                 else "发布按钮已点击一次，但未取得明确成功证据"
             )
