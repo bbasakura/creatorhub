@@ -530,8 +530,11 @@ class BrowserManager:
         return None
 
     def _normalize_ua(self, ua: str) -> str:
-        """把账号 UA 的 Chrome/Edg 大版本对齐到真实内核版本(未探测到则原样返回)。"""
-        if not self._chrome_major or not ua:
+        """把账号 UA 的 Chrome/Edg 大版本对齐到真实内核版本，并彻底清除 HeadlessChrome 标记。"""
+        if not ua:
+            return ua
+        ua = ua.replace("HeadlessChrome/", "Chrome/")
+        if not self._chrome_major:
             return ua
         v = self._chrome_major
         ua = re.sub(r"Chrome/\d+", f"Chrome/{v}", ua)
@@ -683,6 +686,7 @@ class BrowserManager:
             actual_ua = str(
                 await probe_page.evaluate("navigator.userAgent") or "").strip()
             if actual_ua:
+                actual_ua = actual_ua.replace("HeadlessChrome/", "Chrome/")
                 identity.ua = actual_ua
                 if identity.account_id is not None and self._native_ua_callback:
                     self._native_ua_callback(identity.account_id, actual_ua)

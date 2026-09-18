@@ -11,12 +11,12 @@ from .extract import (parse_mp_feed, parse_mp_comment,
                       safe_title, Aweme, MediaItem)
 from .resolve import (resolve_mp_user_id, resolve_mp_article_id,
                       looks_like_article)
-from .publish import publish_mp
+from .publish import publish_mp, send_mp_heartbeat
 
 __all__ = [
     "parse_mp_feed", "parse_mp_comment", "flatten_mp_comments",
     "parse_self_user", "safe_title", "Aweme", "MediaItem",
     "resolve_mp_user_id", "resolve_mp_article_id", "looks_like_article",
-    "publish_mp",
+    "publish_mp", "send_mp_heartbeat",
 ]
 

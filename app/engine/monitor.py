@@ -48,10 +48,10 @@ from ..platforms.kuaishou import (parse_ks_feed, parse_ks_comment,
                    publish_kuaishou)
 from ..platforms.channels import (parse_channels_feed, parse_channels_comment,
                    flatten_channels_comments, parse_self_user as parse_channels_self_user,
-                   publish_channels)
+                   publish_channels, send_channels_heartbeat)
 from ..platforms.wechat_mp import (parse_mp_feed, parse_mp_comment,
                    flatten_mp_comments, parse_self_user as parse_mp_self_user,
-                   publish_mp)
+                   publish_mp, send_mp_heartbeat)
 from ..models import (ContentRecord, CommentRecord, CommentRule, CommentTask,
                       CommentWatch, DanmakuWatch, DanmakuRecord,
                        DouyinAccount, MonitorTarget, AccountRiskState,
@@ -838,11 +838,16 @@ class MonitorEngine:
                 a.last_active_at = datetime.utcnow()
                 s.add(a); s.commit()
 
-    def _keepalive_due(self, last_active_at) -> bool:
-        """闲置判定:从未活跃、或距上次活跃超过 idle_keepalive_hours(带 ±jitter 错峰)才需保活。
-        idle_keepalive_hours<=0 时退回旧行为(每轮都摸)。"""
+    def _keepalive_due(self, last_active_at, platform: str = "") -> bool:
+        """闲置判定:从未活跃、或距上次活跃超过对应平台保活阈值才需保活。"""
         hours = self.cfg.engine.idle_keepalive_hours
-        if hours <= 0 or last_active_at is None:
+        if last_active_at is None:
+            return True
+        if platform == "shipinhao":
+            hours = 0.4  # 视频号敏感，约24分钟心跳保活一次
+        elif platform == "wechat_mp":
+            hours = 0.6  # 公众号约36分钟保活一次
+        if hours <= 0:
             return True
         jitter = max(0.0, self.cfg.engine.scan_jitter)
         factor = 1.0 + random.uniform(-jitter, jitter) if jitter else 1.0
@@ -887,7 +892,7 @@ class MonitorEngine:
     def _account_probe_tuple(self, account):
         return (account.id, account.platform, account.storage_state,
                 account.creator_storage_state, account.proxy or "",
-                self.browser.identity_for(account))
+                self.browser.identity_for(account), account.nickname or "")
 
     def _wake_deferred_tasks(self, account_id: int) -> int:
         """Wake rows that were explicitly deferred by a now-cleared risk gate."""
@@ -922,7 +927,7 @@ class MonitorEngine:
         return woken
 
     async def _probe_account_health(self, probe) -> dict:
-        aid, platform, state, creator_state, proxy, identity = probe
+        aid, platform, state, creator_state, proxy, identity, nickname = probe
         decision = self.risk.preflight(aid, OperationKind.READ_LIGHT)
         if not decision.allowed:
             return {"ok": False, "deferred": True, "reason": decision.reason,
@@ -968,9 +973,19 @@ class MonitorEngine:
                 elif platform == "kuaishou":
                     u, err = await fetch_ks_self_profile(self.browser, identity)
                 elif platform == "wechat_mp":
-                    u, err = await fetch_mp_self_profile(self.browser, identity)
+                    # 优先轻量级 HTTP 探活保活，减少频繁开浏览器风险
+                    hb_ok = send_mp_heartbeat(state or creator_state)
+                    if hb_ok:
+                        u, err = {"nickname": nickname or "樱花AI指南", "heartbeat_ok": True}, ""
+                    else:
+                        u, err = await fetch_mp_self_profile(self.browser, identity)
                 elif platform == "shipinhao":
-                    u, err = await fetch_channels_self_profile(self.browser, identity)
+                    # 优先轻量级 HTTP 官方心跳保活，零启动浏览器开销
+                    hb_ok = send_channels_heartbeat(state or creator_state)
+                    if hb_ok:
+                        u, err = {"nickname": nickname or "樱花AI指南", "heartbeat_ok": True}, ""
+                    else:
+                        u, err = await fetch_channels_self_profile(self.browser, identity)
                 else:
                     u, err = await fetch_self_profile(self.browser, identity)
                 if u:
@@ -1057,7 +1072,7 @@ class MonitorEngine:
         return completed
 
     async def _check_accounts(self):
-        interval = self.cfg.engine.account_check_interval_seconds
+        interval = min(600, self.cfg.engine.account_check_interval_seconds)
         if interval <= 0 or time.time() - self._last_acct_check < interval:
             return
         self._last_acct_check = time.time()
@@ -1066,7 +1081,7 @@ class MonitorEngine:
                       for account in session.exec(select(DouyinAccount)).all()
                       if (account.storage_state or account.creator_storage_state)
                       and account.status != "invalid"
-                      and self._keepalive_due(account.last_active_at)]
+                      and self._keepalive_due(account.last_active_at, account.platform)]
         for probe in probes:
             await self._probe_account_health(probe)
 

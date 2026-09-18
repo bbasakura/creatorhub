@@ -435,3 +435,31 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
         except Exception:
             pass
     return ok, result_url, error
+
+
+def send_channels_heartbeat(storage_state_json: str) -> bool:
+    """直接通过轻量级 HTTP 请求向微信视频号发送 online_heartbeat 心跳包，维持会话热度。无需启动浏览器。"""
+    try:
+        import urllib.request
+        import json
+        st = json.loads(storage_state_json or "{}")
+        cookies = {c["name"]: c["value"] for c in st.get("cookies", []) if c.get("name") and c.get("value")}
+        if "sessionid" not in cookies:
+            return False
+        cookie_header = "; ".join(f"{k}={v}" for k, v in cookies.items())
+        req = urllib.request.Request(
+            "https://channels.weixin.qq.com/cgi-bin/mmfinderassistant-bin/online_heartbeat",
+            data=b'{"timestamp": 0}',
+            headers={
+                "Cookie": cookie_header,
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+                "Referer": "https://channels.weixin.qq.com/platform",
+                "Origin": "https://channels.weixin.qq.com"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+

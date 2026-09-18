@@ -329,3 +329,26 @@ async def publish_mp(mgr: BrowserManager, identity: Identity,
         except Exception:
             pass
         await page.close()
+
+
+def send_mp_heartbeat(storage_state_json: str, token: str = "") -> bool:
+    """直接通过轻量级 HTTP 请求向微信公众平台发送保活请求，维持会话热度。无需启动浏览器。"""
+    try:
+        import urllib.request
+        import json
+        st = json.loads(storage_state_json or "{}")
+        cookies = {c["name"]: c["value"] for c in st.get("cookies", []) if c.get("name") and c.get("value")}
+        cookie_header = "; ".join(f"{k}={v}" for k, v in cookies.items())
+        url = f"https://mp.weixin.qq.com/cgi-bin/home?t=home/index&lang=zh_CN&token={token}" if token else "https://mp.weixin.qq.com/"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Cookie": cookie_header,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 200 and "login" not in resp.url.lower()
+    except Exception:
+        return False
+
