@@ -1,0 +1,2464 @@
+{
+  "version": "2026-Q2",
+  "updatedAt": "2026-04-17",
+  "routes": [
+    {
+      "id": "recv-wise-usd-ach-keep",
+      "name": "Wise 收 USD (ACH) → 保留美元",
+      "nameEn": "Receive USD via ACH → Keep USD",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "ach",
+        "wise",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "ACH 1-3工作日 / Wise即时",
+      "speedHours": 24,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise USD 账户信息（ACH routing number）",
+          "actionEn": "Get your Wise USD ACH details",
+          "platformId": "wise",
+          "detail": "Wise 提供美国本地银行账号，付款方用 ACH 转账完全免费",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "ACH 收款 0 手续费",
+            "Wise互转也是免费的",
+            "到账后可持有USD或随时换汇"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "您好，请通过ACH转账至以下账户：\n\n银行名称：Wise (Community Federal Savings Bank)\n账户名：{name}\n账号：{accountNumber}\nRouting Number：{routingNumber}\n账户类型：Checking\n\n请选择 ACH 转账（免手续费）",
+        "en": "Please send via ACH to:\n\nBank: Wise (Community Federal Savings Bank)\nBeneficiary: {name}\nAccount: {accountNumber}\nRouting: {routingNumber}\nType: Checking\n\nPlease use ACH (free, no wire fee)"
+      },
+      "tags": [
+        "recommended",
+        "free",
+        "freelancer",
+        "kol"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-wise-usd-ach-cny",
+      "name": "Wise 收 USD (ACH) → 换汇 CNY",
+      "nameEn": "Receive USD via ACH → Convert to CNY",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "ach",
+        "wise",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "conversionFee": 0.0084,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 50000,
+        "currency": "USD"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise USD 账户信息",
+          "actionEn": "Get your Wise USD account details",
+          "platformId": "wise",
+          "detail": "让付款方用 ACH 转账（免费），不要用 Wire",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "ACH收款0手续费",
+            "Wire收款要$6.11"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "在 Wise 中 USD→CNY 换汇提现",
+          "actionEn": "Convert USD to CNY and withdraw",
+          "platformId": "wise",
+          "detail": "换汇费率 0.49%，使用中间市场汇率",
+          "affiliateUrl": null,
+          "tips": [
+            "可选择汇率好的时机换汇",
+            "提现到国内银行卡约1个工作日"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "您好，请通过ACH转账至以下账户：\n\n银行名称：Wise (Community Federal Savings Bank)\n账户名：{name}\n账号：{accountNumber}\nRouting Number：{routingNumber}\n账户类型：Checking\n\n备注：请使用ACH转账（免手续费），不要用Wire",
+        "en": "Please send via ACH to:\n\nBank: Wise (Community Federal Savings Bank)\nBeneficiary: {name}\nAccount: {accountNumber}\nRouting: {routingNumber}\nType: Checking\n\nNote: Please use ACH (free) instead of Wire"
+      },
+      "tags": [
+        "recommended",
+        "freelancer",
+        "kol"
+      ],
+      "caveats": [
+        "年度限额5万美元等值",
+        "换汇 CNY 另有约 $3.35 固定费；Wise 费率每周浮动（2026-08-14 实测）"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "recv-wise-usd-wire-keep",
+      "name": "Wise 收 USD (Wire) → 保留美元",
+      "nameEn": "Receive USD via Wire → Keep USD",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "wire",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 6.11,
+          "currency": "USD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "当天",
+      "speedHours": 4,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise USD Wire 收款信息",
+          "actionEn": "Get your Wise USD Wire details",
+          "platformId": "wise",
+          "detail": "Wire 比 ACH 快（当天到账），但 Wise 收 $6.11 入账费",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "Wire入账费$6.11",
+            "如不急建议让对方用ACH（免费）"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "您好，请将美元汇至以下账户（Wire Transfer）：\n\n银行名称：Wise (Community Federal Savings Bank)\n账户名：{name}\n账号：{accountNumber}\nRouting Number：{routingNumber}\nSWIFT：CMFGUS33\n账户类型：Checking",
+        "en": "Please wire USD to:\n\nBank: Wise (Community Federal Savings Bank)\nBeneficiary: {name}\nAccount: {accountNumber}\nRouting: {routingNumber}\nSWIFT: CMFGUS33\nType: Checking"
+      },
+      "tags": [
+        "fast"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-wise-usd-wire-cny",
+      "name": "Wise 收 USD (Wire) → 换汇 CNY",
+      "nameEn": "Receive USD via Wire → Convert to CNY",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "wire",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 6.11,
+          "currency": "USD"
+        },
+        "conversionFee": 0.0084,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 50000,
+        "currency": "USD"
+      },
+      "speed": "1 工作日",
+      "speedHours": 24,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise USD Wire 收款信息",
+          "actionEn": "Get Wise USD Wire details",
+          "platformId": "wise",
+          "detail": "Wire 入账费 $6.11",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "Wire入账费$6.11",
+            "如不急建议让对方用ACH（免费）"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "在 Wise 中 USD→CNY 换汇提现",
+          "actionEn": "Convert USD to CNY and withdraw",
+          "platformId": "wise",
+          "detail": "换汇费 0.49%",
+          "affiliateUrl": null,
+          "tips": []
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [],
+      "caveats": [
+        "年度限额5万美元等值",
+        "换汇 CNY 另有约 $3.35 固定费；Wise 费率每周浮动（2026-08-14 实测）"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "recv-wise-usd-swift-from-hk-keep",
+      "name": "Wise USD 账户收款（港企 SWIFT 打 USD）",
+      "nameEn": "Receive USD from HK via SWIFT → Keep USD",
+      "payerRegion": "HK",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "swift",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 6.11,
+          "currency": "USD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise USD SWIFT 收款信息",
+          "actionEn": "Get Wise USD SWIFT details",
+          "platformId": "wise",
+          "detail": "港企通过 SWIFT 打 USD，Wise 收 $6.11 入账费，可能还有中间行费 $15-$50",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "SWIFT入账费$6.11",
+            "中间行可能额外扣$15-$50",
+            "建议让对方选OUR模式（发方承担中间行费）"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "您好，请将美元汇至以下账户（SWIFT）：\n\n银行名称：Wise (Community Federal Savings Bank)\n账户名：{name}\n账号：{accountNumber}\nSWIFT代码：CMFGUS33\n银行地址：30 W. 26th Street, New York, NY 10010\n\n请选择OUR模式（发方承担中间行费）",
+        "en": "Please wire USD via SWIFT to:\n\nBank: Wise (Community Federal Savings Bank)\nBeneficiary: {name}\nAccount: {accountNumber}\nSWIFT: CMFGUS33\nAddress: 30 W. 26th Street, New York, NY 10010\n\nPlease select OUR charges (sender pays correspondent fees)"
+      },
+      "tags": [],
+      "caveats": [
+        "中间行费$15-$50（视银行而定）",
+        "建议让对方选OUR模式"
+      ],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-wise-usd-swift-from-hk-cny",
+      "name": "Wise 收 USD（港企 SWIFT）→ 换汇 CNY",
+      "nameEn": "Receive USD from HK via SWIFT → Convert CNY",
+      "payerRegion": "HK",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "swift",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 6.11,
+          "currency": "USD"
+        },
+        "conversionFee": 0.0084,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 50000,
+        "currency": "USD"
+      },
+      "speed": "2-4 工作日",
+      "speedHours": 72,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise USD SWIFT 收款信息",
+          "actionEn": "Get Wise USD SWIFT details",
+          "platformId": "wise",
+          "detail": "港企 SWIFT 打 USD，Wise 入账费 $6.11 + 可能的中间行费",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "SWIFT入账费$6.11",
+            "让对方选OUR模式减少中间行费"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "在 Wise 中 USD→CNY 换汇提现",
+          "actionEn": "Convert and withdraw to CNY",
+          "platformId": "wise",
+          "detail": "换汇费 0.49%",
+          "affiliateUrl": null,
+          "tips": []
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [],
+      "caveats": [
+        "中间行费$15-$50",
+        "年度限额5万美元等值",
+        "建议让对方选OUR模式",
+        "换汇 CNY 另有约 $3.35 固定费；Wise 费率每周浮动（2026-08-14 实测）"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "recv-wise-usd-wise-from-hk-keep",
+      "name": "Wise 互转 USD（港企有 Wise）",
+      "nameEn": "Wise-to-Wise USD from HK",
+      "payerRegion": "HK",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "wise"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "即时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "让对方通过 Wise 直接转账给你",
+          "actionEn": "Ask payer to send via Wise",
+          "platformId": "wise",
+          "detail": "Wise互转不走SWIFT，0入账费，即时到账",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "Wise互转完全免费",
+            "比SWIFT快得多",
+            "对方也需要有Wise账户"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "您好，请通过Wise直接转账至我的Wise账户（邮箱/手机号），无需SWIFT，即时到账且免手续费",
+        "en": "Please send via Wise directly to my account. No SWIFT needed — instant and free."
+      },
+      "tags": [
+        "recommended",
+        "free",
+        "instant"
+      ],
+      "caveats": [
+        "对方也需要有Wise账户"
+      ],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-wise-hkd-fps",
+      "name": "Wise 收 HKD (FPS) → 保留港币",
+      "nameEn": "Receive HKD via FPS → Keep HKD",
+      "payerRegion": "HK",
+      "payerCurrency": "HKD",
+      "payerMethods": [
+        "fps",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "HKD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "HKD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 5000000,
+        "currency": "HKD"
+      },
+      "speed": "即时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise HKD FPS 收款信息",
+          "actionEn": "Get Wise HKD FPS details",
+          "platformId": "wise",
+          "detail": "FPS转数快即时到账，0费用",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "FPS收款即时到账",
+            "同币种完全免费",
+            "不要走SWIFT（会收HK$30.80）"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请通过FPS转数快汇至：\n\n收款人：{name}\nFPS ID/手机号：{fpsId}\n\n或银行转账：\n银行代码：{bankCode}\n账号：{accountNumber}",
+        "en": "Please send HKD via FPS:\n\nBeneficiary: {name}\nFPS ID: {fpsId}\n\nOr bank transfer:\nBank Code: {bankCode}\nAccount: {accountNumber}"
+      },
+      "tags": [
+        "recommended",
+        "free",
+        "instant"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-wise-hkd-swift",
+      "name": "Wise 收 HKD (SWIFT) → 保留港币",
+      "nameEn": "Receive HKD via SWIFT → Keep HKD",
+      "payerRegion": "HK",
+      "payerCurrency": "HKD",
+      "payerMethods": [
+        "swift",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "HKD",
+      "fees": {
+        "incomingFee": {
+          "amount": 30.8,
+          "currency": "HKD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "HKD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 5000000,
+        "currency": "HKD"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise HKD SWIFT 收款信息",
+          "actionEn": "Get Wise HKD SWIFT details",
+          "platformId": "wise",
+          "detail": "SWIFT 收 HKD 入账费 HK$30.80，建议优先用 FPS（免费）",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "SWIFT入账费HK$30.80",
+            "FPS免费且即时，优先推荐"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [],
+      "caveats": [
+        "可能有中间行费",
+        "建议让对方选OUR模式"
+      ],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-wise-hkd-fps-cny",
+      "name": "Wise 收 HKD (FPS) → 换汇 CNY",
+      "nameEn": "Receive HKD via FPS → Convert to CNY",
+      "payerRegion": "HK",
+      "payerCurrency": "HKD",
+      "payerMethods": [
+        "fps",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "conversionFee": 0.0095,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 5000000,
+        "currency": "HKD"
+      },
+      "speed": "1-2 工作日",
+      "speedHours": 36,
+      "steps": [
+        {
+          "order": 1,
+          "action": "通过 FPS 收 HKD（免费即时）",
+          "actionEn": "Receive HKD via FPS (free, instant)",
+          "platformId": "wise",
+          "detail": "FPS入账0费用",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "FPS即时到账，免费"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "在 Wise 中 HKD→CNY 换汇提现",
+          "actionEn": "Convert HKD to CNY and withdraw",
+          "platformId": "wise",
+          "detail": "换汇费率 0.56%",
+          "affiliateUrl": null,
+          "tips": [
+            "HKD→CNY汇率相对稳定"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [],
+      "caveats": [
+        "年度限额5万美元等值"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "recv-wise-gbp-fp-keep",
+      "name": "Wise 收 GBP (Faster Payments) → 保留英镑",
+      "nameEn": "Receive GBP via Faster Payments → Keep GBP",
+      "payerRegion": "GB",
+      "payerCurrency": "GBP",
+      "payerMethods": [
+        "faster-payments"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "GBP",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "GBP"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "GBP"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "GBP"
+      },
+      "speed": "即时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise GBP 账户信息（Sort Code）",
+          "actionEn": "Get your Wise GBP account details",
+          "platformId": "wise",
+          "detail": "英国 Faster Payments 即时到账，0费用",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "Faster Payments免费即时",
+            "不要让对方走SWIFT（会收£2.16）"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请通过UK Faster Payments转账至：\n\n银行：Wise Payments Limited\n账户名：{name}\nSort Code：{sortCode}\n账号：{accountNumber}\n\n请使用Faster Payments（免费即时），不要用SWIFT",
+        "en": "Please send GBP via Faster Payments to:\n\nBank: Wise Payments Limited\nBeneficiary: {name}\nSort Code: {sortCode}\nAccount: {accountNumber}\n\nPlease use Faster Payments (free, instant)"
+      },
+      "tags": [
+        "recommended",
+        "free",
+        "instant",
+        "kol"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-wise-gbp-fp-cny",
+      "name": "Wise 收 GBP (FP) → 换汇 CNY",
+      "nameEn": "Receive GBP via FP → Convert CNY",
+      "payerRegion": "GB",
+      "payerCurrency": "GBP",
+      "payerMethods": [
+        "faster-payments",
+        "wise"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "GBP"
+        },
+        "conversionFee": 0.0088,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "GBP"
+      },
+      "speed": "1-2 工作日",
+      "speedHours": 36,
+      "steps": [
+        {
+          "order": 1,
+          "action": "通过 Faster Payments 收 GBP（免费即时）",
+          "actionEn": "Receive GBP via Faster Payments",
+          "platformId": "wise",
+          "detail": "Faster Payments入账0费用",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "GBP是Wise费率最低的币种之一（0.39%）"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "在 Wise 中 GBP→CNY 换汇提现",
+          "actionEn": "Convert GBP to CNY and withdraw",
+          "platformId": "wise",
+          "detail": "换汇费 0.39%",
+          "affiliateUrl": null,
+          "tips": []
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请通过UK Faster Payments转账至：\n\n银行：Wise Payments Limited\n账户名：{name}\nSort Code：{sortCode}\n账号：{accountNumber}",
+        "en": "Please send GBP via Faster Payments:\n\nBank: Wise Payments Limited\nBeneficiary: {name}\nSort Code: {sortCode}\nAccount: {accountNumber}"
+      },
+      "tags": [
+        "recommended",
+        "cheapest",
+        "kol"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "recv-wise-gbp-swift-cny",
+      "name": "Wise 收 GBP (SWIFT) → 换汇 CNY",
+      "nameEn": "Receive GBP via SWIFT → Convert CNY",
+      "payerRegion": "GB",
+      "payerCurrency": "GBP",
+      "payerMethods": [
+        "swift",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 2.16,
+          "currency": "GBP"
+        },
+        "conversionFee": 0.0088,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "GBP"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise GBP SWIFT 收款信息",
+          "actionEn": "Get Wise GBP SWIFT details",
+          "platformId": "wise",
+          "detail": "SWIFT收GBP入账费£2.16，建议优先用Faster Payments（免费）",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "SWIFT入账费£2.16",
+            "Faster Payments免费，请优先使用"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "在 Wise 中 GBP→CNY 换汇提现",
+          "actionEn": "Convert GBP to CNY",
+          "platformId": "wise",
+          "detail": "换汇费 0.39%",
+          "affiliateUrl": null,
+          "tips": []
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [],
+      "caveats": [
+        "可能有中间行费$15-$50",
+        "建议让对方选OUR模式"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "recv-wise-sgd-fast-keep",
+      "name": "Wise 收 SGD (FAST) → 保留新币",
+      "nameEn": "Receive SGD via FAST → Keep SGD",
+      "payerRegion": "SG",
+      "payerCurrency": "SGD",
+      "payerMethods": [
+        "airwallex",
+        "fast",
+        "wise"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "SGD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "SGD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "SGD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "SGD"
+      },
+      "speed": "即时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise SGD 账户信息",
+          "actionEn": "Get Wise SGD account details",
+          "platformId": "wise",
+          "detail": "新加坡本地转账（FAST）即时到账，0费用",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "本地转账免费即时"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请将新加坡元汇至：\n\n银行：Wise Asia-Pacific Pte. Ltd.\n账户名：{name}\n账号：{accountNumber}\nBank Code：{bankCode}",
+        "en": "Please send SGD to:\n\nBank: Wise Asia-Pacific Pte. Ltd.\nBeneficiary: {name}\nAccount: {accountNumber}\nBank Code: {bankCode}"
+      },
+      "tags": [
+        "recommended",
+        "free",
+        "instant"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-wise-sgd-cny",
+      "name": "Wise 收 SGD → 换汇 CNY",
+      "nameEn": "Receive SGD via Wise → Convert CNY",
+      "payerRegion": "SG",
+      "payerCurrency": "SGD",
+      "payerMethods": [
+        "airwallex",
+        "fast",
+        "wise"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "SGD"
+        },
+        "conversionFee": 0.0075,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "SGD"
+      },
+      "speed": "1-2 工作日",
+      "speedHours": 36,
+      "steps": [
+        {
+          "order": 1,
+          "action": "通过本地转账收 SGD（免费即时）",
+          "actionEn": "Receive SGD locally (free, instant)",
+          "platformId": "wise",
+          "detail": "本地转账入账0费用",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": []
+        },
+        {
+          "order": 2,
+          "action": "在 Wise 中 SGD→CNY 换汇提现",
+          "actionEn": "Convert SGD to CNY",
+          "platformId": "wise",
+          "detail": "换汇费 0.56%",
+          "affiliateUrl": null,
+          "tips": []
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "kol"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "recv-paypal-usd-from-us",
+      "name": "PayPal 收 USD → 提现",
+      "nameEn": "Receive USD via PayPal → Withdraw",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "paypal"
+      ],
+      "receivePlatformId": "paypal",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 0.3,
+          "currency": "USD"
+        },
+        "conversionFee": 0.044,
+        "fxMarkup": 0.03,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 50000,
+        "currency": "USD"
+      },
+      "speed": "3-5 工作日",
+      "speedHours": 96,
+      "steps": [
+        {
+          "order": 1,
+          "action": "告知付款方你的 PayPal 邮箱",
+          "actionEn": "Share your PayPal email",
+          "platformId": "paypal",
+          "detail": "付款方通过PayPal发送付款",
+          "affiliateUrl": null,
+          "tips": [
+            "商业交易费2.99%+$0.49",
+            "跨境附加费1.5%"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "在 PayPal 提现到银行卡",
+          "actionEn": "Withdraw from PayPal",
+          "platformId": "paypal",
+          "detail": "标准提现免费（1-3工作日），即时提现1.75%",
+          "affiliateUrl": null,
+          "tips": [
+            "PayPal换汇汇率加价3-4%",
+            "建议用标准提现"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请通过PayPal付款至：{email}",
+        "en": "Please send via PayPal to: {email}"
+      },
+      "tags": [
+        "expensive",
+        "wide-coverage"
+      ],
+      "caveats": [
+        "PayPal换汇极贵",
+        "收款费 4.4% + $0.30/笔（月收款量大可申请降至 3.4%-3.9%）",
+        "换汇加点 2.5%-4% 区间；电汇提现至大陆银行另收 $35/笔"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "recv-hsbc-hk-usd-from-us",
+      "name": "HSBC HK 收 USD 电汇",
+      "nameEn": "Receive USD Wire at HSBC HK",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "wire",
+        "swift",
+        "airwallex"
+      ],
+      "receivePlatformId": "hsbc_hk",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "USD"
+      },
+      "speed": "1-5 工作日",
+      "speedHours": 96,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供 HSBC HK 的 SWIFT 收款信息",
+          "actionEn": "Provide HSBC HK SWIFT details",
+          "platformId": "hsbc_hk",
+          "detail": "SWIFT代码 HSBCHKHHHKH",
+          "affiliateUrl": null,
+          "tips": [
+            "Premier客户可能免入账费",
+            "付款方选SHA模式你可能被扣中间行费"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请将美元汇至：\n\n银行：HSBC Hong Kong\nSWIFT：HSBCHKHHHKH\n账户名：{name}\n账号：{accountNumber}\n银行地址：1 Queen's Road Central, Hong Kong",
+        "en": "Please wire USD to:\n\nBank: HSBC Hong Kong\nSWIFT: HSBCHKHHHKH\nBeneficiary: {name}\nAccount: {accountNumber}\nAddress: 1 Queen's Road Central, Hong Kong"
+      },
+      "tags": [
+        "traditional"
+      ],
+      "caveats": [
+        "中间行可能额外扣费"
+      ],
+      "lastVerified": "2026-03-20"
+    },
+    {
+      "id": "recv-airwallex-usd-keep",
+      "name": "Airwallex 收 USD → 保留美元",
+      "nameEn": "Receive USD via Airwallex → Keep USD",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "ach",
+        "wire",
+        "airwallex"
+      ],
+      "receivePlatformId": "airwallex",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 100,
+        "maxAmount": 5000000,
+        "currency": "USD"
+      },
+      "speed": "1-2 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Airwallex USD 收款账户",
+          "actionEn": "Get Airwallex USD account",
+          "platformId": "airwallex",
+          "detail": "同币种入金免费，保留USD余额",
+          "affiliateUrl": "https://airwallex.com/refer/transfersmart",
+          "tips": [
+            "需要企业账户",
+            "同币种入金免费"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请将美元汇至：\n\n银行：{bankName}\n账户名：{companyName}\n账号：{accountNumber}\nRouting：{routingNumber}",
+        "en": "Please wire USD to:\n\nBank: {bankName}\nBeneficiary: {companyName}\nAccount: {accountNumber}\nRouting: {routingNumber}"
+      },
+      "tags": [
+        "business",
+        "free"
+      ],
+      "caveats": [
+        "需要企业账户"
+      ],
+      "lastVerified": "2026-03-15"
+    },
+    {
+      "id": "recv-airwallex-usd-cny",
+      "name": "Airwallex 收 USD → 换汇 CNY",
+      "nameEn": "Receive USD via Airwallex → Convert CNY",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "ach",
+        "wire",
+        "airwallex"
+      ],
+      "receivePlatformId": "airwallex",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "conversionFee": 0.005,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 100,
+        "maxAmount": 5000000,
+        "currency": "USD"
+      },
+      "speed": "1-2 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Airwallex USD 收款账户",
+          "actionEn": "Get Airwallex USD account",
+          "platformId": "airwallex",
+          "detail": "自有账户入金免费",
+          "affiliateUrl": "https://airwallex.com/refer/transfersmart",
+          "tips": [
+            "需要企业账户"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "在 Airwallex 换汇提现",
+          "actionEn": "Convert and withdraw",
+          "platformId": "airwallex",
+          "detail": "FX加价约0.5%",
+          "affiliateUrl": null,
+          "tips": []
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "business"
+      ],
+      "caveats": [
+        "需要企业账户"
+      ],
+      "lastVerified": "2026-03-15"
+    },
+    {
+      "id": "recv-worldfirst-ecommerce",
+      "name": "万里汇 电商平台收款 → 提现",
+      "nameEn": "WorldFirst E-commerce → Withdrawal",
+      "payerRegion": "GLOBAL",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "platform-settlement"
+      ],
+      "receivePlatformId": "worldfirst",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "conversionFee": 0.003,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "USD"
+      },
+      "speed": "1分钟到支付宝",
+      "speedHours": 0.02,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在电商平台绑定万里汇收款账户",
+          "actionEn": "Link WorldFirst to e-commerce platform",
+          "platformId": "worldfirst",
+          "detail": "支持Amazon/Shopify/eBay等130+平台",
+          "affiliateUrl": "https://worldfirst.com/refer/transfersmart",
+          "tips": [
+            "注册KYC审核约3-7天"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "提款到支付宝",
+          "actionEn": "Withdraw to Alipay",
+          "platformId": "worldfirst",
+          "detail": "1分钟到账支付宝，提款费≤0.3%",
+          "affiliateUrl": null,
+          "tips": [
+            "新客180天享0.3%FX优惠"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "recommended",
+        "ecommerce",
+        "instant"
+      ],
+      "caveats": [
+        "主要面向电商卖家"
+      ],
+      "lastVerified": "2026-03-15"
+    },
+    {
+      "id": "recv-cn-bank-swift-usd",
+      "name": "国内银行 收 USD 电汇 → 结汇",
+      "nameEn": "China Bank Receive USD Wire → Convert",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "wire",
+        "swift",
+        "airwallex"
+      ],
+      "receivePlatformId": "cn_bank",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 20,
+          "currency": "CNY"
+        },
+        "conversionFee": 0.001,
+        "fxMarkup": 0.003,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 50000,
+        "currency": "USD"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 72,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供国内银行 SWIFT 收款信息",
+          "actionEn": "Provide Chinese bank SWIFT details",
+          "platformId": "cn_bank",
+          "detail": "提供银行名称、SWIFT代码、账号",
+          "affiliateUrl": null,
+          "tips": [
+            "入账费约1‰(最低20元)",
+            "中间行可能扣费"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "到账后在银行结汇",
+          "actionEn": "Convert after receipt",
+          "platformId": "cn_bank",
+          "detail": "美元到账后结汇为人民币",
+          "affiliateUrl": null,
+          "tips": [
+            "结汇含约1-2%汇率加价",
+            "个人年度结汇限额5万美元"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请将美元汇至：\n\n银行：{bankNameZh} ({bankNameEn})\nSWIFT：{swiftCode}\n账户名：{name}\n账号：{accountNumber}\n银行地址：{bankAddress}",
+        "en": "Please wire USD to:\n\nBank: {bankNameEn}\nSWIFT: {swiftCode}\nBeneficiary: {name}\nAccount: {accountNumber}\nAddress: {bankAddress}"
+      },
+      "tags": [
+        "traditional"
+      ],
+      "caveats": [
+        "个人年度限额5万美元",
+        "可能有中间行费$15-$50",
+        "建议让对方选OUR模式"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "recv-za-bank-hkd-fps",
+      "name": "众安银行 FPS 收 HKD → 保留港币",
+      "nameEn": "ZA Bank Receive HKD via FPS",
+      "payerRegion": "HK",
+      "payerCurrency": "HKD",
+      "payerMethods": [
+        "fps",
+        "airwallex",
+        "wise"
+      ],
+      "receivePlatformId": "za_bank",
+      "receiveCurrency": "HKD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "HKD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 5000000,
+        "currency": "HKD"
+      },
+      "speed": "即时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取众安银行 FPS 收款信息",
+          "actionEn": "Get ZA Bank FPS details",
+          "platformId": "za_bank",
+          "detail": "众安银行支持 FPS 转数快即时收款，0费用",
+          "affiliateUrl": null,
+          "tips": [
+            "FPS即时到账",
+            "同币种完全免费"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请通过FPS转数快汇至：\n\n收款人：{name}\n手机号/FPS ID：{fpsId}",
+        "en": "Please send HKD via FPS to:\n\nBeneficiary: {name}\nFPS ID: {fpsId}"
+      },
+      "tags": [
+        "recommended",
+        "free",
+        "instant"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-za-bank-hkd-cny",
+      "name": "众安银行 收 HKD → 跨境支付通 CNY",
+      "nameEn": "ZA Bank HKD → Cross-border CNY",
+      "payerRegion": "HK",
+      "payerCurrency": "HKD",
+      "payerMethods": [
+        "fps",
+        "airwallex",
+        "wise"
+      ],
+      "receivePlatformId": "za_bank",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 5000000,
+        "currency": "HKD"
+      },
+      "speed": "实时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "通过 FPS 收 HKD 到众安银行",
+          "actionEn": "Receive HKD via FPS",
+          "platformId": "za_bank",
+          "detail": "FPS入账免费即时",
+          "affiliateUrl": null,
+          "tips": []
+        },
+        {
+          "order": 2,
+          "action": "使用跨境支付通转 CNY 到内地",
+          "actionEn": "Use cross-border payment to transfer CNY",
+          "platformId": "za_bank",
+          "detail": "众安跨境支付通接近0费率，实时到账内地银行卡或微信/支付宝",
+          "affiliateUrl": null,
+          "tips": [
+            "费率接近0，远低于传统银行结汇",
+            "实时到账"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "recommended",
+        "cheapest",
+        "instant"
+      ],
+      "caveats": [
+        "需要香港手机号注册众安银行",
+        "每日限额 HKD 10,000，年度限额 HKD 200,000"
+      ],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-bochk-hkd-fps",
+      "name": "中银香港 FPS 收 HKD",
+      "nameEn": "BOCHK Receive HKD via FPS",
+      "payerRegion": "HK",
+      "payerCurrency": "HKD",
+      "payerMethods": [
+        "fps",
+        "wire",
+        "airwallex"
+      ],
+      "receivePlatformId": "bochk",
+      "receiveCurrency": "HKD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "HKD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "HKD"
+      },
+      "speed": "即时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取中银香港 FPS 收款信息",
+          "actionEn": "Get BOCHK FPS details",
+          "platformId": "bochk",
+          "detail": "FPS即时收款，0手续费",
+          "affiliateUrl": null,
+          "tips": [
+            "FPS即时到账"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "free",
+        "instant"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-bochk-usd-swift",
+      "name": "中银香港 SWIFT 收 USD",
+      "nameEn": "BOCHK Receive USD via SWIFT",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "swift",
+        "wire",
+        "airwallex"
+      ],
+      "receivePlatformId": "bochk",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 60,
+          "currency": "HKD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "USD"
+      },
+      "speed": "1-5 工作日",
+      "speedHours": 96,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供中银香港 SWIFT 收款信息",
+          "actionEn": "Provide BOCHK SWIFT details",
+          "platformId": "bochk",
+          "detail": "SWIFT代码 BKCHHKHHXXX",
+          "affiliateUrl": null,
+          "tips": []
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请将美元汇至：\n\n银行：中国银行(香港)有限公司\nSWIFT：BKCHHKHHXXX\n账户名：{name}\n账号：{accountNumber}",
+        "en": "Please wire USD to:\n\nBank: Bank of China (Hong Kong)\nSWIFT: BKCHHKHHXXX\nBeneficiary: {name}\nAccount: {accountNumber}"
+      },
+      "tags": [
+        "traditional"
+      ],
+      "caveats": [
+        "可能有中间行费",
+        "≤HK$500 等值的入账免收该费用"
+      ],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-mercury-usd-ach",
+      "name": "Mercury 收 USD (ACH) → 保留美元",
+      "nameEn": "Mercury Receive USD via ACH",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "ach",
+        "wire",
+        "airwallex"
+      ],
+      "receivePlatformId": "mercury",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "USD"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Mercury 美国银行账户信息",
+          "actionEn": "Get Mercury US bank details",
+          "platformId": "mercury",
+          "detail": "Mercury 提供美国银行账号，ACH/Wire 均可收款",
+          "affiliateUrl": null,
+          "tips": [
+            "需要美国公司注册",
+            "ACH收款免费"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请将美元汇至：\n\n银行：Mercury (Choice Financial Group)\n账户名：{companyName}\n账号：{accountNumber}\nRouting Number：{routingNumber}",
+        "en": "Please send USD to:\n\nBank: Mercury (Choice Financial Group)\nBeneficiary: {companyName}\nAccount: {accountNumber}\nRouting: {routingNumber}"
+      },
+      "tags": [
+        "business",
+        "free"
+      ],
+      "caveats": [
+        "需要美国公司"
+      ],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-cn-from-cn-swift",
+      "name": "国内银行 收 CNY（中国公司对公转账）",
+      "nameEn": "China Bank Receive CNY from CN Company",
+      "payerRegion": "CN",
+      "payerCurrency": "CNY",
+      "payerMethods": [
+        "wire",
+        "airwallex"
+      ],
+      "receivePlatformId": "cn_bank",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "CNY"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 100000000,
+        "currency": "CNY"
+      },
+      "speed": "即时~1工作日",
+      "speedHours": 4,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供国内银行卡信息",
+          "actionEn": "Provide Chinese bank details",
+          "platformId": "cn_bank",
+          "detail": "对公转账或个人转账，同币种无手续费",
+          "affiliateUrl": null,
+          "tips": [
+            "国内对公转账通常免费或极低费用"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "free"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-wise-usd-from-cn-swift",
+      "name": "Wise 收 USD（中国公司 SWIFT 汇出）",
+      "nameEn": "Wise Receive USD from CN Company via SWIFT",
+      "payerRegion": "CN",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "swift",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 6.11,
+          "currency": "USD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "2-5 工作日",
+      "speedHours": 96,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise USD SWIFT 收款信息",
+          "actionEn": "Get Wise USD SWIFT details",
+          "platformId": "wise",
+          "detail": "中国公司通过银行购汇后 SWIFT 汇出 USD",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "中国公司需在银行办理购汇和汇出"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请将美元汇至：\n\n银行：Wise (Community Federal Savings Bank)\n账户名：{name}\n账号：{accountNumber}\nSWIFT：CMFGUS33",
+        "en": "Please wire USD to:\n\nBank: Wise (Community Federal Savings Bank)\nBeneficiary: {name}\nAccount: {accountNumber}\nSWIFT: CMFGUS33"
+      },
+      "tags": [],
+      "caveats": [
+        "中国公司外汇汇出需审批",
+        "可能有中间行费$15-$50",
+        "建议让对方选OUR模式"
+      ],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-airwallex-from-cn",
+      "name": "Airwallex 收款（中国公司付款）",
+      "nameEn": "Airwallex Receive from CN Company",
+      "payerRegion": "CN",
+      "payerCurrency": "CNY",
+      "payerMethods": [
+        "airwallex",
+        "wire"
+      ],
+      "receivePlatformId": "airwallex",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "CNY"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 100,
+        "maxAmount": 5000000,
+        "currency": "CNY"
+      },
+      "speed": "1-2 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "通过 Airwallex 企业账户收款",
+          "actionEn": "Receive via Airwallex business account",
+          "platformId": "airwallex",
+          "detail": "Airwallex 支持中国公司对公收付款",
+          "affiliateUrl": "https://airwallex.com/refer/transfersmart",
+          "tips": [
+            "需要Airwallex企业账户"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "business"
+      ],
+      "caveats": [
+        "需要企业账户"
+      ],
+      "lastVerified": "2026-04-15"
+    },
+    {
+      "id": "recv-wise-usd-from-sg-keep",
+      "name": "Wise USD 账户收款（新企 Airwallex/SWIFT 打 USD）",
+      "nameEn": "Receive USD from SG via Airwallex/SWIFT → Keep USD",
+      "payerRegion": "SG",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "swift",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 6.11,
+          "currency": "USD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise USD SWIFT 收款信息",
+          "actionEn": "Get Wise USD SWIFT details",
+          "platformId": "wise",
+          "detail": "新企通过 Airwallex 或 SWIFT 打 USD，Wise 收 $6.11 入账费；走 SWIFT 可能有中间行费 $15-$50（Airwallex 通常走本地 ACH 无中间行费）",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "Airwallex 付款通常走本地 ACH，无中间行费",
+            "SWIFT 建议对方选 OUR 模式"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "您好，请将美元汇至以下账户：\n\n银行名称：Wise (Community Federal Savings Bank)\n账户名：{name}\n账号：{accountNumber}\nSWIFT代码：CMFGUS33\nRouting(ACH)：026073150\n银行地址：30 W. 26th Street, New York, NY 10010",
+        "en": "Please send USD to:\n\nBank: Wise (Community Federal Savings Bank)\nBeneficiary: {name}\nAccount: {accountNumber}\nSWIFT: CMFGUS33\nACH Routing: 026073150"
+      },
+      "tags": [],
+      "caveats": [
+        "Airwallex 走本地 ACH 通常无中间行费",
+        "SWIFT 中间行费$15-$50（视银行而定）"
+      ],
+      "lastVerified": "2026-04-17"
+    },
+    {
+      "id": "recv-wise-usd-from-sg-cny",
+      "name": "Wise 收 USD（新企 Airwallex/SWIFT）→ 换汇 CNY",
+      "nameEn": "Receive USD from SG → Convert CNY",
+      "payerRegion": "SG",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "swift",
+        "airwallex"
+      ],
+      "receivePlatformId": "wise",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 6.11,
+          "currency": "USD"
+        },
+        "conversionFee": 0.0084,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 50000,
+        "currency": "USD"
+      },
+      "speed": "2-4 工作日",
+      "speedHours": 72,
+      "steps": [
+        {
+          "order": 1,
+          "action": "获取 Wise USD 收款信息",
+          "actionEn": "Get Wise USD details",
+          "platformId": "wise",
+          "detail": "Wise 入账费 $6.11（Airwallex 本地 ACH 无中间行；SWIFT 可能有中间行费）",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "Airwallex 本地 ACH 无中间行费"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "在 Wise 中 USD→CNY 换汇提现",
+          "actionEn": "Convert USD→CNY",
+          "platformId": "wise",
+          "detail": "换汇费 0.49%",
+          "affiliateUrl": null,
+          "tips": []
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [],
+      "caveats": [
+        "年度限额 5 万美元等值",
+        "SWIFT 可能产生中间行费 $15-$50",
+        "换汇 CNY 另有约 $3.35 固定费；Wise 费率每周浮动（2026-08-14 实测）"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "recv-za-bank-from-sg-airwallex",
+      "name": "众安银行收 HKD（新企 Airwallex 转 HKD FPS）",
+      "nameEn": "ZA Bank Receive HKD from SG via Airwallex",
+      "payerRegion": "SG",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "airwallex"
+      ],
+      "receivePlatformId": "za_bank",
+      "receiveCurrency": "HKD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0.005,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "HKD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 5000000,
+        "currency": "HKD"
+      },
+      "speed": "即时到 1 工作日",
+      "speedHours": 4,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供众安银行 FPS 收款信息",
+          "actionEn": "Provide ZA Bank FPS details",
+          "platformId": "za_bank",
+          "detail": "新企用 Airwallex 将 USD 转为 HKD，通过 FPS 即时到账众安。Airwallex 汇率含约 0.5% 点差，入账方 0 费用",
+          "affiliateUrl": null,
+          "tips": [
+            "Airwallex 跨币种约 0.5% 汇率点差",
+            "FPS 端众安 0 费用即时到账"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请通过 Airwallex 转 HKD 到 FPS：\n\n收款人：{name}\nFPS ID / 手机号：{fpsId}",
+        "en": "Please convert to HKD via Airwallex and send via FPS:\n\nBeneficiary: {name}\nFPS ID: {fpsId}"
+      },
+      "tags": [
+        "instant"
+      ],
+      "caveats": [
+        "Airwallex 换汇约 0.5% 点差"
+      ],
+      "lastVerified": "2026-04-17"
+    },
+    {
+      "id": "recv-za-bank-usd-from-sg",
+      "name": "众安银行收 USD（新企 Airwallex/SWIFT）",
+      "nameEn": "ZA Bank Receive USD from SG",
+      "payerRegion": "SG",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "swift",
+        "airwallex"
+      ],
+      "receivePlatformId": "za_bank",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "1-2 工作日",
+      "speedHours": 36,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供众安银行 USD 账户信息（SWIFT）",
+          "actionEn": "Provide ZA Bank USD SWIFT details",
+          "platformId": "za_bank",
+          "detail": "众安支持多币种账户，USD 入账免费；Airwallex 可走本地 ACH 无中间行费，走 SWIFT 可能有 $15-$50 中间行费",
+          "affiliateUrl": null,
+          "tips": [
+            "众安 USD 入账 0 费",
+            "Airwallex 本地 ACH 比 SWIFT 更便宜"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请将美元汇至：\n\n银行：ZA Bank (SWIFT: ZAHKHKHH)\n收款人：{name}\n账号：{accountNumber}",
+        "en": "Please wire USD to:\n\nBank: ZA Bank (SWIFT: ZAHKHKHH)\nBeneficiary: {name}\nAccount: {accountNumber}"
+      },
+      "tags": [
+        "free"
+      ],
+      "caveats": [
+        "SWIFT 可能产生中间行费 $15-$50"
+      ],
+      "lastVerified": "2026-04-17"
+    },
+    {
+      "id": "recv-za-bank-usd-from-hk",
+      "name": "众安银行收 USD（港企 SWIFT/Airwallex）",
+      "nameEn": "ZA Bank Receive USD from HK",
+      "payerRegion": "HK",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "swift",
+        "airwallex",
+        "wise"
+      ],
+      "receivePlatformId": "za_bank",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "同日到 1 工作日",
+      "speedHours": 12,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供众安银行 USD SWIFT 信息",
+          "actionEn": "Provide ZA Bank USD SWIFT details",
+          "platformId": "za_bank",
+          "detail": "众安多币种账户 USD 入账 0 费用",
+          "affiliateUrl": null,
+          "tips": [
+            "众安 USD 入账 0 费"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "free"
+      ],
+      "caveats": [
+        "SWIFT 可能产生中间行费 $15-$50"
+      ],
+      "lastVerified": "2026-04-17"
+    },
+    {
+      "id": "recv-za-bank-usd-from-us",
+      "name": "众安银行收 USD（美企 SWIFT/ACH）",
+      "nameEn": "ZA Bank Receive USD from US",
+      "payerRegion": "US",
+      "payerCurrency": "USD",
+      "payerMethods": [
+        "swift",
+        "wire",
+        "airwallex"
+      ],
+      "receivePlatformId": "za_bank",
+      "receiveCurrency": "USD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "USD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供众安银行 USD SWIFT 信息",
+          "actionEn": "Provide ZA Bank USD SWIFT details",
+          "platformId": "za_bank",
+          "detail": "众安 USD 入账 0 费用，SWIFT 发方 OUR 模式可避免中间行扣费",
+          "affiliateUrl": null,
+          "tips": [
+            "众安 USD 入账 0 费",
+            "建议对方选 OUR 模式"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "free"
+      ],
+      "caveats": [
+        "SWIFT 可能产生中间行费 $15-$50"
+      ],
+      "lastVerified": "2026-04-17"
+    },
+    {
+      "id": "recv-hsbc-hk-hkd-fps",
+      "name": "HSBC HK 收 HKD (FPS)",
+      "nameEn": "HSBC HK Receive HKD via FPS",
+      "payerRegion": "HK",
+      "payerCurrency": "HKD",
+      "payerMethods": [
+        "fps",
+        "airwallex",
+        "wise"
+      ],
+      "receivePlatformId": "hsbc_hk",
+      "receiveCurrency": "HKD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "HKD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "HKD"
+      },
+      "speed": "即时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供 HSBC HK FPS 收款信息",
+          "actionEn": "Provide HSBC HK FPS details",
+          "platformId": "hsbc_hk",
+          "detail": "FPS 本地转账即时免费",
+          "affiliateUrl": null,
+          "tips": [
+            "FPS 即时到账 0 费"
+          ]
+        }
+      ],
+      "paymentTemplate": {
+        "zh": "请通过 FPS 转 HKD：\n\n收款人：{name}\nFPS ID：{fpsId}",
+        "en": "Please send HKD via FPS:\n\nBeneficiary: {name}\nFPS ID: {fpsId}"
+      },
+      "tags": [
+        "recommended",
+        "free",
+        "instant"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-17"
+    },
+    {
+      "id": "recv-hsbc-hk-cny-swift",
+      "name": "HSBC HK 收 CNY (SWIFT)",
+      "nameEn": "HSBC HK Receive CNY via SWIFT",
+      "payerRegion": "CN",
+      "payerCurrency": "CNY",
+      "payerMethods": [
+        "swift",
+        "wire"
+      ],
+      "receivePlatformId": "hsbc_hk",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "CNY"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "CNY"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供 HSBC HK 离岸人民币账户 SWIFT 信息",
+          "actionEn": "Provide HSBC HK CNH SWIFT details",
+          "platformId": "hsbc_hk",
+          "detail": "HSBC HK 多币种账户支持离岸人民币 (CNH)，入账免费",
+          "affiliateUrl": null,
+          "tips": [
+            "HSBC Premier/One 客户入账 TT 免费",
+            "中间行可能扣 ¥50-¥200"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [],
+      "caveats": [
+        "境内汇出需符合外管局规定",
+        "中间行费估 ¥50-¥200"
+      ],
+      "lastVerified": "2026-04-17"
+    },
+    {
+      "id": "recv-bochk-cny-swift",
+      "name": "中银香港收 CNY (SWIFT)",
+      "nameEn": "BOCHK Receive CNY via SWIFT",
+      "payerRegion": "CN",
+      "payerCurrency": "CNY",
+      "payerMethods": [
+        "swift",
+        "wire"
+      ],
+      "receivePlatformId": "bochk",
+      "receiveCurrency": "CNY",
+      "fees": {
+        "incomingFee": {
+          "amount": 60,
+          "currency": "HKD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "CNY"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "CNY"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供中银香港离岸人民币 SWIFT 信息",
+          "actionEn": "Provide BOCHK CNH SWIFT details",
+          "platformId": "bochk",
+          "detail": "中银香港 CNY 入账费 HK$60，支持跨境结算",
+          "affiliateUrl": null,
+          "tips": [
+            "中银系统跨境汇款直通",
+            "中间行费估 ¥50-¥200"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [],
+      "caveats": [
+        "入账费 HK$60",
+        "中间行费估 ¥50-¥200"
+      ],
+      "lastVerified": "2026-04-17"
+    },
+    {
+      "id": "recv-airwallex-hkd-fps",
+      "name": "Airwallex 收 HKD (FPS)",
+      "nameEn": "Airwallex Receive HKD via FPS",
+      "payerRegion": "HK",
+      "payerCurrency": "HKD",
+      "payerMethods": [
+        "fps",
+        "airwallex",
+        "wise"
+      ],
+      "receivePlatformId": "airwallex",
+      "receiveCurrency": "HKD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "HKD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "HKD"
+      },
+      "speed": "即时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供 Airwallex Global Account HKD FPS 信息",
+          "actionEn": "Provide Airwallex HKD FPS details",
+          "platformId": "airwallex",
+          "detail": "Airwallex Global Account 本地 HKD 账户，FPS 即时免费",
+          "affiliateUrl": null,
+          "tips": [
+            "FPS 即时 0 费"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "free",
+        "instant"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-17"
+    },
+    {
+      "id": "recv-airwallex-sgd-fast",
+      "name": "Airwallex 收 SGD (FAST)",
+      "nameEn": "Airwallex Receive SGD via FAST",
+      "payerRegion": "SG",
+      "payerCurrency": "SGD",
+      "payerMethods": [
+        "fast",
+        "airwallex",
+        "wise"
+      ],
+      "receivePlatformId": "airwallex",
+      "receiveCurrency": "SGD",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "SGD"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "SGD"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "SGD"
+      },
+      "speed": "即时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供 Airwallex SGD FAST 账户信息",
+          "actionEn": "Provide Airwallex SGD FAST details",
+          "platformId": "airwallex",
+          "detail": "Airwallex Global Account SGD 本地账户，FAST 即时免费",
+          "affiliateUrl": null,
+          "tips": [
+            "FAST 即时 0 费"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "free",
+        "instant"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-17"
+    },
+    {
+      "id": "recv-airwallex-gbp-fp",
+      "name": "Airwallex 收 GBP (Faster Payments)",
+      "nameEn": "Airwallex Receive GBP via FP",
+      "payerRegion": "GB",
+      "payerCurrency": "GBP",
+      "payerMethods": [
+        "faster-payments",
+        "airwallex",
+        "wise"
+      ],
+      "receivePlatformId": "airwallex",
+      "receiveCurrency": "GBP",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "GBP"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "GBP"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "GBP"
+      },
+      "speed": "即时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供 Airwallex GBP 本地账户",
+          "actionEn": "Provide Airwallex GBP FP details",
+          "platformId": "airwallex",
+          "detail": "Airwallex Global Account GBP 本地账户，Faster Payments 即时免费",
+          "affiliateUrl": null,
+          "tips": [
+            "Faster Payments 即时 0 费"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "free",
+        "instant"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-17"
+    },
+    {
+      "id": "recv-airwallex-eur-sepa",
+      "name": "Airwallex 收 EUR (SEPA)",
+      "nameEn": "Airwallex Receive EUR via SEPA",
+      "payerRegion": "EU",
+      "payerCurrency": "EUR",
+      "payerMethods": [
+        "sepa",
+        "airwallex",
+        "wise"
+      ],
+      "receivePlatformId": "airwallex",
+      "receiveCurrency": "EUR",
+      "fees": {
+        "incomingFee": {
+          "amount": 0,
+          "currency": "EUR"
+        },
+        "conversionFee": 0,
+        "fxMarkup": 0,
+        "withdrawalFee": {
+          "amount": 0,
+          "currency": "EUR"
+        }
+      },
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "EUR"
+      },
+      "speed": "1 工作日",
+      "speedHours": 24,
+      "steps": [
+        {
+          "order": 1,
+          "action": "提供 Airwallex EUR SEPA 账户信息",
+          "actionEn": "Provide Airwallex EUR SEPA details",
+          "platformId": "airwallex",
+          "detail": "Airwallex EUR 本地账户，SEPA 转账免费",
+          "affiliateUrl": null,
+          "tips": [
+            "SEPA 免费"
+          ]
+        }
+      ],
+      "paymentTemplate": null,
+      "tags": [
+        "free"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-04-17"
+    }
+  ]
+}

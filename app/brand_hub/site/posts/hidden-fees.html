@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>跨境转账的隐藏费用：汇率加价才是大头 · 鱼总 yuzong.ai</title>
+  <meta name="description" content="很多人只看手续费，却忽略了汇率加价——拆解跨境转账的三层费用，算清真实成本">
+  <link rel="canonical" href="https://yuzong.ai/posts/hidden-fees.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="跨境转账的隐藏费用：汇率加价才是大头">
+  <meta property="og:description" content="很多人只看手续费，却忽略了汇率加价——拆解跨境转账的三层费用，算清真实成本">
+  <meta property="og:url" content="https://yuzong.ai/posts/hidden-fees.html">
+  <meta property="og:image" content="https://yuzong.ai/assets/images/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:creator" content="@AI_Jasonyu">
+  <link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20260815e">
+  <script>
+    try {
+      var t = localStorage.getItem('yuzong-theme');
+      if (!t) { t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  </script>
+</head>
+<body class="article-body">
+  <div class="grain" aria-hidden="true"></div>
+
+  <article class="article-page">
+    <nav class="article-top mono">
+      <a href="../index.html#writing">← 鱼总 · YUZONG.AI</a>
+    </nav>
+
+    <header class="article-head">
+      <p class="post-meta mono"><span class="cat">出海实践</span>2026.03.10</p>
+      <h1 class="article-title-lg">跨境转账的隐藏费用：汇率加价才是大头</h1>
+      <p class="article-subtitle">很多人只看手续费，却忽略了汇率加价——拆解跨境转账的三层费用，算清真实成本</p>
+    </header>
+
+    <div class="prose">
+<h2>&quot;免手续费&quot;是个陷阱</h2>
+<p>你有没有见过这样的广告：</p>
+<blockquote>
+<p>&quot;跨境汇款 <strong>0 手续费</strong>！&quot;</p>
+</blockquote>
+<p>听起来很划算，对吗？但当你真正转了 $1000，收款方只收到 $965，这 $35 去哪了？</p>
+<hr>
+<h2>三层费用结构</h2>
+<h3>第一层：固定手续费</h3>
+<p>最容易看到的费用，通常在转账页面直接展示。</p>
+<ul>
+<li>Wise 发送 $1000：约 $5（0.5%）</li>
+<li>银行 SWIFT 电汇：$25–$50 固定费</li>
+<li>PayPal：0–4%</li>
+</ul>
+<h3>第二层：汇率加价（FX Markup）⚠️ 最隐蔽</h3>
+<p>这是大多数人忽略的成本。银行和 PayPal 不使用&quot;真实汇率&quot;（中间市场汇率），而是用一个对你不利的汇率。</p>
+<p><strong>中间市场汇率</strong>：$1 = ¥7.245（这是 <a href="http://XE.com">XE.com</a> 显示的真实汇率）</p>
+<p><strong>PayPal 实际汇率</strong>：$1 = ¥6.955（悄悄扣了约 4%）</p>
+<p>这个差额不会显示在手续费里，但你实实在在少收了钱。</p>
+<table>
+<thead>
+<tr>
+<th>平台</th>
+<th>汇率加价（约）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wise</td>
+<td>0.03–0.5%</td>
+</tr>
+<tr>
+<td>Airwallex</td>
+<td>0.3–0.5%</td>
+</tr>
+<tr>
+<td>万里汇</td>
+<td>0.3–0.5%</td>
+</tr>
+<tr>
+<td>PayPal</td>
+<td>3–4%</td>
+</tr>
+<tr>
+<td>招商银行</td>
+<td>1–2%</td>
+</tr>
+<tr>
+<td>汇丰香港</td>
+<td>1–2%</td>
+</tr>
+</tbody>
+</table>
+<h3>第三层：中间行费/收款行费</h3>
+<p>SWIFT 电汇在全球银行之间中转时，每经过一个中转行可能扣 $15–$25。你发出去 $1000，收款方可能只收到 $950 甚至 $930。</p>
+<p>解决方案：</p>
+<ul>
+<li>选&quot;OUR&quot;模式（发款方承担全部费用）</li>
+<li>或使用 Wise、Airwallex 等不走 SWIFT 的平台</li>
+</ul>
+<hr>
+<h2>真实成本计算器</h2>
+<p>用这个公式自己算：</p>
+<pre><code>真实成本 = 手续费 + (中间市场汇率 - 实际汇率) × 金额 + 中间行费
+</code></pre>
+<p>举例（$5000 USD → CNY）：</p>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>手续费</th>
+<th>汇率损失</th>
+<th>中间行费</th>
+<th>总损失</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wise</td>
+<td>$25</td>
+<td>$15</td>
+<td>$0</td>
+<td><strong>$40（0.8%）</strong></td>
+</tr>
+<tr>
+<td>PayPal</td>
+<td>$0</td>
+<td>$200</td>
+<td>$0</td>
+<td><strong>$200（4%）</strong></td>
+</tr>
+<tr>
+<td>银行 Wire</td>
+<td>$40</td>
+<td>$75</td>
+<td>$25</td>
+<td><strong>$140（2.8%）</strong></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>省钱建议</h2>
+<ol>
+<li><strong>优先选择 Wise 或 Airwallex</strong>：使用中间市场汇率，手续费透明</li>
+<li><strong>避免 PayPal 换汇</strong>：收到 PayPal 后，先不换汇，等提现到 Wise 再换</li>
+<li><strong>银行电汇选 OUR 方式</strong>：让发款方承担中间行费</li>
+<li><strong>金额越大，固定费用占比越低</strong>：小额转账用 PayPal 便利性更高</li>
+</ol>
+<p><a href="/send">用汇费通比较你的具体方案 →</a></p>
+<hr>
+<p>算不清自己那条路线的真实成本？用我做的 <a href="../tools/transfer.html?mode=send">汇款手续费对比工具</a> 直接对比到手金额。</p>
+
+    </div>
+
+    <footer class="article-foot">
+      <p class="mono">— 本文完 —</p>
+
+      <div class="follow-card">
+        <p class="follow-lede">觉得有用？出海路上的真话与工具，都在这两个地方：</p>
+        <div class="follow-row">
+          <a class="follow-btn" href="https://x.com/AI_Jasonyu" target="_blank" rel="noopener">
+            <b>X · @AI_Jasonyu</b><span>日常更新 · 私信最快</span>
+          </a>
+          <div class="follow-btn">
+            <b>公众号 · 鱼总聊AI</b><span>微信搜索关注 · 长文首发</span>
+          </div>
+        </div>
+      </div>
+
+      <a class="article-back" href="../index.html#writing">← 返回文章列表</a>
+    </footer>
+  </article>
+  <a class="voyage-fab" href="../voyage/" aria-label="688 航线">
+    <span class="vf-ico">⚓</span><span class="vf-text">688 航线</span>
+  </a>
+</body>
+</html>

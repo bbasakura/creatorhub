@@ -2939,7 +2939,7 @@ class MonitorEngine:
                     if t.source_platform == "d2y" and t.source_content_id:
                         try:
                             import sys
-                            d2y_pkg = r"D:\soft\Codex\ai-narrator"
+                            d2y_pkg = r"D:\soft\Codex\自媒体自动化"
                             if d2y_pkg not in sys.path:
                                 sys.path.insert(0, d2y_pkg)
                             from src.douyin_to_youtube.d2y_to_creatorhub import sync_d2y_uploaded_result
@@ -2955,7 +2955,7 @@ class MonitorEngine:
                     if t.source_platform == "d2y" and t.source_content_id:
                         try:
                             import sys
-                            d2y_pkg = r"D:\soft\Codex\ai-narrator"
+                            d2y_pkg = r"D:\soft\Codex\自媒体自动化"
                             if d2y_pkg not in sys.path:
                                 sys.path.insert(0, d2y_pkg)
                             from src.douyin_to_youtube.d2y_to_creatorhub import sync_d2y_uploaded_result
@@ -2971,7 +2971,7 @@ class MonitorEngine:
                     if t.source_platform == "d2y" and t.source_content_id:
                         try:
                             import sys
-                            d2y_pkg = r"D:\soft\Codex\ai-narrator"
+                            d2y_pkg = r"D:\soft\Codex\自媒体自动化"
                             if d2y_pkg not in sys.path:
                                 sys.path.insert(0, d2y_pkg)
                             from src.douyin_to_youtube.d2y_to_creatorhub import sync_d2y_uploaded_result

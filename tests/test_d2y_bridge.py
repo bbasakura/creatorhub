@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 import sys
 
-sys.path.insert(0, 'D:/soft/Codex/ai-narrator')
+sys.path.insert(0, 'D:/soft/Codex/自媒体自动化')
 from src.douyin_to_youtube import d2y_to_creatorhub
 
 

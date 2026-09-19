@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>订单查询 · 鱼总的杂货铺</title>
+  <link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20260816d">
+  <link rel="stylesheet" href="./shop.css?v=20260816d">
+  <script>
+    try {
+      var t = localStorage.getItem('yuzong-theme');
+      if (!t) { t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  </script>
+</head>
+<body class="article-body">
+  <div class="grain" aria-hidden="true"></div>
+
+  <div class="shop-page">
+
+    <header class="shop-head">
+      <div class="s-avatar">
+        <img src="../assets/images/avatar.jpg" onerror="this.onerror=null;this.src='../assets/images/avatar.svg'" alt="鱼总">
+        <span class="s-seal" aria-hidden="true">鱼</span>
+      </div>
+      <div class="s-id">
+        <h1>鱼总的杂货铺</h1>
+        <p>CHANDLERY · 出海装备自营</p>
+      </div>
+      <nav class="shop-nav">
+        <a href="./index.html">商品</a>
+        <a class="active" href="./order.html">订单查询</a>
+        <a href="https://yuzong.ai" target="_blank" rel="noopener">回主站 ↗</a>
+      </nav>
+    </header>
+
+    <section class="shop-hero">
+      <p class="eyebrow mono">TRACKING · 航行追踪</p>
+      <h2 class="hero-title">你的货，<em>到哪了</em>？</h2>
+      <p class="hero-lede">输入订单号（YZ 开头，下单成功时展示），查看订单状态和快递单号。</p>
+    </section>
+
+    <div class="query-box">
+      <input type="text" placeholder="订单号，如 YZ20260814XXXXXXXX" data-query-input>
+      <button class="submit-btn" data-query-btn>查询</button>
+    </div>
+
+    <p class="form-err" data-query-err></p>
+
+    <div class="order-result" data-order-result style="display:none"></div>
+
+    <footer class="shop-foot">
+      <span>© 2026 鱼总的杂货铺 · 个体工商户经营</span>
+      <span>YUZONG.AI 出品</span>
+    </footer>
+  </div>
+
+  <script src="./track.js"></script>
+</body>
+</html>

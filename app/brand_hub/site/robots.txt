@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /_v1-vcard-style/
+
+Sitemap: https://yuzong.ai/sitemap.xml

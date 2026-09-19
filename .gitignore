@@ -22,12 +22,14 @@ _site/
 .claude/
 
 # Runtime data (login states, downloaded media, sqlite db, uploads)
-data/
+/data/
+/runtime/
 logs/
+*.log
 *.db
 config.yaml
 .env
 .env.*
 
 # 内部方案文档(不随公开仓库发布)
-docs/
+/docs/

@@ -1,0 +1,124 @@
+{
+  "platforms": [
+    {
+      "id": "wise",
+      "name": "Wise",
+      "nameZh": "Wise (前TransferWise)",
+      "type": "fintech",
+      "logo": "/images/platforms/wise.svg",
+      "website": "https://wise.com",
+      "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+      "supportedCurrencies": ["USD", "GBP", "EUR", "HKD", "CNY", "SGD", "AUD", "CAD", "JPY"],
+      "openingRequirements": "护照/身份证，无最低存款，免费开户",
+      "tags": ["low-fee", "transparent-rate", "fast"]
+    },
+    {
+      "id": "airwallex",
+      "name": "Airwallex",
+      "nameZh": "空中云汇",
+      "type": "fintech",
+      "logo": "/images/platforms/airwallex.svg",
+      "website": "https://airwallex.com",
+      "affiliateUrl": "https://airwallex.com/refer/transfersmart",
+      "supportedCurrencies": ["USD", "GBP", "EUR", "HKD", "CNY", "SGD", "AUD"],
+      "openingRequirements": "企业注册，需营业执照，Explore计划免费(需$10K存款)",
+      "tags": ["business", "ecommerce", "api"]
+    },
+    {
+      "id": "paypal",
+      "name": "PayPal",
+      "nameZh": "PayPal",
+      "type": "online_payment",
+      "logo": "/images/platforms/paypal.svg",
+      "website": "https://paypal.com",
+      "affiliateUrl": null,
+      "supportedCurrencies": ["USD", "GBP", "EUR", "HKD", "CNY", "SGD", "AUD", "CAD", "JPY"],
+      "openingRequirements": "邮箱注册，免费开户",
+      "tags": ["wide-coverage", "expensive"]
+    },
+    {
+      "id": "mercury",
+      "name": "Mercury",
+      "nameZh": "水星银行",
+      "type": "fintech",
+      "logo": "/images/platforms/mercury.svg",
+      "website": "https://mercury.com",
+      "affiliateUrl": "https://mercury.com/r/transfersmart",
+      "supportedCurrencies": ["USD"],
+      "openingRequirements": "仅限美国注册公司，免费开户",
+      "tags": ["us-startup", "free-wire"]
+    },
+    {
+      "id": "hsbc_hk",
+      "name": "HSBC HK",
+      "nameZh": "汇丰香港",
+      "type": "traditional_bank",
+      "logo": "/images/platforms/hsbc.svg",
+      "website": "https://www.hsbc.com.hk",
+      "affiliateUrl": null,
+      "supportedCurrencies": ["HKD", "USD", "GBP", "EUR", "CNY", "SGD", "AUD", "CAD", "JPY"],
+      "openingRequirements": "香港居民/工作签证，按账户等级收费",
+      "tags": ["global-transfer", "premier"]
+    },
+    {
+      "id": "bochk",
+      "name": "BOCHK",
+      "nameZh": "中银香港",
+      "type": "traditional_bank",
+      "logo": "/images/platforms/bochk.svg",
+      "website": "https://www.bochk.com",
+      "affiliateUrl": null,
+      "supportedCurrencies": ["HKD", "USD", "GBP", "EUR", "CNY", "JPY"],
+      "openingRequirements": "香港居民/工作签证，按账户等级收费",
+      "tags": ["china-hk-corridor", "same-name-free"]
+    },
+    {
+      "id": "za_bank",
+      "name": "ZA Bank",
+      "nameZh": "众安银行",
+      "type": "virtual_bank",
+      "logo": "/images/platforms/za-bank.svg",
+      "website": "https://bank.za.group",
+      "affiliateUrl": "https://bank.za.group/refer/transfersmart",
+      "supportedCurrencies": ["HKD", "USD", "CNY"],
+      "openingRequirements": "香港居民，手机开户，免费",
+      "tags": ["wise-partner", "low-fee", "payment-connect"]
+    },
+    {
+      "id": "airstar",
+      "name": "Airstar Bank",
+      "nameZh": "天星银行",
+      "type": "virtual_bank",
+      "logo": "/images/platforms/airstar.svg",
+      "website": "https://www.airstarbank.com",
+      "affiliateUrl": null,
+      "supportedCurrencies": ["HKD", "USD", "CNY"],
+      "openingRequirements": "香港居民，手机开户，免费",
+      "tags": ["payment-connect", "futu-link"]
+    },
+    {
+      "id": "worldfirst",
+      "name": "WorldFirst",
+      "nameZh": "万里汇",
+      "type": "fintech",
+      "logo": "/images/platforms/worldfirst.svg",
+      "website": "https://worldfirst.com",
+      "affiliateUrl": "https://worldfirst.com/refer/transfersmart",
+      "supportedCurrencies": ["USD", "GBP", "EUR", "HKD", "CNY", "AUD", "CAD", "JPY"],
+      "openingRequirements": "企业或个体户注册，KYC审核较慢",
+      "tags": ["ecommerce", "alipay-withdrawal", "china-seller"]
+    },
+    {
+      "id": "cn_bank",
+      "name": "China Banks",
+      "nameZh": "国内银行(中行/招行/工行)",
+      "type": "traditional_bank",
+      "logo": "/images/platforms/cn-bank.svg",
+      "website": "",
+      "affiliateUrl": null,
+      "supportedCurrencies": ["CNY", "USD", "GBP", "EUR", "HKD", "JPY"],
+      "openingRequirements": "中国大陆居民，身份证开户",
+      "tags": ["domestic", "annual-limit"]
+    }
+  ]
+}

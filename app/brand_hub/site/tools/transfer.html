@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>汇款手续费对比 · 鱼总 yuzong.ai</title>
+  <meta name="description" content="对比 Wise / PayPal / 银行电汇的真实到手金额——把汇率加点、中转行扣费这些隐藏费用摊开给你看。">
+  <link rel="canonical" href="https://yuzong.ai/tools/transfer.html">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="汇款手续费对比 · 跨境汇款真实到手多少钱？">
+  <meta property="og:description" content="Wise / PayPal / 银行电汇横向对比，62 条路线按到手金额排序，隐藏费用全拆开。">
+  <meta property="og:url" content="https://yuzong.ai/tools/transfer.html">
+  <meta property="og:image" content="https://yuzong.ai/assets/images/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:creator" content="@AI_Jasonyu">
+  <link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20260814g">
+  <script>
+    try {
+      var t = localStorage.getItem('yuzong-theme');
+      if (!t) { t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  </script>
+  <style>
+    /* ── 工具页专属样式（沿用出海志变量体系）── */
+    .tool-page { max-width: 880px; margin: 0 auto; padding: clamp(28px, 5vh, 56px) 24px clamp(60px, 10vh, 110px); }
+
+    .tool-head { margin: clamp(28px, 5vh, 48px) 0 26px; }
+    .tool-title {
+      font-family: var(--serif); font-size: clamp(30px, 4vw, 44px);
+      font-weight: 700; line-height: 1.3; margin: 14px 0 10px; text-wrap: balance;
+    }
+    .tool-sub { font-size: 15px; color: var(--ink-soft); max-width: 40em; }
+
+    /* 模式切换 */
+    .modes { display: flex; gap: 10px; margin: 26px 0 20px; }
+    .mode-tab {
+      font-size: 14.5px; letter-spacing: 0.04em;
+      padding: 9px 26px; border-radius: 99px;
+      border: 1px solid var(--rule); color: var(--ink-soft);
+      transition: all 0.25s var(--ease-out);
+    }
+    .mode-tab:hover { border-color: var(--teal); color: var(--teal); }
+    .mode-tab.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
+    /* 查询表单 */
+    .calc-form {
+      display: grid; grid-template-columns: 1fr 1fr 1.2fr auto;
+      gap: 14px; align-items: end;
+      border: 1px solid var(--rule); border-radius: 16px;
+      background: var(--card); padding: 20px 22px;
+    }
+    .cf-field { display: grid; gap: 7px; }
+    .cf-field > span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; color: var(--ink-soft); }
+    .cf-field select, .cf-field input {
+      font: inherit; color: var(--ink);
+      background: var(--paper); border: 1px solid var(--rule);
+      border-radius: 10px; padding: 11px 14px;
+      transition: border-color 0.25s, box-shadow 0.25s;
+      width: 100%;
+    }
+    .cf-field select:focus, .cf-field input:focus {
+      outline: none; border-color: var(--teal);
+      box-shadow: 0 0 0 3px rgba(16, 105, 122, 0.12);
+    }
+    .calc-btn {
+      font-size: 15px; letter-spacing: 0.04em;
+      background: var(--teal); color: #fff;
+      padding: 12px 30px; border-radius: 99px;
+      transition: all 0.3s var(--ease-out);
+      white-space: nowrap;
+    }
+    .calc-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -12px rgba(16, 105, 122, 0.5); }
+
+    .rates-note {
+      margin-top: 12px; font-family: var(--mono);
+      font-size: 10.5px; letter-spacing: 0.08em; color: var(--ink-soft);
+    }
+
+    /* 结果卡 */
+    .results { margin-top: 30px; display: grid; gap: 16px; }
+
+    .r-card {
+      position: relative;
+      border: 1px solid var(--rule); border-radius: 16px;
+      background: var(--card); padding: 22px 24px 16px;
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    .r-card:hover { border-color: var(--teal); }
+    .r-card.best { border-color: var(--teal); box-shadow: 0 24px 50px -30px rgba(11, 75, 88, 0.45); }
+
+    .best-ribbon {
+      position: absolute; top: -11px; left: 22px;
+      font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+      background: var(--signal); color: #fff;
+      padding: 3px 12px; border-radius: 99px;
+    }
+
+    .r-top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .r-rank { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); }
+    .r-name { font-family: var(--serif); font-size: 19px; font-weight: 700; }
+    .r-tags { display: flex; gap: 6px; margin-left: auto; }
+    .r-tag {
+      font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em;
+      color: var(--teal); border: 1px solid var(--rule);
+      padding: 2px 9px; border-radius: 99px;
+    }
+
+    .r-main { display: flex; align-items: baseline; gap: 26px; flex-wrap: wrap; margin: 14px 0 4px; }
+    .r-received b {
+      font-family: var(--mono); font-size: clamp(24px, 2.6vw, 32px);
+      color: var(--teal); font-variant-numeric: tabular-nums;
+    }
+    .r-received span, .r-meta { font-size: 12px; color: var(--ink-soft); }
+    .r-meta { display: flex; gap: 20px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; }
+    .r-meta b { color: var(--ink); font-weight: 600; }
+    .r-meta .fee-pct { color: var(--signal); }
+
+    .r-card details { border-top: 1px dashed var(--rule); margin-top: 14px; }
+    .r-card summary {
+      cursor: pointer; list-style: none;
+      font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+      color: var(--teal); padding: 12px 0 10px;
+    }
+    .r-card summary::-webkit-details-marker { display: none; }
+    .r-card summary::after { content: " ▾"; }
+    .r-card details[open] summary::after { content: " ▴"; }
+
+    .fee-list { display: grid; gap: 6px; margin-bottom: 14px; }
+    .fee-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-soft); }
+    .fee-row b { font-family: var(--mono); color: var(--ink); font-weight: 500; }
+
+    .steps { display: grid; gap: 12px; padding-left: 2px; margin-bottom: 8px; }
+    .step { display: grid; grid-template-columns: 24px 1fr; gap: 10px; }
+    .step-no {
+      font-family: var(--mono); font-size: 11px; color: var(--paper);
+      background: var(--teal); width: 22px; height: 22px; border-radius: 50%;
+      display: grid; place-items: center;
+    }
+    .step h5 { font-size: 13.5px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+    .step p { font-size: 12.5px; color: var(--ink-soft); }
+    .step a { color: var(--teal); border-bottom: 1px dashed var(--teal); }
+    .step .tip { font-size: 11.5px; color: var(--ink-soft); opacity: 0.85; }
+    .step .tip::before { content: "· "; color: var(--signal); }
+
+    .caveats {
+      font-size: 11.5px; color: var(--ink-soft);
+      border-top: 1px dashed var(--rule);
+      padding-top: 10px; margin-top: 4px;
+    }
+    .caveats span { display: inline-block; margin-right: 14px; }
+    .caveats span::before { content: "⚠ "; color: var(--signal); }
+
+    .limit-warn {
+      font-family: var(--mono); font-size: 10px;
+      color: var(--signal); letter-spacing: 0.08em;
+    }
+
+    .empty-state {
+      text-align: center; padding: 50px 20px;
+      color: var(--ink-soft); font-size: 14px;
+      border: 1px dashed var(--rule); border-radius: 16px;
+    }
+
+
+    /* 个性化折叠区 */
+    .pfilters { margin: 14px 0 4px; }
+    .pf-summary {
+      display: flex; align-items: center; gap: 9px;
+      width: 100%; text-align: left;
+      padding: 11px 16px;
+      font-size: 12.5px; color: var(--ink-soft);
+      background: transparent;
+      border: 1px dashed var(--rule); border-radius: 10px;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .pf-summary:hover { border-color: var(--teal); color: var(--ink); }
+    .pf-summary.has-filters {
+      border-style: solid; border-color: var(--teal);
+      color: var(--teal); font-weight: 600;
+    }
+    .pf-ico { opacity: 0.7; }
+    .pf-arrow { margin-left: auto; }
+    .pf-body { padding: 4px 2px 0; }
+
+    @media (max-width: 760px) {
+      .calc-form { grid-template-columns: 1fr 1fr; }
+      .calc-btn { grid-column: 1 / -1; }
+      .r-tags { margin-left: 0; }
+    }
+  </style>
+</head>
+<body class="article-body">
+  <div class="grain" aria-hidden="true"></div>
+
+  <main class="tool-page">
+
+    <nav class="article-top mono">
+      <a href="../index.html#tools">← 鱼总 · YUZONG.AI / 工具箱</a>
+    </nav>
+
+    <header class="tool-head">
+      <p class="post-meta mono"><span class="cat">TOOL · 汇款对比</span>数据版本 <span data-data-version>—</span></p>
+      <h1 class="tool-title">跨境汇款，<em style="font-style:normal;color:var(--teal)">真实到手</em>多少钱？</h1>
+      <p class="tool-sub">
+        平台费率表看着都便宜，真实到手金额差得远——汇率加点、SWIFT 电报费、中转行扣费全都算给你看。
+        选好路线和金额，按到手金额从高到低排序。
+      </p>
+    </header>
+
+    <div class="modes" role="group" aria-label="模式切换">
+      <button class="mode-tab active" data-mode="send">我要汇款</button>
+      <button class="mode-tab" data-mode="receive">我要收款</button>
+    </div>
+
+    <form class="calc-form" data-calc novalidate>
+      <label class="cf-field">
+        <span data-label-from>FROM · 汇出币种</span>
+        <select data-from></select>
+      </label>
+      <label class="cf-field">
+        <span data-label-to>TO · 收款币种</span>
+        <select data-to></select>
+      </label>
+      <label class="cf-field">
+        <span data-label-amount>AMOUNT · 金额</span>
+        <input type="number" data-amount value="1000" min="0" step="any" inputmode="decimal" required>
+      </label>
+      <button class="calc-btn" type="submit">对比 →</button>
+    </form>
+
+    <div class="pfilters">
+      <button type="button" class="pf-summary" data-pf-toggle>
+        <span class="pf-ico" aria-hidden="true">⚙</span>
+        <span data-pf-text>个性化（选填）：告诉我你有哪些账户、对方从哪付款</span>
+        <span class="pf-arrow" data-pf-arrow>▾</span>
+      </button>
+      <div class="pf-body" data-pf-body hidden>
+        <div class="my-accounts" data-my-accounts>
+          <p class="ma-label mono">MY ACCOUNTS · 我有哪些账户 <i>（勾选后，你能直接用的方案排最前）</i></p>
+          <div class="ma-chips" data-ma-chips></div>
+        </div>
+        <div class="my-accounts" data-payer-filter hidden>
+          <p class="ma-label mono">PAYER FROM · 对方从哪付款 <i>（选定后只看对应付款方的路线）</i></p>
+          <div class="ma-chips" data-payer-chips></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="rates-note" data-rates-note></p>
+
+    <div class="results" data-results></div>
+
+    <footer class="article-foot">
+      <p class="mono">费率数据人工核对，季度更新 · 结果仅供参考，以平台实时报价为准</p>
+      <a class="article-back" href="../index.html#tools">← 返回工具箱</a>
+    </footer>
+
+  </main>
+
+  <script src="./transfer.js?v=20260814j"></script>
+</body>
+</html>

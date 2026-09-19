@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>做了三年出海，我把「基础设施」重新理解了一遍 · 鱼总 yuzong.ai</title>
+  <meta name="description" content="网络、信息、身份、通讯、支付、协作、合规、学习——一份完整的八层清单">
+  <link rel="canonical" href="https://yuzong.ai/posts/chuhai-infra.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="做了三年出海，我把「基础设施」重新理解了一遍">
+  <meta property="og:description" content="网络、信息、身份、通讯、支付、协作、合规、学习——一份完整的八层清单">
+  <meta property="og:url" content="https://yuzong.ai/posts/chuhai-infra.html">
+  <meta property="og:image" content="https://yuzong.ai/assets/images/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:creator" content="@AI_Jasonyu">
+  <link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20260815e">
+  <script>
+    try {
+      var t = localStorage.getItem('yuzong-theme');
+      if (!t) { t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  </script>
+</head>
+<body class="article-body">
+  <div class="grain" aria-hidden="true"></div>
+
+  <article class="article-page">
+    <nav class="article-top mono">
+      <a href="../index.html#writing">← 鱼总 · YUZONG.AI</a>
+    </nav>
+
+    <header class="article-head">
+      <p class="post-meta mono"><span class="cat">出海实践</span>2026.06</p>
+      <h1 class="article-title-lg">做了三年出海，我把「基础设施」重新理解了一遍</h1>
+      <p class="article-subtitle">网络、信息、身份、通讯、支付、协作、合规、学习——一份完整的八层清单</p>
+    </header>
+
+    <div class="prose">
+<p>做了三年出海业务，我踩过的坑可以写一本书。</p>
+<p>但如果让我把所有经验压缩成一句话，那就是——<strong>基础设施比你想象的重要一百倍</strong>。</p>
+<p>很多人以为出海就是把产品翻译成英文、注册个海外公司就完事了。实际上你真正下场之后会发现，从网络访问、信息获取、身份认证、通讯方案、到支付收款，每一个环节都有看不见的门槛。这些门槛不会直接让你的业务失败，但会像慢性病一样消耗你的时间和精力——直到某一天你发现，原本一起出发的人已经跑出去三条街了。</p>
+<p>我自己是从 SaaS 工具出海开始切的，后来又顺手做了 X 和 YouTube 的英文账号，独立站也跑通了。这三年下来，我把基础设施按解决的核心问题分成八层：<strong>网络层、信息层、身份层、通讯层、支付层、协作层、合规层、学习层</strong>。</p>
+<p>这篇文章我会一层一层讲完，包括我自己用的是什么、为什么用、不同阶段怎么升级。都是真金白银试错出来的经验，希望能帮你少走点弯路。</p>
+<hr>
+<h2>一、网络层：所有事的起点</h2>
+<p>聊出海基础设施，<strong>第一件要解决的事是网络</strong>。</p>
+<p>这件事没什么可避讳的——你打不开 Google、登不上 Stripe、刷不动 X、看不了 YouTube、连不上 Notion，后面所有的事都是空中楼阁。</p>
+<p>X 上大家都已经解决了这个问题，我就不展开讲具体方案了。但有三件事我想强调一下，因为我自己踩过坑：</p>
+<p><strong>第一，一定要选商业级服务，不要用免费的。</strong></p>
+<p>免费方案不仅慢、不稳定，还有严重的隐私风险——你所有的流量都从对方的服务器走，你的 Google 密码、Stripe 后台、收款数据全都暴露。做出海最怕的就是账号被盗，你为了省那几十块钱可能损失几万美金。</p>
+<p><strong>第二，常备主备两条线路。</strong></p>
+<p>我自己常年挂两个不同来源的服务，一个主用、一个备用。做出海最怕的就是关键节点突然断网——你正在跑广告、正在跟客户开会、正在处理 Stripe dispute，这时候断 5 分钟可能就是几千美金的损失。备用线路不是奢侈品，是保险。</p>
+<p><strong>第三，关键账号一定要绑定固定 IP。</strong></p>
+<p>Stripe、PayPal、Google Ads、TikTok Shop 这种高风控平台，登录 IP 一直跳的话，账号被风控甚至冻结的概率会显著上升。给关键账号配一个相对固定的 IP（最好是住宅 IP），是降低风险的最基础动作。</p>
+<p>这一层我说到这里。<strong>核心心法就一句：稳定、独立、不省</strong>。</p>
+<hr>
+<h2>二、信息层：打破语言壁垒是第一步</h2>
+<p>网络通了之后，第二件要解决的事是<strong>信息不对称</strong>。</p>
+<p>海外市场的一手信息、技术文档、用户反馈、行业报告、KOL 评测——90% 都是英文。如果你的英文阅读速度慢，或者每次都要切换翻译工具来回折腾，那你获取信息的效率可能只有母语用户的 1/3。</p>
+<p>这不是夸张。我见过太多团队因为信息滞后错过窗口期。也见过太多人把&quot;我英文不好&quot;当成做不了出海的借口——其实你不需要英文多好，你只需要一个把英文阅读环境<strong>降到接近母语</strong>的工具。</p>
+<h3>2.1 为什么浏览器自带翻译不够用</h3>
+<p>Chrome、Edge 的自带翻译看起来很方便，但实际用起来有三个致命问题：</p>
+<p><strong>第一，全文替换导致排版崩溃。</strong> 尤其是技术文档、产品后台、定价页这种复杂页面，谷歌翻译一上去整个页面就乱了——按钮找不到、表格错位、代码块被翻成中文。我以前调研竞品后台经常出现这种情况，截图给同事看的时候根本对不上原文，沟通成本巨高。</p>
+<p><strong>第二，无法对照原文。</strong> 遇到关键术语（pricing tier、churn、CAC、ARR 这种）翻得不准，你得手动切回英文页面再找一遍，来回折腾。</p>
+<p><strong>第三，翻译质量堪忧。</strong> 我以前用谷歌翻译插件，<strong>总是各种报错</strong>——要么翻译失败、要么半页中文半页英文、要么翻得<strong>牛头不对马嘴</strong>。技术文档里的专业术语翻错了，反而把人引向错误的方向。</p>
+<p>不支持 PDF、不支持视频字幕、不支持输入框翻译这些就更不用说了。</p>
+<h3>2.2 我的解决方案：沉浸式翻译</h3>
+<p>试过十几款翻译工具之后，我现在每天打开次数最多的插件就是它，<strong>没有之一</strong>。</p>
+<p>它解决的不是&quot;能不能翻&quot;的问题，是&quot;翻完之后我还想不想读下去&quot;的问题。我具体在这几个场景里离不开它：</p>
+<p><strong>场景一：调研外文网站和 SaaS 后台</strong></p>
+<p>做 SaaS 出海，最高频的动作就是扒竞品。每次发现一个新对标，我的标准流程是：打开他们的 landing page、定价页、博客、文档中心，从头到尾读一遍。</p>
+<p>沉浸式翻译用的是<strong>双语对照</strong>——原文一段、译文一段并排显示。我读译文为主、扫原文为辅，遇到关键术语一眼瞄回去对照英文原词，效率高得离谱。</p>
+<p>而且它在 Notion、GitHub、Stripe Docs、AWS 控制台、各种 SaaS 后台都能正常工作，<strong>不会把按钮和代码也翻掉</strong>，这点是很多翻译工具做不到的。</p>
+<p><strong>场景二：刷 X、LinkedIn、Reddit</strong></p>
+<p>做出海的人 X 是必须挂着的。但 X 信息流刷起来你会发现，纯英文阅读这件事就足够累——做 SaaS 的老外动不动写一长串 build in public 复盘，一刷一屏密密麻麻全是英文。</p>
+<p>我现在的状态是 X 全程开着双语模式，刷起来跟刷中文 timeline 没区别。看到有意思的就停下来扫一眼译文，不用切走、不用复制粘贴、不用开新窗口。</p>
+<p>LinkedIn 同理——我做出海合作要找海外 marketer 聊，LinkedIn 上一篇长文的 case study 经常两三千词起步，开着双语翻译扫起来比纯英文快至少一倍。Reddit 上 r/SaaS、r/EntrepreneurRideAlong 这些版块的高赞帖也一样，里面藏着大量真实的独立开发者经验，但前提是你得读得动。</p>
+<p><strong>场景三：阅读海外技术文档和行业报告</strong></p>
+<p>我每天要看大量的技术文档、API 文档、竞品分析报告。沉浸式翻译的双语对照让我同时看到原文和译文，遇到关键术语可以立刻对照，不用担心翻译理解偏差。</p>
+<p>排版完全不会乱——原文保持原样，译文优雅地显示在下方，表格、代码块、多栏布局都能完美保留。这对需要精读的专业文档来说太重要了。</p>
+<p>我特别要单独提一下它的 <strong>BabelDOC</strong> 功能，专门用来翻译复杂 PDF。之前签合作合同、看技术白皮书、读行业研报，普通工具翻译完排版直接崩——表格变形、公式乱码、多栏顺序错乱。BabelDOC 底层用的是开源引擎，翻译后排版几乎不变，还能保持术语一致性，这对需要反复查阅的文档来说是刚需。</p>
+<p><strong>场景四：看 YouTube 教程和海外评测</strong></p>
+<p>YouTube 是我研究海外市场最重要的信息源之一。美区博主的 10-20 分钟产品评测，信息密度远大于文字版的 review——他们会讲细节体验、价格吐槽、跟竞品对比、用户场景。</p>
+<p>但纯英文听力，对大部分人来说门槛太高了。</p>
+<p>沉浸式翻译可以给 YouTube 视频<strong>实时挂双语字幕</strong>，原文和中文同时显示。我现在看英文 YouTube 几乎不再有听力压力，速度还能开到 1.25x。</p>
+<p>更骚的操作是<strong>支持字幕导出</strong>。我看完一个有价值的视频，直接把双语字幕导出来丢进 Notion，配上自己的标注，就是一份完整的笔记。这套流程跑通之后，我每周能消化掉的英文视频量是以前的三四倍。</p>
+<p>YouTube 直播也能翻（仅限自带字幕的直播），看产品发布会、看 Y Combinator 的直播分享都用得到。</p>
+<p><strong>场景五：用英文写邮件和聊天</strong></p>
+<p>做出海每天要处理大量英文邮件——客户咨询、合作洽谈、Stripe 工单、Apple Developer 审核回复、AppSumo 编辑 pitch……</p>
+<p>我英文阅读还行，但写作就比较吃力。以前的流程是：自己用中文打草稿 → 复制到 ChatGPT → 让它翻译润色 → 复制回来发出去。流程慢、上下文断裂、还容易翻车。</p>
+<p>沉浸式翻译的<strong>全局输入框翻译</strong>彻底改了这件事——在 Gmail、Slack、Discord、WhatsApp 任何输入框里直接用中文打字，一键转成地道英文，原地替换。不用再复制粘贴，反应速度直接拉到母语水平。</p>
+<p>它还有个 <strong>AI Reply</strong> 功能可以一键总结长篇英文邮件、生成回复草稿。我只需要微调一下语气和细节就能发送，处理邮件的速度至少快了一倍。</p>
+<p><strong>场景六：远程会议和团队协作</strong></p>
+<p>我们团队有海外成员，经常开 Zoom 或 Google Meet 会议。沉浸式翻译可以给会议<strong>实时加双语字幕</strong>，还能翻译聊天消息。这对英语听力不够强的团队成员来说是救星，再也不会出现&quot;开会空耳&quot;的尴尬。</p>
+<h3>2.3 关于成本，我想说清楚几个事</h3>
+<p>第一，<strong>基础功能完全免费</strong>。网页双语、YouTube 字幕、PDF 翻译、输入框翻译，免费版全都不限次数，用的是谷歌、微软等免费引擎。<strong>如果你刚开始用、只是想读读网页和看看视频，免费版完全够。</strong></p>
+<p>第二，付费版主要是给&quot;AI 翻译重度用户&quot;准备的。Pro 版 ¥49/月（年付更便宜），主要是为了用 <strong>GPT、Claude、DeepSeek</strong> 这些顶级 AI 引擎——翻译质量和专业术语准确度明显更高，每月 2000 万 Token 配额对绝大多数人都够用了。我自己是 Pro 用户，主要用来翻技术白皮书、产品 release notes 这类对专业度要求高的内容。</p>
+<p>第三，这个插件在 <strong>Chrome 商店拿过 2024 年度精选</strong>，全球有 2000 多万人在用，Edge / Safari / Firefox 都有版本，手机端有独立 App。安装也很简单，Chrome 商店搜&quot;沉浸式翻译&quot;几步配好。</p>
+<p>一句话总结：<strong>如果你每天要看大量英文内容、或者需要用英文沟通，这个工具能让你的效率至少翻倍</strong>。它不是锦上添花，是出海必备的基础设施。</p>
+<h3>2.4 信息层的其他配套</h3>
+<p>翻译插件解决的是&quot;读&quot;的问题，但完整的信息层还有两个补充：</p>
+<ul>
+<li><strong>RSS 阅读器</strong>：Inoreader 订阅几十个海外 SaaS / 出海博客，每天早上集中刷半小时，配合沉浸式翻译用，效率最大化。</li>
+<li><strong>AI 搜索引擎</strong>：Perplexity 或者 ChatGPT 搜索是我做 deep research 的标配。问&quot;美国 25-35 岁女性最近一年在用的健身 app 都有哪些&quot;这种问题，比谷歌效率高得多。</li>
+</ul>
+<p><strong>翻译插件是基础设施、RSS 是供应链、AI 搜索是燃料</strong>。三件套配齐，做出海决策的信息密度直接拉到另一个量级。</p>
+<hr>
+<h2>三、身份层：你需要一个&quot;海外身份&quot;</h2>
+<p>这层是国内做出海最容易卡住的地方。</p>
+<p>很多人不知道，做出海绝大部分关键基础设施——开 Stripe、注册 Google Ads、申请 Apple Developer、做 Wise 实名、收 PayPal、注册海外银行账户——<strong>都要求你提供一个&quot;海外可验证身份&quot;</strong>。</p>
+<p>国内身份证在很多场景下用不了，或者用了之后会限制你拿不到本应有的额度和权限。</p>
+<p><strong>护照</strong>：第一个必须办的。是几乎所有海外身份验证场景的最低配置。注册 Stripe、Wise、Payoneer、PayPal Business、Apple Developer 个人账户——只要涉及 KYC 的，护照基本通用。国内办护照很简单，预约出入境管理局，本人到场，二十几个工作日下来几百块钱搞定。</p>
+<p>但注意：<strong>护照只是&quot;身份证明&quot;，不等于&quot;海外身份&quot;</strong>。你拿国内护照去注册海外服务，平台依然会把你识别成中国大陆用户。要真正绕开这个标签，你还需要下面这些。</p>
+<p><strong>港澳通行证 + 港卡</strong>：我个人最推荐的&quot;性价比方案&quot;。港澳通行证办起来跟护照差不多门槛，几百块、半个月。拿到之后你可以去香港开银行账户（中银、汇丰、众安、ZA Bank 等），拿到一张可以全球收款的港卡。这套组合下来，你就有了一个&quot;准海外身份&quot;——我自己 Stripe、Apple Developer、AdSense 这些账户全是用港卡身份注册的。</p>
+<p><strong>海外公司主体</strong>：如果你做的是中重度业务（独立站月流水 5 位数美金以上、SaaS 准备拿 Stripe Atlas），那就直接注册：</p>
+<ul>
+<li><strong>香港公司</strong>：距离近、语言通、税制简单（利得税 16.5%），银行开户相对容易。注册成本 1-2 万人民币，每年维护 5000 左右。适合面向亚太市场的业务。</li>
+<li><strong>新加坡公司</strong>：国际认可度高，适合 SaaS 或金融科技。税率 17%，但有税收优惠政策。注册和维护成本比香港高。</li>
+<li><strong>美国公司（Delaware LLC/C-Corp）</strong>：要融资或者进入美国市场，这是标配。Delaware 法律体系成熟、投资人认可度高。可以通过 Stripe Atlas、<a href="http://Firstbase.io">Firstbase.io</a> 等服务在线注册，500-1000 美元搞定，能拿到 EIN、注册地址、银行账户（Mercury / Brex）。</li>
+<li><strong>开曼 / BVI</strong>：主要用于搭建 VIE 架构或税务筹划，普通创业者用不到。</li>
+</ul>
+<p><strong>选择哪个主体取决于业务类型、目标市场、融资计划</strong>。建议早期就用护照 + 港卡跑起来，等到流水到一定规模再认真研究公司注册。</p>
+<hr>
+<h2>四、通讯层：手机号本身就是身份</h2>
+<p>很多人对手机号的理解还停留在&quot;我有一个就够了&quot;。</p>
+<p>做出海之后你会发现，<strong>手机号本身就是一种身份</strong>。不同号段决定了你能注册什么服务、能进入什么平台、能拿到什么权限。</p>
+<p>我现在身上常年挂着 4 张卡，分工明确：</p>
+<p><strong>大陆主卡</strong>：日常生活用。但<strong>绝对不要拿这张卡注册任何海外服务</strong>——一旦平台识别到 +86 号码，账户从一开始就被打上&quot;中国大陆用户&quot;标签，后续做什么都束手束脚。</p>
+<p><strong>港卡</strong>：我的&quot;轻量级海外身份卡&quot;。中国移动香港、CSL、3HK、SmarTone 都可以，月费几十块。能去香港最好办本地实体卡，是真正的香港本地号，注册 WhatsApp、Telegram、Google、Apple ID 直接以&quot;香港地区&quot;识别。CMHK 现在支持远程开 eSIM，不用本人到香港。</p>
+<p><strong>美国号</strong>：做美区业务必备。轻量方案是 Google Voice / TextNow / Hushed 这类虚拟号 App（能用，但部分高安全等级平台会拒掉虚拟号）；中等方案是 <strong>Ultra Mobile / Mint Mobile 的 eSIM</strong>，月费 10 美元起，是真正的美国实体运营商号码；重度方案是 T-Mobile / AT&amp;T 本地 SIM，需要去美国办或代办。Google Fi 也是一个优雅选项，前提是你有美国银行卡。</p>
+<p><strong>全球备用 eSIM</strong>：常备一张 <strong>Airalo / Holafly</strong> 应付临时出差、临时注册某国专属服务。几美元买一张 10 天流量包，注册个号也行。</p>
+<h3>手机号矩阵的核心心法</h3>
+<p>记一句话：<strong>号码不是越多越好，是越&quot;干净&quot;越好</strong>。</p>
+<p>什么叫&quot;干净&quot;？一个号码只用来注册一类业务、不要乱交叉登录、不要在多个高风险场景反复用。</p>
+<p>我自己的分配：</p>
+<ul>
+<li>大陆主卡 → 国内一切</li>
+<li>港卡 → Stripe、Wise、PayPal、Google、Apple ID</li>
+<li>美国号 → TikTok US、独立站收件、AdSense</li>
+<li>备用 eSIM → 临时用，用完就丢</li>
+</ul>
+<p>这套矩阵跑了三年多，没有一个账户被关过。</p>
+<hr>
+<h2>五、支付层：钱怎么进来、怎么出去</h2>
+<p>做出海的本质就是一句话——<strong>美金怎么收进来，美金怎么花出去</strong>。</p>
+<p>国内银行卡在跨境场景里基本是废的：付美元订阅会被拒、收美元会强制结汇成人民币、广告费充值经常被风控。你必须搭一套独立的&quot;美元收付体系&quot;。</p>
+<h3>5.1 收款端：Stripe + Wise + PayPal 三件套</h3>
+<ul>
+<li><strong>Stripe</strong>：信用卡收款的事实标准，独立站、SaaS、订阅业务都用它。需要海外身份注册（港卡 / 美国公司）。手续费 2.9% + $0.30 / 笔。文档完善、接入简单，但对中国大陆主体支持有限。</li>
+<li><strong>Wise（原 TransferWise）</strong>：跨境收款 + 跨币种转账。可以拿到美国、英国、欧元区的本地账户号，让海外客户像本地转账一样付你钱。汇率接近实时中间价，手续费透明，比传统银行电汇便宜得多。我一般用 Wise 做跨境资金中转。</li>
+<li><strong>PayPal</strong>：海外消费者用得最多的钱包，做 2C 必须接。手续费比 Stripe 高，但覆盖面更广，尤其在欧美 C 端用户中普及率很高。<strong>强烈建议同时接入 Stripe 和 PayPal</strong>。</li>
+</ul>
+<h3>5.2 付款端：U 卡 + 港卡 + 虚拟卡</h3>
+<p>这块是大坑，我多展开讲讲。</p>
+<p>做出海每个月要付一堆订阅费：服务器、SaaS 工具、AI API、广告费、域名、邮箱…… 这些大部分只收 Visa / Master 信用卡，国内卡很多都付不了。</p>
+<p><strong>港卡 / 美国实体卡</strong>：最稳的方案。汇丰、ZA Bank、Mercury、Brex 这些都能搞到 Visa / Master 实体卡，几乎付任何海外服务都没问题。但门槛高，要本人去办或者注册公司。</p>
+<p><strong>U 卡（USDT 充值的虚拟卡）</strong>：近两年比较火的方案。用 USDT 充值进卡，可以付绝大部分海外订阅。市面上常见的有：</p>
+<ul>
+<li><strong>Dupay</strong>：老牌虚拟卡，支持 USDT 充值，开卡快，适合小额高频</li>
+<li><strong>NobePay</strong>：单卡额度更高，适合订阅 AWS、Google Cloud 这种大额服务</li>
+<li><strong>OneKey Card</strong>：如果你本身就在用加密货币钱包，可以直接用 USDT 消费</li>
+</ul>
+<p>优点是开卡快、不需要海外身份；缺点是部分卡商不稳定（跑路风险、突然关卡）。<strong>用 U 卡的核心心法是：分散持卡，不要把鸡蛋放在一个篮子里。</strong> 我自己同时持有 2-3 家不同卡商的卡，万一一家出事还能继续用。</p>
+<p><strong>WildCard / Nobepay 等虚拟信用卡</strong>：专门解决&quot;付订阅&quot;问题的虚拟卡。开卡门槛低、人民币充值，专门用来开 ChatGPT、Claude、Cursor、Midjourney 这种 AI 订阅。但不适合付大额，也不适合长期持有。</p>
+<p>我自己的搭配是：</p>
+<ul>
+<li><strong>大额（广告费、服务器、Stripe 手续费）</strong>：港卡 / Mercury</li>
+<li><strong>中额（SaaS 订阅、域名、邮箱、CDN）</strong>：U 卡</li>
+<li><strong>小额尝鲜（AI 工具、临时订阅）</strong>：虚拟信用卡</li>
+</ul>
+<p><strong>注意事项</strong>：虚拟卡的合规性一直在变化，选服务商时要看清楚是否有正规牌照。另外不同卡对某些平台的支持度不一样，建议准备 2-3 张不同的卡做备份。</p>
+<hr>
+<h2>六、协作层：远程团队的效率保障</h2>
+<p>做出海大概率要组建跨国团队或者和海外合作伙伴协作。工具选择直接决定效率：</p>
+<ul>
+<li><strong>项目管理</strong>：Notion、Asana、Linear 都不错，看团队习惯。我个人更喜欢 Notion，文档和任务管理放在一起，信息密度高。</li>
+<li><strong>即时通讯</strong>：Slack 是海外团队标配，但国内访问有时不稳定。如果团队主要在国内，可以考虑飞书国际版。</li>
+<li><strong>视频会议</strong>：Zoom、Google Meet、腾讯会议国际版都可以。前面提到的沉浸式翻译可以给这些会议工具加实时双语字幕，多语言团队特别实用。</li>
+<li><strong>代码协作</strong>：GitHub 必备。国内访问慢可以用 Gitee 做镜像，或者配置代理加速。</li>
+<li><strong>设计协作</strong>：Figma 已经是行业标准，云端协作不用担心文件同步。</li>
+</ul>
+<hr>
+<h2>七、合规层：不可忽视的数据隐私</h2>
+<p>做出海，数据合规是绕不过去的坎，尤其是面向欧美市场。</p>
+<ul>
+<li><strong>GDPR（欧盟通用数据保护条例）</strong>：用户在欧盟必须遵守。核心要求是用户数据收集需明确授权、用户有权查看和删除自己的数据、数据泄露需 72 小时内通知。违规罚款最高可达全球营收的 4%。</li>
+<li><strong>CCPA（加州消费者隐私法案）</strong>：面向美国加州用户，要求类似 GDPR 但稍微宽松。</li>
+<li><strong>数据存储位置</strong>：某些国家要求用户数据必须存储在本地。选云服务商时注意区域合规性，AWS、GCP、Azure 都有多区域部署方案。</li>
+<li><strong>隐私政策和用户协议</strong>：千万不要从别人那里抄，每个业务的数据处理方式不一样。建议找专业律师起草，成本不高但能避免很多麻烦。</li>
+</ul>
+<p>顺带一提，前面讲的沉浸式翻译在隐私保护上做得不错。它有个<strong>隐私模式（OneAIFW）</strong>，采用&quot;本地识别 → 本地脱敏 → 云端翻译 → 本地还原&quot;的流程——姓名、地址、银行卡号、密码这些敏感信息不会离开你的设备。而且翻译内容零留存、不用于 AI 训练。<strong>这对处理敏感文档（合同、客户邮件、内部财务报表）的团队来说是个加分项</strong>。</p>
+<hr>
+<h2>八、学习层：持续进化的能力</h2>
+<p>出海是个快速变化的领域，你需要持续学习才能不掉队。</p>
+<p><strong>必读 Newsletter</strong>：</p>
+<ul>
+<li><strong>Lenny's Newsletter</strong> —— 产品和增长的深度内容</li>
+<li><strong>The Hustle</strong> —— 商业趋势和案例分析</li>
+<li><strong>Benedict's Newsletter</strong> —— 科技行业宏观分析</li>
+<li><strong>a16z newsletter</strong> —— 投资视角看趋势</li>
+</ul>
+<p><strong>必看 YouTube 频道</strong>：</p>
+<ul>
+<li><strong>Y Combinator</strong> —— 创业方法论和案例</li>
+<li><strong>a16z</strong> —— 投资视角</li>
+<li><strong>Indie Hackers</strong> —— 独立开发者实战经验</li>
+<li><strong>Greg Isenberg</strong> —— SaaS 和 idea 池</li>
+</ul>
+<p><strong>必逛社区</strong>：</p>
+<ul>
+<li><strong>Indie Hackers</strong> —— 独立开发者社区，很多人在这里分享真实收入数据</li>
+<li><strong>Product Hunt</strong> —— 新产品发现和趋势观察</li>
+<li><strong>Hacker News</strong> —— 技术和创业讨论，信息密度极高</li>
+</ul>
+<p>这些资源基本都是英文的，所以前面说的翻译工具就派上用场了。我每天早上花半小时浏览这些信息源，用沉浸式翻译的双语对照模式快速扫读，遇到重要内容再精读。这个习惯让我能持续跟上行业变化，也经常能发现新的机会。</p>
+<hr>
+<h2>九、不同阶段，怎么配置基础设施</h2>
+<p>讲完八层，最后给一个落地建议——不同阶段，你需要配什么。</p>
+<p><strong>阶段一：验证想法（0-3 个月，月流水 0-1000 美金）</strong></p>
+<p>最低配置：稳定的网络服务 + 沉浸式翻译（免费版）+ ChatGPT Plus + 护照 + 一张大陆双币卡 + 一个虚拟信用卡 + Google Voice。</p>
+<p>总成本：<strong>1000 元人民币以内</strong>。这个阶段不需要任何重资产配置，目标是尽快把想法跑通，验证有没有人愿意为这个东西付钱。</p>
+<p><strong>阶段二：早期增长（3-12 个月，月流水 1000-10000 美金）</strong></p>
+<p>升级配置：主备双线路 + 沉浸式翻译 Pro + 港澳通行证 + 港卡（实体最好）+ 港号 + 美国 eSIM + Stripe（港卡身份）+ Wise + PayPal + 1-2 张 U 卡 + 港卡 Visa。</p>
+<p>这个阶段是关键转折点。你已经验证了 PMF，开始有稳定收入，需要把基础设施做&quot;正规化&quot;——能合法收钱、能正常充广告、能拿到平台的信任分。</p>
+<p><strong>阶段三：规模化（12 个月以上，月流水 10000+ 美金）</strong></p>
+<p>重资产配置：固定 IP / 住宅 IP 套餐 + 美国 LLC 或香港公司 + 公司对公账户（Mercury / Brex / 汇丰）+ Stripe Atlas + 美国实体 SIM + 多张实体 Visa / Master 分账户使用 + 正经的会计 / 税务顾问 + GDPR / CCPA 合规审查。</p>
+<p>到这个阶段基础设施就不只是&quot;个人配置&quot;了，要按&quot;一个海外小公司&quot;的标准来搭。每个月固定成本可能在几百到一两千美金，但相对你的流水来说是合理的。</p>
+<hr>
+<h2>写在最后</h2>
+<p>出海不是一件容易的事，但也没有想象中那么难。</p>
+<p>很多时候，真正阻碍你的不是产品能力或者资金，而是这些看起来琐碎的基础设施问题。</p>
+<p>我写这篇文章的目的，就是希望能帮你少走弯路，把精力聚焦在真正重要的事情上——打磨产品、理解用户、建立竞争优势。</p>
+<p>最大的认知误区是——&quot;我先做起来，基础设施缺什么补什么&quot;。<strong>实际上是反过来的：基础设施搭得稳，你的执行才能跑得快</strong>。</p>
+<p>我见过太多人栽在这种地方——独立站爆单了 Stripe 被冻、TikTok 起号了号被封、Apple Developer 卡在身份验证三个月、Wise 因为 +86 号被风控、ChatGPT 因为虚拟卡突然付不上…… 这些事每发生一次，你就要停下来几天甚至几周去处理，机会窗口就是这么错过的。</p>
+<p>所以不管你现在什么阶段，今天就开始一件一件搭：</p>
+<ul>
+<li><strong>先解决稳定的网络，这是地基</strong></li>
+<li>然后装沉浸式翻译，把英文阅读环境跑通</li>
+<li>然后办护照、办港澳通行证</li>
+<li>然后开港卡、配手机号矩阵</li>
+<li>然后搭支付体系</li>
+<li>最后该注册公司再注册公司</li>
+</ul>
+<p>这个顺序是我自己踩过坑之后总结的最优路径。出海是一场马拉松，<strong>基础设施就是你的跑鞋——穿着合脚的鞋才能跑得更远</strong>。</p>
+<hr>
+<p>如果你也在做出海，欢迎来 <a href="https://x.com/AI_Jasonyu">X @AI_Jasonyu</a> 或公众号「鱼总聊AI」聊聊你卡在哪一层，我尽量回。祝你出海顺利。</p>
+
+    </div>
+
+    <footer class="article-foot">
+      <p class="mono">— 本文完 —</p>
+
+      <div class="follow-card">
+        <p class="follow-lede">觉得有用？出海路上的真话与工具，都在这两个地方：</p>
+        <div class="follow-row">
+          <a class="follow-btn" href="https://x.com/AI_Jasonyu" target="_blank" rel="noopener">
+            <b>X · @AI_Jasonyu</b><span>日常更新 · 私信最快</span>
+          </a>
+          <div class="follow-btn">
+            <b>公众号 · 鱼总聊AI</b><span>微信搜索关注 · 长文首发</span>
+          </div>
+        </div>
+      </div>
+
+      <a class="article-back" href="../index.html#writing">← 返回文章列表</a>
+    </footer>
+  </article>
+  <a class="voyage-fab" href="../voyage/" aria-label="688 航线">
+    <span class="vf-ico">⚓</span><span class="vf-text">688 航线</span>
+  </a>
+</body>
+</html>

@@ -1,0 +1,1348 @@
+{
+  "version": "2026-Q2",
+  "updatedAt": "2026-04-01",
+  "routes": [
+    {
+      "id": "wise-usd-cny-direct",
+      "name": "Wise 直接汇款",
+      "nameEn": "Wise Direct Transfer",
+      "sourcePlatformId": "wise",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "USD",
+      "destinationCurrency": "CNY",
+      "sourceRegion": "US",
+      "destinationRegion": "CN",
+      "fees": {
+        "fixedFee": {
+          "amount": 3.35,
+          "currency": "USD"
+        },
+        "percentageFee": 0.0084,
+        "fxMarkup": 0,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "CNY"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 50000,
+        "currency": "USD"
+      },
+      "speed": "1-2 工作日",
+      "speedHours": 36,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在 Wise 创建 USD → CNY 转账",
+          "actionEn": "Create USD to CNY transfer on Wise",
+          "platformId": "wise",
+          "detail": "登录 Wise，选择发送 USD 到 CNY，输入金额和收款人信息",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "首次需验证身份（护照+地址证明）",
+            "ACH付款免费，借记卡/信用卡额外收费"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "通过 ACH 从美国银行付款",
+          "actionEn": "Pay via ACH from US bank",
+          "platformId": null,
+          "detail": "连接你的美国银行账户，通过 ACH 转账（免费）",
+          "affiliateUrl": null,
+          "tips": [
+            "ACH 到账需 1-2 天"
+          ]
+        },
+        {
+          "order": 3,
+          "action": "收款人中国银行卡收到 CNY",
+          "actionEn": "Recipient receives CNY in Chinese bank",
+          "platformId": null,
+          "detail": "Wise 通过代理网络将人民币直接入账收款人银行卡",
+          "affiliateUrl": null,
+          "tips": [
+            "需提供收款人真实姓名和银行卡号",
+            "单笔限额约 $50,000 等值"
+          ]
+        }
+      ],
+      "tags": [
+        "recommended",
+        "low-fee"
+      ],
+      "caveats": [
+        "个人年度购汇限额 5 万美元",
+        "CNY到账可能需代理行中转",
+        "美国区用普通银行转账付款另收约 $6.11 pay-in 费，用 ACH direct debit 可免",
+        "Wise 费率每周浮动，此为 2026-08-14 实测值"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "wise-usd-gbp-direct",
+      "name": "Wise 美元转英镑",
+      "nameEn": "Wise USD to GBP",
+      "sourcePlatformId": "wise",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "USD",
+      "destinationCurrency": "GBP",
+      "sourceRegion": "US",
+      "destinationRegion": "GB",
+      "fees": {
+        "fixedFee": {
+          "amount": 0.89,
+          "currency": "USD"
+        },
+        "percentageFee": 0.0033,
+        "fxMarkup": 0,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "GBP"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "秒级~24小时",
+      "speedHours": 24,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在 Wise 创建 USD → GBP 转账",
+          "actionEn": "Create USD to GBP transfer on Wise",
+          "platformId": "wise",
+          "detail": "使用中间市场汇率，无汇率加价",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "GBP到账通常非常快（秒级）"
+          ]
+        }
+      ],
+      "tags": [
+        "recommended",
+        "fast"
+      ],
+      "caveats": [
+        "美国区用普通银行转账付款另收约 $6.11 pay-in 费，用 ACH direct debit 可免",
+        "Wise 费率每周浮动，此为 2026-08-14 实测值"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "wise-usd-eur-direct",
+      "name": "Wise 美元转欧元",
+      "nameEn": "Wise USD to EUR",
+      "sourcePlatformId": "wise",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "USD",
+      "destinationCurrency": "EUR",
+      "sourceRegion": "US",
+      "destinationRegion": "EU",
+      "fees": {
+        "fixedFee": {
+          "amount": 0.9,
+          "currency": "USD"
+        },
+        "percentageFee": 0.003,
+        "fxMarkup": 0,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "EUR"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "秒级~24小时",
+      "speedHours": 24,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在 Wise 创建 USD → EUR 转账",
+          "actionEn": "Create USD to EUR transfer on Wise",
+          "platformId": "wise",
+          "detail": "使用中间市场汇率，通过 SEPA 快速到账",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": []
+        }
+      ],
+      "tags": [
+        "recommended",
+        "fast"
+      ],
+      "caveats": [
+        "美国区用普通银行转账付款另收约 $6.11 pay-in 费，用 ACH direct debit 可免",
+        "Wise 费率每周浮动，此为 2026-08-14 实测值"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "wise-hkd-usd-direct",
+      "name": "Wise 港币转美元",
+      "nameEn": "Wise HKD to USD",
+      "sourcePlatformId": "wise",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "HKD",
+      "destinationCurrency": "USD",
+      "sourceRegion": "HK",
+      "destinationRegion": "US",
+      "fees": {
+        "fixedFee": {
+          "amount": 11.9,
+          "currency": "HKD"
+        },
+        "percentageFee": 0.0043,
+        "fxMarkup": 0,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 5000000,
+        "currency": "HKD"
+      },
+      "speed": "秒级~24小时",
+      "speedHours": 24,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在 Wise 创建 HKD → USD 转账",
+          "actionEn": "Create HKD to USD transfer on Wise",
+          "platformId": "wise",
+          "detail": "通过 FPS 入金到 Wise 港币账户（免费即时）",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "通过 FPS 转数快入金最快最便宜"
+          ]
+        }
+      ],
+      "tags": [
+        "recommended"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "wise-gbp-eur-direct",
+      "name": "Wise 英镑转欧元",
+      "nameEn": "Wise GBP to EUR",
+      "sourcePlatformId": "wise",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "GBP",
+      "destinationCurrency": "EUR",
+      "sourceRegion": "GB",
+      "destinationRegion": "EU",
+      "fees": {
+        "fixedFee": {
+          "amount": 0.52,
+          "currency": "GBP"
+        },
+        "percentageFee": 0.0033,
+        "fxMarkup": 0,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "GBP"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "EUR"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "GBP"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "GBP"
+      },
+      "speed": "秒级",
+      "speedHours": 1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在 Wise 创建 GBP → EUR 转账",
+          "actionEn": "Create GBP to EUR transfer on Wise",
+          "platformId": "wise",
+          "detail": "GBP到EUR是Wise费率最低的通道之一",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "这是Wise费率最低的币种对之一，仅约0.39%"
+          ]
+        }
+      ],
+      "tags": [
+        "recommended",
+        "cheapest"
+      ],
+      "caveats": [],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "paypal-usd-cny-withdraw",
+      "name": "PayPal 提现到中国",
+      "nameEn": "PayPal Withdrawal to China",
+      "sourcePlatformId": "paypal",
+      "destinationPlatformId": "cn_bank",
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "USD",
+      "destinationCurrency": "CNY",
+      "sourceRegion": "US",
+      "destinationRegion": "CN",
+      "fees": {
+        "fixedFee": {
+          "amount": 35,
+          "currency": "USD"
+        },
+        "percentageFee": 0,
+        "fxMarkup": 0.035,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "CNY"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "platform-rate",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 50000,
+        "currency": "USD"
+      },
+      "speed": "3-5 工作日",
+      "speedHours": 96,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在 PayPal 发起提现",
+          "actionEn": "Initiate withdrawal on PayPal",
+          "platformId": "paypal",
+          "detail": "选择提现到银行账户，PayPal会自动换汇",
+          "affiliateUrl": null,
+          "tips": [
+            "PayPal汇率加价约3-4%，是最大的隐性成本",
+            "建议先转到Wise再换汇"
+          ]
+        }
+      ],
+      "tags": [
+        "expensive",
+        "slow"
+      ],
+      "caveats": [
+        "汇率加价3-4%是主要成本",
+        "总成本约3.5-4.5%",
+        "电汇提现至大陆银行 $35/笔；若经香港银行账户提现 ≥HK$1,000 免手续费（另有 2.5% 转换费）",
+        "换汇加点实际在 2.5%-4% 区间浮动"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "mercury-usd-usd-sha",
+      "name": "Mercury 美元电汇 (SHA)",
+      "nameEn": "Mercury USD Wire (SHA)",
+      "sourcePlatformId": "mercury",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "USD",
+      "destinationCurrency": "USD",
+      "sourceRegion": "US",
+      "destinationRegion": "GLOBAL",
+      "fees": {
+        "fixedFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "percentageFee": 0,
+        "fxMarkup": 0,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "intermediaryFee": {
+          "amount": 25,
+          "currency": "USD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "USD"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 72,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在 Mercury 发起国际电汇 (SHA模式)",
+          "actionEn": "Initiate international wire on Mercury (SHA)",
+          "platformId": "mercury",
+          "detail": "Mercury端免费，但中间行可能扣$15-50",
+          "affiliateUrl": "https://mercury.com/r/transfersmart",
+          "tips": [
+            "SHA模式：Mercury免费，但收款方可能被扣中间行费",
+            "适合大额美元转账"
+          ]
+        }
+      ],
+      "tags": [
+        "free-send",
+        "usd-only"
+      ],
+      "caveats": [
+        "仅限美国注册公司",
+        "中间行可能扣费$15-50",
+        "收款方收到金额可能少于发送金额"
+      ],
+      "lastVerified": "2026-03-15"
+    },
+    {
+      "id": "mercury-usd-usd-our",
+      "name": "Mercury 美元电汇 (OUR)",
+      "nameEn": "Mercury USD Wire (OUR)",
+      "sourcePlatformId": "mercury",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "USD",
+      "destinationCurrency": "USD",
+      "sourceRegion": "US",
+      "destinationRegion": "GLOBAL",
+      "fees": {
+        "fixedFee": {
+          "amount": 15,
+          "currency": "USD"
+        },
+        "percentageFee": 0,
+        "fxMarkup": 0,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "USD"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 72,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在 Mercury 发起国际电汇 (OUR模式)",
+          "actionEn": "Initiate international wire on Mercury (OUR)",
+          "platformId": "mercury",
+          "detail": "发送方承担所有费用，保证收款方收到全额",
+          "affiliateUrl": "https://mercury.com/r/transfersmart",
+          "tips": [
+            "OUR模式确保收款方收到全额",
+            "适合发工资或需要精确金额的场景"
+          ]
+        }
+      ],
+      "tags": [
+        "recommended",
+        "full-amount"
+      ],
+      "caveats": [
+        "仅限美国注册公司"
+      ],
+      "lastVerified": "2026-03-15"
+    },
+    {
+      "id": "mercury-usd-foreign-wire",
+      "name": "Mercury 外币国际电汇",
+      "nameEn": "Mercury Foreign Currency Wire",
+      "sourcePlatformId": "mercury",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "USD",
+      "destinationCurrency": "GBP",
+      "sourceRegion": "US",
+      "destinationRegion": "GB",
+      "fees": {
+        "fixedFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "percentageFee": 0.01,
+        "fxMarkup": 0,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "GBP"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "platform-rate",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "USD"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 72,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在 Mercury 发起外币电汇",
+          "actionEn": "Initiate foreign currency wire on Mercury",
+          "platformId": "mercury",
+          "detail": "Mercury收取1%换汇费，支持30+外币",
+          "affiliateUrl": "https://mercury.com/r/transfersmart",
+          "tips": [
+            "换汇费1%包含在费用中"
+          ]
+        }
+      ],
+      "tags": [],
+      "caveats": [
+        "仅限美国注册公司",
+        "换汇费1%高于Wise"
+      ],
+      "lastVerified": "2026-03-15"
+    },
+    {
+      "id": "hsbc-global-transfer",
+      "name": "HSBC Global Transfer (Premier)",
+      "nameEn": "HSBC Global Transfer (Premier)",
+      "sourcePlatformId": "hsbc_hk",
+      "destinationPlatformId": "hsbc_hk",
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "HKD",
+      "destinationCurrency": "GBP",
+      "sourceRegion": "HK",
+      "destinationRegion": "GB",
+      "fees": {
+        "fixedFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "percentageFee": 0,
+        "fxMarkup": 0.015,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "GBP"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "bank-rate",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "HKD"
+      },
+      "speed": "即时",
+      "speedHours": 1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "登录 HSBC HK 网银，使用 Global Transfer",
+          "actionEn": "Login HSBC HK, use Global Transfer",
+          "platformId": "hsbc_hk",
+          "detail": "选择「转账及缴费」→「Global Transfer」→选择目标HSBC账户",
+          "affiliateUrl": null,
+          "tips": [
+            "仅限 Premier/One 客户",
+            "需要在目标国家也有HSBC账户",
+            "免手续费但汇率含银行加价"
+          ]
+        }
+      ],
+      "tags": [
+        "instant",
+        "no-fee"
+      ],
+      "caveats": [
+        "仅限Premier/One客户",
+        "汇率加价约1-2%",
+        "需在两地都有HSBC账户"
+      ],
+      "lastVerified": "2026-03-20"
+    },
+    {
+      "id": "hsbc-hk-swift-wire",
+      "name": "HSBC HK SWIFT 电汇 (网银)",
+      "nameEn": "HSBC HK SWIFT Wire (Online)",
+      "sourcePlatformId": "hsbc_hk",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "HKD",
+      "destinationCurrency": "GBP",
+      "sourceRegion": "HK",
+      "destinationRegion": "GB",
+      "fees": {
+        "fixedFee": {
+          "amount": 70,
+          "currency": "HKD"
+        },
+        "percentageFee": 0,
+        "fxMarkup": 0.015,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "GBP"
+        },
+        "intermediaryFee": {
+          "amount": 100,
+          "currency": "HKD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "bank-rate",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "HKD"
+      },
+      "speed": "1-5 工作日",
+      "speedHours": 96,
+      "steps": [
+        {
+          "order": 1,
+          "action": "登录 HSBC HK 网银，发起海外电汇",
+          "actionEn": "Login HSBC HK, initiate overseas wire",
+          "platformId": "hsbc_hk",
+          "detail": "选择「转账及缴费」→「海外转账」→输入收款人SWIFT信息",
+          "affiliateUrl": null,
+          "tips": [
+            "网银/App手续费HKD70",
+            "海外电报费HKD100",
+            "非HSBC收款行可能有中间行费"
+          ]
+        }
+      ],
+      "tags": [
+        "traditional",
+        "expensive"
+      ],
+      "caveats": [
+        "HKD70本地手续费 + HKD100海外电报费",
+        "汇率含银行加价1-2%",
+        "中间行可能额外扣费",
+        "网银 HK$70（Premier 免）；HK$100 为可选海外费用包干（OUR），不选则收款侧可能被扣中转费"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "bochk-same-name-free",
+      "name": "中银香港 同名账户免费汇款",
+      "nameEn": "BOCHK Same-Name Free Transfer",
+      "sourcePlatformId": "bochk",
+      "destinationPlatformId": "cn_bank",
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "HKD",
+      "destinationCurrency": "CNY",
+      "sourceRegion": "HK",
+      "destinationRegion": "CN",
+      "fees": {
+        "fixedFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "percentageFee": 0,
+        "fxMarkup": 0.003,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "CNY"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "bank-rate",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 500000,
+        "currency": "HKD"
+      },
+      "speed": "当天~1工作日",
+      "speedHours": 24,
+      "steps": [
+        {
+          "order": 1,
+          "action": "登录中银香港网银，选择同名汇款",
+          "actionEn": "Login BOCHK, select same-name transfer",
+          "platformId": "bochk",
+          "detail": "选择「汇款」→「中银系统内同名账户」→输入内地中国银行账号",
+          "affiliateUrl": null,
+          "tips": [
+            "必须是同一人名下的中银香港和中国银行账户",
+            "网银操作免手续费"
+          ]
+        }
+      ],
+      "tags": [
+        "free",
+        "china-hk"
+      ],
+      "caveats": [
+        "仅限同名中银系统内账户",
+        "汇率含银行加价约1-2%"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "bochk-swift-wire",
+      "name": "中银香港 SWIFT 电汇",
+      "nameEn": "BOCHK SWIFT Wire",
+      "sourcePlatformId": "bochk",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "HKD",
+      "destinationCurrency": "GBP",
+      "sourceRegion": "HK",
+      "destinationRegion": "GB",
+      "fees": {
+        "fixedFee": {
+          "amount": 65,
+          "currency": "HKD"
+        },
+        "percentageFee": 0,
+        "fxMarkup": 0.015,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "GBP"
+        },
+        "intermediaryFee": {
+          "amount": 160,
+          "currency": "HKD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "bank-rate",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "HKD"
+      },
+      "speed": "1-3 工作日",
+      "speedHours": 72,
+      "steps": [
+        {
+          "order": 1,
+          "action": "登录中银香港网银，发起海外电汇",
+          "actionEn": "Login BOCHK, initiate overseas wire",
+          "platformId": "bochk",
+          "detail": "网银电汇手续费 HKD65/笔",
+          "affiliateUrl": null,
+          "tips": [
+            "代理行费用另计",
+            "选OUR模式更贵但保证对方全额收到"
+          ]
+        }
+      ],
+      "tags": [
+        "traditional"
+      ],
+      "caveats": [
+        "HKD65手续费 + 代理行费",
+        "汇率含银行加价1-2%"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "za-bank-wise-remit",
+      "name": "众安银行 ZA Remit (Wise通道)",
+      "nameEn": "ZA Bank Remit via Wise",
+      "sourcePlatformId": "za_bank",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [
+        "wise"
+      ],
+      "sourceCurrency": "HKD",
+      "destinationCurrency": "GBP",
+      "sourceRegion": "HK",
+      "destinationRegion": "GB",
+      "fees": {
+        "fixedFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "percentageFee": 0.0068,
+        "fxMarkup": 0,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "GBP"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 100,
+        "maxAmount": 1000000,
+        "currency": "HKD"
+      },
+      "speed": "秒级~2工作日",
+      "speedHours": 24,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在众安银行 App 发起 ZA Remit",
+          "actionEn": "Initiate ZA Remit in ZA Bank App",
+          "platformId": "za_bank",
+          "detail": "选择「汇款」→ ZA Remit → 选择目标币种和收款人",
+          "affiliateUrl": "https://bank.za.group/refer/transfersmart",
+          "tips": [
+            "使用Wise通道，享受接近中间市场的汇率",
+            "ZA Bank额外收0.25%平台费",
+            "仅支持HKD出金"
+          ]
+        }
+      ],
+      "tags": [
+        "recommended",
+        "wise-rate"
+      ],
+      "caveats": [
+        "仅支持HKD出金",
+        "Wise费率+0.25%平台费"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "za-bank-payment-connect-cny",
+      "name": "众安银行 跨境支付通 (HKD→CNY)",
+      "nameEn": "ZA Bank Payment Connect to China",
+      "sourcePlatformId": "za_bank",
+      "destinationPlatformId": "cn_bank",
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "HKD",
+      "destinationCurrency": "CNY",
+      "sourceRegion": "HK",
+      "destinationRegion": "CN",
+      "fees": {
+        "fixedFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "percentageFee": 0,
+        "fxMarkup": 0.001,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "CNY"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 100,
+        "maxAmount": 100000,
+        "currency": "HKD"
+      },
+      "speed": "实时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在众安银行 App 使用跨境支付通",
+          "actionEn": "Use Payment Connect in ZA Bank App",
+          "platformId": "za_bank",
+          "detail": "选择「跨境支付通」→ 输入内地收款人信息 → 实时到账",
+          "affiliateUrl": "https://bank.za.group/refer/transfersmart",
+          "tips": [
+            "实时到账，费用极低",
+            "类似FPS跨境版",
+            "仅支持到内地部分银行"
+          ]
+        }
+      ],
+      "tags": [
+        "recommended",
+        "cheapest",
+        "instant"
+      ],
+      "caveats": [
+        "仅支持HKD→CNY",
+        "仅支持到内地部分银行",
+        "每日限额 HKD 10,000，年度限额 HKD 200,000"
+      ],
+      "lastVerified": "2026-03-20"
+    },
+    {
+      "id": "airstar-payment-connect-cny",
+      "name": "天星银行 跨境支付通 (HKD→CNY)",
+      "nameEn": "Airstar Payment Connect to China",
+      "sourcePlatformId": "airstar",
+      "destinationPlatformId": "cn_bank",
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "HKD",
+      "destinationCurrency": "CNY",
+      "sourceRegion": "HK",
+      "destinationRegion": "CN",
+      "fees": {
+        "fixedFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "percentageFee": 0,
+        "fxMarkup": 0.001,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "CNY"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 100,
+        "maxAmount": 100000,
+        "currency": "HKD"
+      },
+      "speed": "实时",
+      "speedHours": 0.1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在天星银行 App 使用跨境支付通",
+          "actionEn": "Use Payment Connect in Airstar App",
+          "platformId": "airstar",
+          "detail": "选择「跨境支付通」→ 输入内地收款人信息 → 实时到账",
+          "affiliateUrl": null,
+          "tips": [
+            "与众安银行类似，实时到账",
+            "适合港陆日常汇款"
+          ]
+        }
+      ],
+      "tags": [
+        "recommended",
+        "cheapest",
+        "instant"
+      ],
+      "caveats": [
+        "仅支持HKD→CNY",
+        "每日限额 HKD 10,000，年度限额 HKD 200,000"
+      ],
+      "lastVerified": "2026-03-20"
+    },
+    {
+      "id": "airwallex-usd-eur-local",
+      "name": "Airwallex 本地通道转账",
+      "nameEn": "Airwallex Local Payment Transfer",
+      "sourcePlatformId": "airwallex",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "USD",
+      "destinationCurrency": "EUR",
+      "sourceRegion": "US",
+      "destinationRegion": "EU",
+      "fees": {
+        "fixedFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "percentageFee": 0,
+        "fxMarkup": 0.005,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "EUR"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 100,
+        "maxAmount": 5000000,
+        "currency": "USD"
+      },
+      "speed": "1-2 工作日",
+      "speedHours": 48,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在 Airwallex 平台发起转账",
+          "actionEn": "Initiate transfer on Airwallex",
+          "platformId": "airwallex",
+          "detail": "通过本地支付网络转账，主要币种FX加价0.5%",
+          "affiliateUrl": "https://airwallex.com/refer/transfersmart",
+          "tips": [
+            "需要企业账户",
+            "本地通道免SWIFT费",
+            "非主要币种加价1.0%"
+          ]
+        }
+      ],
+      "tags": [
+        "business"
+      ],
+      "caveats": [
+        "需要企业账户",
+        "SWIFT转账另收$15-30"
+      ],
+      "lastVerified": "2026-03-15"
+    },
+    {
+      "id": "worldfirst-ecommerce-cny",
+      "name": "万里汇 电商提款到支付宝",
+      "nameEn": "WorldFirst E-commerce Withdrawal to Alipay",
+      "sourcePlatformId": "worldfirst",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "USD",
+      "destinationCurrency": "CNY",
+      "sourceRegion": "GLOBAL",
+      "destinationRegion": "CN",
+      "fees": {
+        "fixedFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "percentageFee": 0.003,
+        "fxMarkup": 0,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "CNY"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "platform-rate",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 10000000,
+        "currency": "USD"
+      },
+      "speed": "1分钟到账",
+      "speedHours": 0.02,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在万里汇发起提款",
+          "actionEn": "Initiate withdrawal on WorldFirst",
+          "platformId": "worldfirst",
+          "detail": "从电商平台收款账户提款到支付宝，1分钟到账",
+          "affiliateUrl": "https://worldfirst.com/refer/transfersmart",
+          "tips": [
+            "支持130+电商平台收款",
+            "提款费≤0.3%封顶",
+            "新客180天享0.3%FX优惠"
+          ]
+        }
+      ],
+      "tags": [
+        "recommended",
+        "ecommerce",
+        "instant"
+      ],
+      "caveats": [
+        "主要面向电商卖家",
+        "非电商场景费率不透明"
+      ],
+      "lastVerified": "2026-03-15"
+    },
+    {
+      "id": "cn-bank-swift-wire",
+      "name": "国内银行 SWIFT 电汇",
+      "nameEn": "China Bank SWIFT Wire",
+      "sourcePlatformId": "cn_bank",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "CNY",
+      "destinationCurrency": "USD",
+      "sourceRegion": "CN",
+      "destinationRegion": "US",
+      "fees": {
+        "fixedFee": {
+          "amount": 0,
+          "currency": "CNY"
+        },
+        "percentageFee": 0.001,
+        "fxMarkup": 0.003,
+        "swiftFee": {
+          "amount": 120,
+          "currency": "CNY"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "CNY"
+        },
+        "minimumFee": {
+          "amount": 50,
+          "currency": "CNY"
+        },
+        "maximumFee": {
+          "amount": 260,
+          "currency": "CNY"
+        }
+      },
+      "exchangeRateSource": "bank-rate",
+      "limits": {
+        "minAmount": 100,
+        "maxAmount": 362250,
+        "currency": "CNY"
+      },
+      "speed": "1-5 工作日",
+      "speedHours": 96,
+      "steps": [
+        {
+          "order": 1,
+          "action": "到银行柜台或网银购汇",
+          "actionEn": "Buy foreign currency at bank counter or online",
+          "platformId": "cn_bank",
+          "detail": "用人民币购买美元，注意个人年度限额5万美元",
+          "affiliateUrl": null,
+          "tips": [
+            "个人年度购汇限额5万美元",
+            "网银购汇汇率比柜台略好"
+          ]
+        },
+        {
+          "order": 2,
+          "action": "填写汇款申请",
+          "actionEn": "Fill wire transfer application",
+          "platformId": "cn_bank",
+          "detail": "提供收款人姓名、银行名称、SWIFT代码、账号、汇款用途",
+          "affiliateUrl": null,
+          "tips": [
+            "汇款用途须真实合理",
+            "手续费1‰（最低50最高1000元）+ 电报费约80-150元"
+          ]
+        }
+      ],
+      "tags": [
+        "traditional",
+        "expensive"
+      ],
+      "caveats": [
+        "个人年度购汇限额5万美元",
+        "手续费叠加多",
+        "流程较慢",
+        "手续费 0.1%（min ¥50 / max ¥260，工行等更低）+ 电讯费 ¥80-150；加点按大行现汇卖价实测约 0.3%"
+      ],
+      "lastVerified": "2026-08-14"
+    },
+    {
+      "id": "wise-usd-hkd-direct",
+      "name": "Wise 美元转港币",
+      "nameEn": "Wise USD to HKD",
+      "sourcePlatformId": "wise",
+      "destinationPlatformId": null,
+      "intermediaryPlatformIds": [],
+      "sourceCurrency": "USD",
+      "destinationCurrency": "HKD",
+      "sourceRegion": "US",
+      "destinationRegion": "HK",
+      "fees": {
+        "fixedFee": {
+          "amount": 1.09,
+          "currency": "USD"
+        },
+        "percentageFee": 0.0032,
+        "fxMarkup": 0,
+        "swiftFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "receivingFee": {
+          "amount": 0,
+          "currency": "HKD"
+        },
+        "intermediaryFee": {
+          "amount": 0,
+          "currency": "USD"
+        },
+        "minimumFee": null,
+        "maximumFee": null
+      },
+      "exchangeRateSource": "mid-market",
+      "limits": {
+        "minAmount": 1,
+        "maxAmount": 1000000,
+        "currency": "USD"
+      },
+      "speed": "秒级",
+      "speedHours": 1,
+      "steps": [
+        {
+          "order": 1,
+          "action": "在 Wise 创建 USD → HKD 转账",
+          "actionEn": "Create USD to HKD transfer on Wise",
+          "platformId": "wise",
+          "detail": "中间市场汇率，FPS即时到账香港银行",
+          "affiliateUrl": "https://wise.com/invite/u/transfersmart",
+          "tips": [
+            "HKD到账通常秒级（通过FPS）"
+          ]
+        }
+      ],
+      "tags": [
+        "recommended",
+        "fast"
+      ],
+      "caveats": [
+        "美国区用普通银行转账付款另收约 $6.11 pay-in 费，用 ACH direct debit 可免",
+        "Wise 费率每周浮动，此为 2026-08-14 实测值"
+      ],
+      "lastVerified": "2026-08-14"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 90" width="100%" height="100%">
+  <title>MoonInAI Section Header - 核心配色规范 (COLOR TOKENS)</title>
+  <rect x="2" y="2" width="1196" height="86" rx="6" fill="#F4EFE6" stroke="#1A1714" stroke-width="1.5"/>
+  <rect x="20" y="18" width="6" height="54" rx="2" fill="#F0652E"/>
+  
+  <text x="44" y="55" fill="#F0652E" font-family="'Playfair Display', Georgia, serif" font-size="32" font-weight="900">01</text>
+  <line x1="100" y1="22" x2="100" y2="68" stroke="#C9C0B2" stroke-width="1.5"/>
+
+  <text x="120" y="44" fill="#1A1714" font-family="'Playfair Display', 'Noto Serif SC', serif" font-size="20" font-weight="800" letter-spacing="0.5">核心配色规范 (COLOR TOKENS)</text>
+  <text x="120" y="66" fill="#7D756A" font-family="system-ui, sans-serif" font-size="13" font-weight="500">纸张底色 · 墨水主字 · 软墨正文 · 爱马仕暖橘撞色系统</text>
+
+  <rect x="1080" y="28" width="90" height="34" rx="4" fill="#1A1714"/>
+  <text x="1125" y="50" fill="#F4EFE6" font-family="monospace" font-size="12" font-weight="700" text-anchor="middle">TOKEN</text>
+</svg>
