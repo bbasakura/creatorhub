@@ -269,6 +269,8 @@ class PublishTask(SQLModel, table=True):
     allow_save: bool = True                            # 抖音:是否允许他人保存(下载)
     operation: str = "publish"
     content_fingerprint: str = Field(default="", index=True)
+    source_intent_key: Optional[str] = Field(default=None, index=True, unique=True)
+    source_revision: int = 0
     platform_result_id: str = ""
     youtube_category: str = "22"
     made_for_kids: bool = False
@@ -287,6 +289,15 @@ class PublishTask(SQLModel, table=True):
     source_content_id: Optional[int] = None            # 来源作品记录 id
     created_at: datetime = Field(default_factory=datetime.utcnow)
     done_at: Optional[datetime] = None
+
+
+class D2YImportRequest(SQLModel, table=True):
+    request_id: str = Field(primary_key=True)
+    account_id: int
+    options_json: str
+    videos_json: str
+    start_time: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class CommentRecord(SQLModel, table=True):

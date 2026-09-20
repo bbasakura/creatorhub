@@ -1,0 +1,18 @@
+title = "Repository credential checks"
+[extend]
+useDefault = true
+
+[[rules]]
+id = "project-telegram-token"
+description = "Telegram token literal regardless of assignment name"
+regex = '''\b[0-9]{8,12}:[A-Za-z0-9_-]{30,}'''
+
+[[rules]]
+id = "project-wxpusher-token"
+description = "WxPusher application credential"
+regex = '''AT_[A-Za-z0-9]{20,}'''
+
+[[rules]]
+id = "project-weixin-token"
+description = "Weixin bot credential"
+regex = '''[A-Za-z0-9]+@im\.bot:[A-Za-z0-9]{20,}'''

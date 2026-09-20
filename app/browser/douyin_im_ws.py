@@ -15,7 +15,7 @@ from .douyin_im_pb import (_get_fields, _first, _s, _preview_text,
                            _msg_create_ts, peer_uid_from_conv_id,
                            share_video_card)
 
-_APP_KEY = "e1bd35ec9db7b8d846de66ed140b1ad9"
+_APP_KEY = "e1bd35ec9db7b8d846de66ed140b1ad9"  # gitleaks:allow -- public protocol app identifier, not an account credential
 _FPID = "9"
 _SALT = "f8a69f1719916z"
 _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

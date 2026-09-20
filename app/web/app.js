@@ -6844,12 +6844,12 @@ async function importD2YBatch() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          batch_size: 20,
+          request_id: crypto.randomUUID(),
           visibility: vis,
           interval_seconds: interval
         })
       });
-      toast(res.message || "已成功排期 20 条 Shorts 视频", "ok");
+      toast(res.message || "已完成本批排期", "ok");
       await refreshPublish();
     } catch(e) {
       toast("导入排期失败: " + e.message, "err");

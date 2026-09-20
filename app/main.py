@@ -9589,32 +9589,7 @@ async def youtube_resume(task_id: int, request: Request):
     return {"ok": True, "message": "已安排查询原会话并恢复，不新建视频"}
 
 
-class D2YImportIn(BaseModel):
-    batch_size: int = 20
-    visibility: str = "public"
-    interval_seconds: int = 150
-    account_id: int | None = None
+from .api.d2y import router as d2y_router
 
-
-@app.post("/api/youtube/d2y/import-batch")
-async def import_d2y_batch(body: D2YImportIn = D2YImportIn()):
-    try:
-        import sys
-        d2y_pkg = r"D:\soft\Codex\自媒体自动化"
-        if d2y_pkg not in sys.path:
-            sys.path.insert(0, d2y_pkg)
-        from src.douyin_to_youtube.d2y_to_creatorhub import schedule_d2y_batch_into_creatorhub
-        res = schedule_d2y_batch_into_creatorhub(
-            batch_size=body.batch_size,
-            visibility=body.visibility,
-            interval_seconds=body.interval_seconds,
-            account_id=body.account_id,
-        )
-        if not res.get("ok"):
-            raise HTTPException(400, res.get("message", "导入失败"))
-        return res
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(500, f"D2Y 导入异常: {e}")
+app.include_router(d2y_router)
 

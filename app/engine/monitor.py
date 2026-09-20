@@ -2936,51 +2936,27 @@ class MonitorEngine:
                     elif platform == "youtube" and "watch?v=" in url:
                         t.platform_result_id = url.split("watch?v=", 1)[1]
                     t.done_at = datetime.utcnow()
-                    if t.source_platform == "d2y" and t.source_content_id:
-                        try:
-                            import sys
-                            d2y_pkg = r"D:\soft\Codex\自媒体自动化"
-                            if d2y_pkg not in sys.path:
-                                sys.path.insert(0, d2y_pkg)
-                            from src.douyin_to_youtube.d2y_to_creatorhub import sync_d2y_uploaded_result
-                            sync_d2y_uploaded_result(t.source_content_id, t.platform_result_id, success=True)
-                        except Exception as sync_exc:
-                            print(f"[monitor] d2y sync error: {sync_exc}")
                 elif uncertain:
                     # Submission crossed the click boundary but success evidence
                     # was lost.  Never enqueue it again automatically.
                     t.status = "uncertain"
                     t.scheduled_at = None
                     t.done_at = None
-                    if t.source_platform == "d2y" and t.source_content_id:
-                        try:
-                            import sys
-                            d2y_pkg = r"D:\soft\Codex\自媒体自动化"
-                            if d2y_pkg not in sys.path:
-                                sys.path.insert(0, d2y_pkg)
-                            from src.douyin_to_youtube.d2y_to_creatorhub import sync_d2y_uploaded_result
-                            sync_d2y_uploaded_result(t.source_content_id, "", success=False, error_msg="uncertain")
-                        except Exception:
-                            pass
                 elif failure and failure.controlled and failure.category in {
                         RiskCategory.RISK, RiskCategory.NETWORK, RiskCategory.AUTH}:
                     self._defer_row(t, err, failure.next_allowed_at,
                                     signal=failure.signal)
                 else:
                     t.status = "failed"
-                    if t.source_platform == "d2y" and t.source_content_id:
-                        try:
-                            import sys
-                            d2y_pkg = r"D:\soft\Codex\自媒体自动化"
-                            if d2y_pkg not in sys.path:
-                                sys.path.insert(0, d2y_pkg)
-                            from src.douyin_to_youtube.d2y_to_creatorhub import sync_d2y_uploaded_result
-                            sync_d2y_uploaded_result(t.source_content_id, "", success=False, error_msg=str(err))
-                        except Exception:
-                            pass
                 t.result_url = url or t.result_url
                 t.error = "" if ok else err
+                t.source_revision += 1
                 s.add(t); s.commit()
+        try:
+            from ..services.d2y import reconcile_d2y
+            await asyncio.to_thread(reconcile_d2y)
+        except Exception as sync_exc:
+            log.warning("D2Y projection pending reconciliation: %s", sync_exc)
         if ok and account_id:
             self.risk.record_success(account_id, OperationKind.PUBLISH)
         if ok:
