@@ -927,18 +927,24 @@ function applyPlatformUI() {
   document.querySelectorAll(".ks-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "kuaishou"));
   document.querySelectorAll(".sh-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "shipinhao"));
   document.querySelectorAll(".mp-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "wechat_mp"));
-  // 公众号文章与贴图选项在 wechat_mp 平台显示
+  // 公众号固定四类草稿：文章 / 贴图 / 视频 / 播客。
   const pubType = $("pub-type");
   if (pubType) {
     const artOpt = pubType.querySelector('option[value="article"]');
-    if (artOpt) artOpt.remove();
+    const podcastOpt = pubType.querySelector('option[value="podcast"]');
     const imgOpt = pubType.querySelector('option[value="images"]');
+    const vidOpt = pubType.querySelector('option[value="video"]');
     if (PLATFORM === "wechat_mp") {
-      const vidOpt = pubType.querySelector('option[value="video"]');
-      if (vidOpt) vidOpt.insertAdjacentHTML("afterend", '<option value="article">公众号文章 (图文)</option>');
-      if (imgOpt) imgOpt.textContent = "公众号贴图 (图片消息)";
+      if (artOpt) { artOpt.classList.remove("hidden"); artOpt.textContent = "文章"; }
+      if (podcastOpt) { podcastOpt.classList.remove("hidden"); podcastOpt.textContent = "播客"; }
+      if (imgOpt) imgOpt.textContent = "贴图";
+      if (vidOpt) vidOpt.textContent = "视频";
     } else {
+      if (artOpt) artOpt.classList.add("hidden");
+      if (podcastOpt) podcastOpt.classList.add("hidden");
       if (imgOpt) imgOpt.textContent = "图集 (多图)";
+      if (vidOpt) vidOpt.textContent = "视频";
+      if (pubType.value === "article" || pubType.value === "podcast") pubType.value = "images";
     }
   }
   document.querySelectorAll(".notsh-only").forEach(e => e.classList.toggle("hidden", pfIsChannels(PLATFORM)));
@@ -957,7 +963,7 @@ function applyPlatformUI() {
   const pubSub = $("pub-head-sub");
   if (pubSub) pubSub.textContent = dy ? "上传图集 / 视频到抖音创作平台(实验性)"
     : ks ? "上传图集 / 视频到快手创作平台(实验性)"
-    : sph ? "上传视频到视频号助手(实验性)" : mp ? "公众号文章/图文/视频" : "上传图集 / 视频到小红书(实验性)";
+    : sph ? "上传视频到视频号助手(实验性)" : mp ? "推送文章 / 贴图 / 视频 / 播客到公众号草稿箱" : "上传图集 / 视频到小红书(实验性)";
   if ($("pub-head-lead")) $("pub-head-lead").textContent = (ks || dy || sph) ? "发布作品" : mp ? "发布" : "发布笔记";
   if ($("pub-title")) $("pub-title").placeholder = (ks || dy || sph) ? "给作品起个标题" : "给笔记起个标题";
   const pubHintText = dy
@@ -966,7 +972,7 @@ function applyPlatformUI() {
     ? "发布通过自动化快手创作平台完成。若遇验证码或需要补充封面，请在弹出窗口中手动处理；定时任务由后台引擎按计划执行。"
     : sph
     ? "发布通过自动化视频号助手完成。视频需等待转码，发布前可能要求补充封面、实名或人脸验证，请在弹出窗口中处理。注意：平台页面改版后可能需要重新适配。"
-    : mp ? "公众号文章默认保存为草稿，支持Markdown格式。图文/视频需选择文件。"
+    : mp ? "公众号仅保存草稿。文章需封面，贴图需图片，视频需视频，播客需音频。"
     : "发布通过账号独立的可见 Chrome 页面完成。提交只点击一次；若显示“结果待确认”，请先到小红书核对，系统不会自动重发。";
   const pubHint = $("pub-hint");
   if (pubHint) {
@@ -988,11 +994,11 @@ function applyPlatformUI() {
   } else if (mp) {
     $("pub-type").disabled = false;
     $("pub-when").disabled = false;
-    if ($("pub-type").value !== "images" && $("pub-type").value !== "article") {
+    if (!["images", "article", "video", "podcast"].includes($("pub-type").value)) {
       $("pub-type").value = "article";
     }
     $("pub-head-lead").textContent = "保存公众号草稿";
-    $("pub-head-sub").textContent = "支持图文文章与贴图草稿入库（存入草稿箱）";
+    $("pub-head-sub").textContent = "文章、贴图、视频、播客均保存至草稿箱";
     const hint = $("pub-hint").querySelector("span");
     if (hint) hint.textContent = "保存草稿后系统自动回读草稿箱核验真实状态；群发推送强制微信手机扫码，系统默认保存为草稿。";
     onPubType();
@@ -5864,15 +5870,20 @@ function onPubType() {
   if (!inp) return;
   const isMp = PLATFORM === "wechat_mp";
   if (v === "article") {
-    inp.accept = ""; inp.multiple = true;
-    lbl.textContent = "选择封面/插图（第一张为封面，必选）";
+    inp.accept = "image/*"; inp.multiple = true;
+    lbl.textContent = "选择文章封面/插图（第一张为封面）";
     $("pub-title").maxLength = 64;
-    $("pub-title").previousElementSibling.textContent = "标题(≤ 64 字)";
+    $("pub-title").previousElementSibling.textContent = "文章标题(≤ 64 字)";
+  } else if (v === "podcast") {
+    inp.accept = "audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/x-wav,audio/amr,audio/x-ms-wma,.mp3,.m4a,.wav,.amr,.wma"; inp.multiple = false;
+    lbl.textContent = "选择播客音频文件(单个)";
+    $("pub-title").maxLength = 20;
+    $("pub-title").previousElementSibling.textContent = "播客标题(≤ 20 字)";
   } else if (v === "video") {
     inp.accept = "video/*"; inp.multiple = false;
     lbl.textContent = "选择视频文件(单个)";
-    $("pub-title").maxLength = 64;
-    $("pub-title").previousElementSibling.textContent = "标题";
+    $("pub-title").maxLength = isMp ? 64 : 20;
+    $("pub-title").previousElementSibling.textContent = isMp ? "视频标题(≤ 64 字)" : "标题";
   } else {
     inp.accept = "image/*"; inp.multiple = true;
     lbl.textContent = isMp ? "选择贴图图片(可多选)" : "选择图片(可多选,最多 18 张)";
@@ -5884,7 +5895,7 @@ function onPubType() {
 function pubFilesClear() { pubFilesDT = new DataTransfer(); _pubSync(); }
 function _pubSync() { const inp = $("pub-files"); if (inp) inp.files = pubFilesDT.files; renderPubFiles(); }
 function pubAddFiles(files) {
-  const isVideo = $("pub-type").value === "video";
+  const isVideo = ["video", "podcast"].includes($("pub-type").value);
   for (const f of files) {
     if (isVideo) { pubFilesDT = new DataTransfer(); pubFilesDT.items.add(f); break; }
     if ([...pubFilesDT.files].some(x => x.name === f.name && x.size === f.size)) continue;
@@ -5919,7 +5930,7 @@ async function addPublish() {
   const acc = $("pub-acc").value;
   if (!acc) { toast("请选择" + (PF_NAME[PLATFORM] || "发布") + "账号", "err"); return; }
   const files = $("pub-files").files;
-  if (!files.length && $("pub-type").value !== "article") { toast("请先选择要发布的文件", "err"); return; }
+  if (!files.length) { toast(PLATFORM === "wechat_mp" ? "请先选择该草稿类型需要的封面/图片/视频/音频文件" : "请先选择要发布的文件", "err"); return; }
   const btn = evtBtn();
   $("pub-msg").textContent = "上传中…";
   await withBusy(btn, "上传中", async () => {
@@ -5945,7 +5956,7 @@ async function addPublish() {
       });
       pubFilesClear(); $("pub-title").value = ""; $("pub-desc").value = ""; $("pub-topics").value = ""; $("pub-when").value = ""; if ($("pub-location")) $("pub-location").value = ""; if ($("pub-collection")) $("pub-collection").value = ""; dtSyncAll();
       $("pub-msg").textContent = when ? "已加入定时队列 ✓" : (PLATFORM === "wechat_mp" ? "已加入存草稿队列 ✓" : "已加入上传队列 ✓");
-      toast("已加入发布队列", "ok");
+      toast(PLATFORM === "wechat_mp" ? "已加入公众号草稿队列" : "已加入发布队列", "ok");
     } catch (e) { $("pub-msg").textContent = "失败: " + e.message; toast("发布失败:" + e.message, "err"); }
   });
   refreshPublish();
@@ -5973,8 +5984,8 @@ async function editPublish(id) {
     $("ui-body").innerHTML = `
       <div><label class="field" for="ep-account">发布账号</label>
         <select id="ep-account">${accountOptions}</select></div>
-      <div><label class="field" for="ep-title">标题（≤20 字）</label>
-        <input id="ep-title" maxlength="20" value="${esc(task.title || "")}"></div>
+      <div><label class="field" for="ep-title">标题（≤${task.platform === "wechat_mp" && ["article", "video"].includes(task.media_type) ? 64 : 20} 字）</label>
+        <input id="ep-title" maxlength="${task.platform === "wechat_mp" && ["article", "video"].includes(task.media_type) ? 64 : 20}" value="${esc(task.title || "")}"></div>
       <div><label class="field" for="ep-desc">正文</label>
         <textarea id="ep-desc" rows="4">${esc(task.desc || "")}</textarea></div>
       <div><label class="field" for="ep-topics">话题</label>
@@ -6015,19 +6026,20 @@ async function refreshPublish() {
   if ($("tb-pub")) $("tb-pub").textContent = rows.length;
   $("pub-table").innerHTML = rows.map(t => `<tr>
     <td class="wrap" style="max-width:220px">${esc(t.title || "(无标题)")}</td>
-    <td>${t.media_type === "video" ? "视频" : "图文"}</td>
+    <td>${t.platform === "wechat_mp" ? ({article: "文章", images: "贴图", video: "视频", podcast: "播客"}[t.media_type] || esc(t.media_type)) : t.media_type === "video" ? "视频" : "图文"}</td>
     <td class="num">${t.media_count}</td>
     <td>${t.source_platform ? esc(t.source_platform) + " 转发" : "手动"}</td>
     <td class="mut num">${t.scheduled_at ? new Date(t.scheduled_at).toLocaleString() : "尽快"}</td>
-    <td><span class="pill ${PUB_PILL[t.status] || "pending"}">${t.status === "done" && t.platform === "wechat_mp" ? "已存草稿" : t.status === "done" && t.platform === "youtube" ? "已上传（查看平台状态）" : PUB_ST[t.status] || t.status}</span>${t.error ? ` <span class="warn-ic" title="${esc(t.error)}">${ic("i-info")}</span>` : ""}${t.result_url ? (t.platform === "shipinhao" ? ` <a href="javascript:void(0)" onclick="openPubInBrowser(${t.account_id}, '${esc(t.result_url)}')">查看</a>` : ` <a href="${esc(t.result_url)}" target="_blank">查看</a>`) : ""}</td>
+    <td><span class="pill ${PUB_PILL[t.status] || "pending"}">${t.platform === "wechat_mp" && t.status === "done" ? "已存草稿" : t.platform === "wechat_mp" && t.status === "publishing" ? "存草稿中" : t.status === "done" && t.platform === "youtube" ? "已上传（查看平台状态）" : PUB_ST[t.status] || t.status}</span>${t.error ? ` <span class="warn-ic" title="${esc(t.error)}">${ic("i-info")}</span>` : ""}${t.result_url ? (t.platform === "shipinhao" ? ` <a href="javascript:void(0)" onclick="openPubInBrowser(${t.account_id}, '${esc(t.result_url)}')">查看</a>` : ` <a href="${esc(t.result_url)}" target="_blank">查看</a>`) : ""}</td>
     <td class="acttd">
       ${["pending", "failed", "canceled"].includes(t.status) ? `<button class="ghost sm" onclick="editPublish(${t.id})">编辑</button>` : ""}
-      ${["pending", "failed"].includes(t.status) ? `<button class="ghost sm" onclick="runPublish(${t.id})">立即发布</button>` : ""}
+      ${["pending", "failed"].includes(t.status) ? `<button class="ghost sm" onclick="runPublish(${t.id})">${t.platform === "wechat_mp" ? "立即存草稿" : "立即发布"}</button>` : ""}
       ${t.platform === "youtube" && ["uncertain", "failed"].includes(t.status) ? `<button class="ghost sm" onclick="resumeYoutube(${t.id})">恢复原上传</button>` : ""}
       <button class="ghost sm danger" onclick="delPublish(${t.id})">${ic("i-trash")}删除</button>
     </td></tr>`).join("") || empty(7, "暂无发布任务", "i-send",
       PLATFORM === "kuaishou" ? "上传图集/视频加入队列(发布到快手创作平台)"
       : PLATFORM === "douyin" ? "上传图集/视频加入队列(发布到抖音创作平台)"
+      : PLATFORM === "wechat_mp" ? "选择文章、贴图、视频或播客，存入公众号草稿箱"
       : "上传图集/视频加入队列,或在抖音作品上点「发小红书」转发过来");
 }
 // 视频号作品无公开链接:用该账号已登录浏览器打开图文/视频管理页查看
@@ -6040,9 +6052,10 @@ async function openPubInBrowser(accountId, url) {
 }
 async function runPublish(id) {
   const btn = evtBtn();
-  toast("发布中…会弹出浏览器窗口完成发布", "info", 8000);
+  const isMp = PUBLISH_TASKS.find(x => x.id === id)?.platform === "wechat_mp";
+  toast(isMp ? "存草稿中…会弹出公众号后台窗口" : "发布中…会弹出浏览器窗口完成发布", "info", 8000);
   await withBusy(btn, "发布中", async () => {
-    try { const r = await api("/api/publish/" + id + "/run-now", { method: "POST" }); toast(r.ok ? "发布成功 ✓" : "发布未成功:" + (r.error || ""), r.ok ? "ok" : "err", 6000); }
+    try { const r = await api("/api/publish/" + id + "/run-now", { method: "POST" }); toast(r.ok ? (isMp ? "已存入草稿箱 ✓" : "发布成功 ✓") : (isMp ? "存草稿未成功:" : "发布未成功:") + (r.error || ""), r.ok ? "ok" : "err", 6000); }
     catch (e) { toast("发布失败:" + e.message, "err"); }
   });
   refreshPublish();
@@ -6603,6 +6616,27 @@ function taskQueueSourceLabel(tab) {
   })[tab] || "查看";
 }
 
+const TASK_QUEUE_ACTION_LABEL = {
+  "run-now": "立即执行", cancel: "取消", retry: "重试", resume: "解除阻塞",
+};
+
+function taskQueueActionButtons(item) {
+  const actions = Array.isArray(item.actions) ? item.actions : [];
+  return actions.map(action => `<button type="button" class="ghost sm" onclick="taskQueueAction('${esc(item.queue_type)}',${Number(item.id)},'${esc(action)}')">${esc(TASK_QUEUE_ACTION_LABEL[action] || action)}</button>`).join("");
+}
+
+async function taskQueueAction(queueType, id, action) {
+  if (action === "cancel" && !window.confirm("确认取消这个任务？")) return;
+  try {
+    const result = await api(`/api/task-queue/${encodeURIComponent(queueType)}/${Number(id)}/${encodeURIComponent(action)}`, { method: "POST" });
+    const label = TASK_QUEUE_ACTION_LABEL[action] || action;
+    toast(result.queued === false ? `${label}成功，任务已重新排队` : `${label}成功`, "ok");
+    await refreshTaskQueue();
+  } catch (e) {
+    toast(`任务操作失败：${e.message}`, "err");
+  }
+}
+
 function taskQueueRow(item) {
   const stateMeta = TASK_QUEUE_STATE_META[item.state] || [item.state || "未知", "skipped"];
   const rawStatus = TASK_QUEUE_RAW_STATUS[item.status] || item.status || "未知";
@@ -6613,6 +6647,7 @@ function taskQueueRow(item) {
   const reason = item.blocked_reason || item.error || "—";
   const reasonClass = item.error && !item.blocked_reason ? " has-error" : "";
   const signal = item.blocked_signal ? `<small>信号：${esc(item.blocked_signal)}</small>` : "";
+  const queueActions = taskQueueActionButtons(item);
   return `<tr>
     <td><span class="pill q bare">${esc(item.queue_label)}</span><small class="mut" style="display:block;margin-top:5px">${esc(PF_NAME[item.platform] || item.platform || "—")}</small></td>
     <td><div class="queue-copy"><b title="${esc(item.title)}">${esc(item.title)}</b>${item.detail ? `<small>${esc(item.detail)}</small>` : ""}</div></td>
@@ -6620,7 +6655,7 @@ function taskQueueRow(item) {
     <td><div class="queue-time">${scheduled || "尽快执行"}${created}</div></td>
     <td><span class="pill ${stateMeta[1]}">${esc(stateMeta[0])}</span><small class="mut" style="display:block;margin-top:5px">${esc(rawStatus)}</small></td>
     <td><div class="queue-reason${reasonClass}">${esc(reason)}${signal}${nextAllowed}</div></td>
-    <td class="acttd"><button type="button" class="ghost sm" onclick="openTaskQueueSource('${esc(item.source_tab)}')">${esc(taskQueueSourceLabel(item.source_tab))}</button></td>
+    <td class="acttd">${queueActions}<button type="button" class="ghost sm" onclick="openTaskQueueSource('${esc(item.source_tab)}')">${esc(taskQueueSourceLabel(item.source_tab))}</button></td>
   </tr>`;
 }
 

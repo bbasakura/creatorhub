@@ -105,6 +105,29 @@ from .risk import (OperationKind, RiskCategory, RiskController,
 from .risk_admin import (RiskSettingsError, apply_risk_settings,
                          export_risk_settings, load_persisted_risk_settings,
                          save_risk_settings)
+from .services.task_queue_view import (
+    QUEUE_COMPLETED as _QUEUE_COMPLETED,
+    QUEUE_FAILED as _QUEUE_FAILED,
+    QUEUE_STATES as _QUEUE_STATES,
+    QUEUE_TYPES as _QUEUE_TYPES,
+    queue_iso as _queue_iso,
+    queue_keywords as _queue_keywords,
+    queue_state as _queue_state,
+)
+from .services.task_queue_actions import (
+    QueueActionError as _QueueActionError,
+    available_queue_actions as _available_queue_actions,
+    perform_queue_action as _perform_queue_action,
+)
+from .services.platform_capabilities import (
+    media_capability as _media_capability,
+    media_types_for as _media_types_for,
+    normalize_operation as _normalize_operation,
+    normalize_visibility as _normalize_visibility,
+    supports_schedule as _supports_schedule,
+    title_limit as _title_limit,
+    visibility_allowed as _visibility_allowed,
+)
 from .settings import get_setting, set_setting
 from .windowing import (CHROMIUM_WINDOW_CLASSES, EXPLORER_WINDOW_CLASSES,
                         bring_window_to_front,
@@ -1562,46 +1585,6 @@ async def list_accounts(platform: str | None = None):
 
 
 # ─────────── 统一任务队列（只读看板）───────────
-_QUEUE_TYPES = {
-    "collections", "publishes", "comments", "actions",
-    "monitor_downloads", "collection_downloads",
-}
-_QUEUE_STATES = {"active", "pending", "running", "blocked", "failed", "completed", "all"}
-_QUEUE_RUNNING = {"running", "publishing", "doing", "downloading"}
-_QUEUE_FAILED = {"failed", "partial", "uncertain"}
-_QUEUE_COMPLETED = {"done", "canceled", "skipped"}
-
-
-def _queue_iso(value: datetime | None) -> str | None:
-    return value.isoformat(timespec="seconds") + "Z" if value else None
-
-
-def _queue_state(status: str, *, blocked_reason: str = "",
-                 next_allowed_at: datetime | None = None) -> str:
-    status = str(status or "").lower()
-    if status in _QUEUE_FAILED:
-        return "failed"
-    if status in _QUEUE_COMPLETED:
-        return "completed"
-    if blocked_reason or (next_allowed_at and next_allowed_at > datetime.utcnow()):
-        return "blocked"
-    if status in _QUEUE_RUNNING:
-        return "running"
-    return "pending"
-
-
-def _queue_keywords(value: str) -> str:
-    try:
-        values = json.loads(value or "[]")
-    except (TypeError, ValueError):
-        values = []
-    if isinstance(values, list):
-        text = "、".join(str(item).strip() for item in values if str(item).strip())
-        if text:
-            return text
-    return str(value or "").strip() or "未命名关键词任务"
-
-
 @app.get("/api/task-queue")
 async def list_task_queue(platform: str | None = None, queue_type: str = "",
                           state: str = "active", q: str = "", page: int = 1,
@@ -1660,6 +1643,10 @@ async def list_task_queue(platform: str | None = None, queue_type: str = "",
                 "blocked_signal": str(blocked_signal or "")[:120],
                 "error": str(error or "")[:1000],
                 "source_tab": source_tab,
+                "actions": _available_queue_actions(
+                    queue, status,
+                    blocked_reason=blocked_reason,
+                    next_allowed_at=next_allowed_at),
             })
 
         task_specs = (
@@ -1826,6 +1813,16 @@ async def list_task_queue(platform: str | None = None, queue_type: str = "",
         "history_limit_per_queue": 1000,
         "generated_at": _queue_iso(datetime.utcnow()),
     }
+
+
+@app.post("/api/task-queue/{queue_type}/{row_id}/{action}")
+async def control_task_queue(queue_type: str, row_id: int, action: str):
+    """Operate an actionable queue row through the existing worker/state machine."""
+    try:
+        return await _perform_queue_action(
+            queue_type, row_id, action, engine=engine)
+    except _QueueActionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
 
 
 # ─────────── 风控中心 ───────────
@@ -8297,67 +8294,12 @@ async def publish_upload(files: list[UploadFile] = File(...)):
     return {"files": saved}
 
 
-class PublishIn(BaseModel):
-    account_id: int
-    media_type: str = "images"            # images | video
-    title: str = ""
-    desc: str = ""
-    topics: str = ""
-    location: str = ""                    # 视频号:位置 POI(可选)
-    media_paths: list[str] = []
-    visibility: str = "public"            # 抖音:public | friends | private
-    allow_duplicate: bool = False
-    youtube_category: str = "22"
-    made_for_kids: bool = False
-    thumbnail_path: str = ""
-    collection_name: str = ""
-    operation: str = "publish"            # publish | draft
-    allow_save: bool = True               # 抖音:是否允许他人保存
-    scheduled_at: str | None = None       # ISO 时间(本地),空=尽快发
-
-
-class PublishUpdate(BaseModel):
-    account_id: int | None = None
-    title: str | None = None
-    desc: str | None = None
-    topics: str | None = None
-    location: str | None = None
-    collection_name: str | None = None
-    visibility: str | None = None
-    allow_save: bool | None = None
-    scheduled_at: str | None = None
-
-
-def _publish_dict(t: PublishTask) -> dict:
-    return {
-        "id": t.id, "platform": t.platform, "account_id": t.account_id,
-        "media_type": t.media_type, "title": t.title, "desc": t.desc,
-        "topics": t.topics, "location": t.location,
-        "collection_name": getattr(t, "collection_name", "") or "",
-        "operation": "draft" if t.platform == "wechat_mp" else t.operation,
-        "platform_result_id": t.platform_result_id,
-        "status": t.status, "result_url": t.result_url,
-        "visibility": t.visibility, "allow_save": t.allow_save,
-        "error": t.error, "media_count": len(json.loads(t.media_json or "[]")),
-        "source_platform": t.source_platform, "source_content_id": t.source_content_id,
-        "scheduled_at": (t.scheduled_at.isoformat() + "Z") if t.scheduled_at else None,
-        "created_at": (t.created_at.isoformat() + "Z") if t.created_at else None,
-    }
-
-
-def _parse_when(s: str | None) -> datetime | None:
-    if not s:
-        return None
-    try:
-        if s.endswith("Z"):
-            return datetime.fromisoformat(s[:-1])
-        dt = datetime.fromisoformat(s)
-        if dt.tzinfo is not None:
-            return dt.astimezone(timezone.utc).replace(tzinfo=None)
-        # 本地时间(默认按东八区 UTC+8)转换为 UTC 存储，以便与 monitor.py 中的 utcnow() 对齐
-        return dt - timedelta(hours=8)
-    except Exception:
-        return None
+from .api.publish_contract import (
+    PublishIn,
+    PublishUpdate,
+    parse_when as _parse_when,
+    publish_dict as _publish_dict,
+)
 
 
 @app.get("/api/publish")
@@ -8384,41 +8326,56 @@ async def add_publish(body: PublishIn):
     with get_session() as session:
         account = session.get(DouyinAccount, body.account_id)
         if account and account.platform == "youtube":
-            if body.media_type != "video" or len(body.media_paths) != 1 or not Path(body.media_paths[0]).is_file():
+            if body.media_type not in _media_types_for("youtube") or len(body.media_paths) != 1 or not Path(body.media_paths[0]).is_file():
                 raise HTTPException(400, "YouTube需要一个有效视频文件")
             if not account.credential_ref or account.status != "active":
                 raise HTTPException(400, "请先完成YouTube频道授权")
-            visibility = body.visibility if "visibility" in body.model_fields_set else "private"
-            if visibility not in ("private", "unlisted", "public") or body.scheduled_at:
+            if ("visibility" in body.model_fields_set and
+                    not _visibility_allowed("youtube", body.visibility)):
                 raise HTTPException(400, "可见性无效或使用了尚不支持的定时上传")
-            if not body.title.strip() or len(body.title) > 100 or len(body.desc) > 5000:
+            visibility = _normalize_visibility(
+                "youtube", body.visibility,
+                explicitly_set="visibility" in body.model_fields_set)
+            if body.scheduled_at and not _supports_schedule("youtube"):
+                raise HTTPException(400, "可见性无效或使用了尚不支持的定时上传")
+            if not body.title.strip() or len(body.title) > _title_limit("youtube", body.media_type) or len(body.desc) > 5000:
                 raise HTTPException(400, "YouTube标题须1至100字，描述最多5000字")
             task = PublishTask(content_fingerprint=fingerprint, platform="youtube", account_id=account.id, media_type="video",
                 title=body.title, desc=body.desc, topics=body.topics,
-                visibility=visibility, operation="upload", media_json=json.dumps(body.media_paths),
+                visibility=visibility, operation=_normalize_operation("youtube", body.operation), media_json=json.dumps(body.media_paths),
                 youtube_category=body.youtube_category, made_for_kids=body.made_for_kids,
                 thumbnail_path=body.thumbnail_path)
             session.add(task); session.commit(); session.refresh(task)
             return _publish_dict(task)
         if account and account.platform == "wechat_mp":
-            if body.media_type not in ("article", "images"):
-                raise HTTPException(400, "公众号当前支持图文草稿(article)与贴图草稿(images)")
-            if body.media_type == "article" and (not body.title.strip() or len(body.title) > 64):
-                raise HTTPException(400, "公众号图文标题须1至64字")
-            if body.media_type == "images" and (not body.title.strip() or len(body.title) > 20):
-                raise HTTPException(400, "公众号贴图标题须1至20字")
+            mp_types = _media_types_for("wechat_mp")
+            if body.media_type not in mp_types:
+                raise HTTPException(400, "公众号草稿类型须为 article / images / video / podcast")
+            title_cap = _title_limit("wechat_mp", body.media_type)
+            if not body.title.strip() or len(body.title.strip()) > title_cap:
+                label = {"article": "文章", "images": "贴图", "video": "视频", "podcast": "播客"}[body.media_type]
+                raise HTTPException(400, f"公众号{label}标题须1至{title_cap}字")
+            if body.media_type == "article" and not body.desc.strip():
+                raise HTTPException(400, "公众号文章正文不能为空")
+            if body.media_type == "video" and len(body.media_paths) != 1:
+                raise HTTPException(400, "公众号视频草稿需要且只能上传1个视频文件")
+            if body.media_type == "podcast" and (len(body.media_paths) != 1 or
+                    Path(body.media_paths[0]).suffix.lower() not in _media_capability("wechat_mp", "podcast").extensions):
+                raise HTTPException(400, "公众号播客草稿需要且只能上传1个 mp3/m4a/wav/amr/wma 音频文件")
+            if body.media_type == "images" and not body.media_paths:
+                raise HTTPException(400, "公众号贴图草稿至少需要1张图片")
             if any(not Path(p).is_file() for p in body.media_paths):
-                raise HTTPException(400, "配图不存在，不允许静默遗漏")
+                raise HTTPException(400, "公众号上传文件不存在，不允许静默遗漏")
     paths = [p for p in body.media_paths if Path(p).exists()] if body.media_paths else []
     with get_session() as s:
         acc = s.get(DouyinAccount, body.account_id)
         if not acc or acc.platform not in ("xhs", "kuaishou", "douyin", "shipinhao", "wechat_mp"):
             raise HTTPException(400, "请选择一个已登录的抖音 / 小红书 / 快手 / 视频号账号")
-        is_mp_item = acc.platform == "wechat_mp" and body.media_type in ("article", "images")
+        is_mp_item = acc.platform == "wechat_mp" and body.media_type in _media_types_for("wechat_mp")
         if is_mp_item:
             if not body.title.strip():
-                raise HTTPException(400, "公众号作品需要标题")
-        elif body.media_type not in ("images", "video"):
+                raise HTTPException(400, "公众号草稿需要标题")
+        elif body.media_type not in _media_types_for(acc.platform):
             raise HTTPException(400, "media_type 须为 images 或 video")
         pname = {"kuaishou": "快手", "douyin": "抖音",
                  "shipinhao": "视频号", "wechat_mp": "微信公众号"}.get(acc.platform, "小红书")
@@ -8428,12 +8385,12 @@ async def add_publish(body: PublishIn):
                 raise HTTPException(400, f"该{pname}账号不可发布:请先在账号页完成登录")
         elif not (has_creator_cookies(acc.creator_storage_state) or has_creator_cookies(acc.storage_state)):
             raise HTTPException(400, "该账号小红书创作者登录态已过期，请在「账号」页点击「小红书创作者登录」完成扫码")
-        vis = body.visibility if body.visibility in ("public", "friends", "private") else "public"
+        vis = _normalize_visibility(acc.platform, body.visibility)
         t = PublishTask(
             content_fingerprint=fingerprint,
-            operation=body.operation if body.operation in ("draft", "publish") else ("draft" if acc.platform == "wechat_mp" else "publish"),
+            operation=_normalize_operation(acc.platform, body.operation),
             platform=acc.platform, account_id=body.account_id, media_type=body.media_type,
-            title=body.title.strip()[:(20 if body.media_type == "images" else 64) if acc.platform == "wechat_mp" else 20], desc=body.desc, topics=body.topics,
+            title=body.title.strip()[:_title_limit(acc.platform, body.media_type)], desc=body.desc, topics=body.topics,
             location=(body.location or "").strip()[:60],
             collection_name=(body.collection_name or "").strip()[:50],
             visibility=vis, allow_save=bool(body.allow_save),
@@ -8458,7 +8415,7 @@ async def update_publish(tid: int, body: PublishUpdate):
                 raise HTTPException(400, "发布账号不存在、登录态失效或与任务平台不匹配")
             t.account_id = body.account_id
         if body.title is not None:
-            cap = 100 if t.platform == "youtube" else 64 if t.platform == "wechat_mp" else 20
+            cap = _title_limit(t.platform, t.media_type)
             if len(body.title.strip()) > cap:
                 raise HTTPException(400, f"标题最多{cap}字，不会自动截断")
             t.title = body.title.strip()
@@ -8471,9 +8428,8 @@ async def update_publish(tid: int, body: PublishUpdate):
         if body.collection_name is not None:
             t.collection_name = body.collection_name.strip()[:50]
         if body.visibility is not None:
-            choices = ("public", "unlisted", "private") if t.platform == "youtube" else ("public", "friends", "private")
-            if body.visibility not in choices:
-                raise HTTPException(400, "可见范围须为 public、friends 或 private")
+            if not _visibility_allowed(t.platform, body.visibility):
+                raise HTTPException(400, "可见范围不受该平台支持")
             t.visibility = body.visibility
         if body.allow_save is not None:
             t.allow_save = body.allow_save
