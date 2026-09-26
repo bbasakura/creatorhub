@@ -4,7 +4,7 @@
 1. 账号资料解析 (parse_self_user)；
 2. 文章/草稿/贴图解析 (parse_mp_feed) 与留言解析 (parse_mp_comment, flatten_mp_comments)；
 3. ID 与文章链接解析 (resolve_mp_user_id, resolve_mp_article_id, looks_like_article)；
-4. 综合发布引擎 (publish_mp - 支持图文草稿/图片贴图/视频消息/无推送发表)。
+4. 综合草稿引擎 (publish_mp - 支持文章/贴图/视频/播客四类草稿；不自动发表)。
 """
 from .extract import (parse_mp_feed, parse_mp_comment,
                       flatten_mp_comments, parse_self_user,
@@ -19,4 +19,3 @@ __all__ = [
     "resolve_mp_user_id", "resolve_mp_article_id", "looks_like_article",
     "publish_mp", "send_mp_heartbeat",
 ]
-

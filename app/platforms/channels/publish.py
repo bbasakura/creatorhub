@@ -255,6 +255,7 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
     ctx = await mgr.open_headed(identity)
     page = await ctx.new_page()
     ok, result_url, error = False, "", ""
+    submitted = False
     try:
         await page.set_viewport_size({"width": 1600, "height": 960})
         # 视频号发布入口先打开平台首页或发布页
@@ -389,13 +390,14 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
             if pub is None or not await pub.count():
                 diag = await _collect_diag(page, "no-publish-btn")
                 return False, "", (f"上传/填写已完成但未找到发表按钮。DOM诊断: {diag}")
+            submitted = True
             try:
                 await pub.click(timeout=5000)
             except Exception:
                 try:
                     await pub.evaluate("el => el.click()")
                 except Exception as e:
-                    return False, "", f"点发表失败: {e!r}"
+                    return False, "", f"write_uncertain: 点击发表时异常，请先核对视频号作品列表，禁止自动重试: {e!r}"
 
             # 等成功:
             # 1. 跳管理列表页 (URL含 postlist 或 /post/list) 或离开 /post/create
@@ -425,10 +427,11 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
             result_url = page.url if ok else ""
             if not ok:
                 diag = await _collect_diag(page, "no-success")
-                error = ("已点发表但未确认成功(视频号可能要求封面/实名/过脸验证,请到助手确认)。"
+                error = ("write_uncertain: 已点发表但未确认成功(视频号可能要求封面/实名/过脸验证,请到助手确认；禁止自动重试)。"
                          f"当前页: {page.url}; DOM诊断: {diag}")
     except Exception as e:
-        error = f"发布异常: {e!r}"
+        error = (f"write_uncertain: 已尝试点击发表但页面异常，请先核对视频号作品列表，禁止自动重试: {e!r}"
+                 if submitted else f"发布异常: {e!r}")
     finally:
         try:
             await ctx.close()
@@ -462,4 +465,3 @@ def send_channels_heartbeat(storage_state_json: str) -> bool:
             return resp.status == 200
     except Exception:
         return False
-

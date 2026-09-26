@@ -257,9 +257,9 @@ class CommentWatch(SQLModel, table=True):
 class PublishTask(SQLModel, table=True):
     """多平台发布任务(可定时、可来自跨平台作品转发)。"""
     id: Optional[int] = Field(default=None, primary_key=True)
-    platform: str = Field(default="xhs", index=True)   # xhs | douyin | kuaishou | shipinhao
+    platform: str = Field(default="xhs", index=True)   # xhs | douyin | kuaishou | shipinhao | wechat_mp
     account_id: Optional[int] = None                   # 用哪个已登录账号发布
-    media_type: str = "images"                         # images | video
+    media_type: str = "images"                         # 通用: images|video; 公众号: article|images|video|podcast
     title: str = ""                                    # 标题(各平台上限不同)
     desc: str = ""                                     # 正文
     topics: str = ""                                   # 话题,逗号分隔(不带 #)

@@ -95,7 +95,7 @@ def parse_mp_feed(item: dict, quality: str = "highest") -> Optional[Aweme]:
 
     # 判断类型：appmsg_type 10 = 图片消息/贴图, 15 = 视频消息, 9 = 图文文章
     msg_type_code = _to_int(_first(item, "appmsg_type", "type", default=9))
-    media_type = "images" if msg_type_code == 10 else ("video" if msg_type_code == 15 else "video")
+    media_type = "images" if msg_type_code == 10 else ("video" if msg_type_code == 15 else "article")
 
     aw = Aweme(
         aweme_id=aid,
