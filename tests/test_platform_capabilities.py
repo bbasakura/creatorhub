@@ -27,11 +27,12 @@ class PlatformCapabilitiesTests(unittest.TestCase):
         self.assertEqual(podcast.max_media, 1)
         self.assertIn(".mp3", podcast.extensions)
 
-    def test_youtube_defaults_remain_private_and_unscheduled(self):
+    def test_youtube_defaults_public_and_unscheduled(self):
         self.assertEqual(media_types_for("youtube"), ("video",))
         self.assertEqual(title_limit("youtube", "video"), 100)
-        self.assertEqual(normalize_visibility("youtube", "public", explicitly_set=False), "private")
+        self.assertEqual(normalize_visibility("youtube", "private", explicitly_set=False), "public")
         self.assertEqual(normalize_visibility("youtube", "unlisted", explicitly_set=True), "unlisted")
+        self.assertEqual(normalize_visibility("youtube", "private", explicitly_set=True), "private")
         self.assertFalse(supports_schedule("youtube"))
         self.assertEqual(normalize_operation("youtube", "publish"), "upload")
 

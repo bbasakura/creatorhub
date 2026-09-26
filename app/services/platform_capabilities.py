@@ -86,7 +86,7 @@ PLATFORM_CAPABILITIES: dict[str, PlatformCapability] = {
     "youtube": PlatformCapability(
         media={"video": MediaCapability(title_max=100, min_media=1, max_media=1)},
         visibilities=frozenset({"private", "unlisted", "public"}),
-        default_visibility="private",
+        default_visibility="public",
         operations=frozenset({"upload"}),
         default_operation="upload",
         supports_schedule=False,

@@ -22,10 +22,10 @@ class YoutubeApiTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         db._engine.dispose(); db._engine = self.previous; self.temp.cleanup()
 
-    async def test_defaults_private_and_rejects_duplicate(self):
+    async def test_defaults_public_and_rejects_duplicate(self):
         body = PublishIn(account_id=self.account, media_type='video', title='test',media_paths=[str(self.video)])
         result = await add_publish(body)
-        self.assertEqual(result['visibility'],'private')
+        self.assertEqual(result['visibility'],'public')
         with self.assertRaises(HTTPException) as raised:
             await add_publish(body)
         self.assertEqual(raised.exception.status_code,409)
