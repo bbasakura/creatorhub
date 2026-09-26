@@ -9,7 +9,7 @@
    发布时弹真实窗口,遇滑块验证 / 需补封面 / 定位话题必填可在窗口里手动处理。
 
 调试:失败(含「已点发布但未确认成功」)时会把截图 + 页面 URL/文本快照写到
-   data/debug/dy_publish_*.{png,txt},并在服务端控制台打印 [dy-publish] 日志。
+   data/runtime/diagnostics/douyin/dy_publish_*.{png,txt},并在服务端控制台打印 [dy-publish] 日志。
    抖音创作平台改版频繁,首次真机发布基本都要据此把选择器校准一次。
 """
 from __future__ import annotations
@@ -21,6 +21,7 @@ from typing import List, Tuple
 
 from ...browser.identity import Identity
 from ...browser.manager import BrowserManager
+from ...runtime_paths import runtime_subdir
 
 UPLOAD_URL = "https://creator.douyin.com/creator-micro/content/upload"
 # 图文发布入口(default-tab=3 直达「发布图文」;失败再退回点 tab)
@@ -38,7 +39,7 @@ _DESC_SEL = ['.editor-kit-editor-container [contenteditable="true"]',
 _PUBLISH_BTN = ['button:has-text("发布")', 'button:has-text("发布作品")',
                 'div[class*="content-confirm"] button', '.publish-btn button', '.button-publish']
 
-_DEBUG_DIR = Path("./data/debug")
+_DEBUG_DIR = runtime_subdir("diagnostics", "douyin")
 
 # 发布成功信号(文案任一命中即算成功)
 _SUCCESS_KW = ("发布成功", "作品发布成功", "投稿成功", "发布完成", "已发布", "审核中")
@@ -509,7 +510,7 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
             await page.wait_for_timeout(2000)
         if btn is None:
             await _dump(page, "nobtn")
-            return False, "", "未找到发布按钮(发布页可能改版)。已存诊断截图到 data/debug/。"
+            return False, "", f"未找到发布按钮(发布页可能改版)。已存诊断截图到 {_DEBUG_DIR}。"
         try:
             await btn.scroll_into_view_if_needed(timeout=3000)
         except Exception:
@@ -554,7 +555,7 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
         else:
             png = await _dump(page, "unconfirmed")
             error = ("已点发布但未在页面确认到成功信号。请到抖音创作平台「作品管理」看是否已在列表"
-                     "(视频常直接进审核中);若确实没发出去,把 data/debug 里最新一张 "
+                     f"(视频常直接进审核中);若确实没发出去,把 {_DEBUG_DIR} 里最新一张 "
                      f"dy_publish_unconfirmed_*.png {'('+png+') ' if png else ''}发我校准选择器。")
     except Exception as e:
         try:

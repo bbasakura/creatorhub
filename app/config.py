@@ -37,6 +37,7 @@ class EngineConfig:
     douyin_keyword_gap_seconds: float = 8.0  # 同一任务内相邻抖音关键词的最小停顿
     download_timeout_seconds: int = 120
     media_dir: str = "./data/media"
+    runtime_dir: str = "./data/runtime"  # 临时日志/诊断/运行中间文件统一归仓
     user_agent: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
@@ -215,4 +216,6 @@ def load_config(path: str | None = None) -> Config:
     Path(cfg.engine.media_dir).mkdir(parents=True, exist_ok=True)
     Path(cfg.engine.profiles_dir).mkdir(parents=True, exist_ok=True)
     Path(cfg.db_path).parent.mkdir(parents=True, exist_ok=True)
+    from .runtime_paths import ensure_runtime_layout
+    ensure_runtime_layout(cfg.engine.runtime_dir)
     return cfg

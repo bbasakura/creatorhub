@@ -36,6 +36,7 @@ engine:
   douyin_keyword_gap_seconds: 8    # 同一任务内相邻抖音关键词的停顿秒数
   download_timeout_seconds: 120
   media_dir: ./data/media         # 下载文件落地目录
+  runtime_dir: ./data/runtime     # 临时日志/诊断/运行中间文件统一目录
   user_agent: >-
     Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
     (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36

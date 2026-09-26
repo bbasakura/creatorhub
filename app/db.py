@@ -6,10 +6,31 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import inspect, text
+from sqlalchemy import event, inspect, text
 from sqlmodel import SQLModel, Session, create_engine
 
 _engine = None
+
+
+_SQLITE_BUSY_TIMEOUT_MS = 10000
+
+
+def _configure_sqlite_connection(dbapi_connection, _connection_record):
+    """Apply per-connection safety pragmas to every pooled SQLite connection."""
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute(f"PRAGMA busy_timeout={_SQLITE_BUSY_TIMEOUT_MS}")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        cursor.close()
+
+
+def _configure_sqlite_database(engine):
+    """Apply database-level WAL settings once during initialization."""
+    with engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+        conn.exec_driver_sql("PRAGMA wal_autocheckpoint=1000")
 
 
 def _backup_before_migration(db_path: str):
@@ -76,11 +97,16 @@ def _auto_migrate(engine):
 
 def init_db(db_path: str):
     global _engine
+    # SQLModel only knows tables whose model modules have been imported.
+    # Fresh DB initialization must not depend on main.py import order.
+    from . import models as _models  # noqa:F401
     _backup_before_migration(db_path)
     _engine = create_engine(
         f"sqlite:///{db_path}",
-        connect_args={"check_same_thread": False},
+        connect_args={"check_same_thread": False, "timeout": 10},
     )
+    event.listen(_engine, "connect", _configure_sqlite_connection)
+    _configure_sqlite_database(_engine)
     SQLModel.metadata.create_all(_engine)
     _auto_migrate(_engine)
     _versioned_migrations(_engine)
