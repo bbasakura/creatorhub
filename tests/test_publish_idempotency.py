@@ -5,7 +5,11 @@ from sqlmodel import SQLModel, Session, create_engine
 
 from app.api.publish_contract import PublishIn, publish_fingerprint, publish_intent_key
 from app.models import PublishTask
-from app.services.publish_idempotency import PublishIntentConflict, persist_direct_publish
+from app.services.publish_idempotency import (
+    PublishIntentConflict,
+    persist_direct_publish,
+    refresh_direct_publish_identity,
+)
 
 
 class PublishFingerprintTests(unittest.TestCase):
@@ -69,6 +73,54 @@ class PublishPersistenceTests(unittest.TestCase):
                 persist_direct_publish(session, PublishTask(
                     account_id=1, platform="douyin", content_fingerprint="fp-b",
                     source_intent_key="publish:1:client:x"), explicit_intent=True)
+
+
+    def test_edit_refreshes_auto_intent_key(self):
+        with Session(self.engine) as session:
+            task = PublishTask(account_id=1, platform="douyin",
+                               content_fingerprint="old",
+                               source_intent_key="publish:1:fp:old")
+            session.add(task); session.commit(); session.refresh(task)
+            changed = refresh_direct_publish_identity(session, task, "new")
+            session.add(task); session.commit(); session.refresh(task)
+            self.assertTrue(changed)
+            self.assertEqual(task.content_fingerprint, "new")
+            self.assertEqual(task.source_intent_key, "publish:1:fp:new")
+            self.assertEqual(task.source_revision, 1)
+
+    def test_edit_detects_auto_intent_collision(self):
+        with Session(self.engine) as session:
+            first = PublishTask(account_id=1, platform="douyin",
+                                content_fingerprint="target",
+                                source_intent_key="publish:1:fp:target")
+            second = PublishTask(account_id=1, platform="douyin",
+                                 content_fingerprint="old",
+                                 source_intent_key="publish:1:fp:old")
+            session.add(first); session.add(second); session.commit(); session.refresh(second)
+            with self.assertRaises(PublishIntentConflict):
+                refresh_direct_publish_identity(session, second, "target")
+
+    def test_edit_rejects_explicit_intent_semantic_change(self):
+        with Session(self.engine) as session:
+            task = PublishTask(account_id=1, platform="douyin",
+                               content_fingerprint="old",
+                               source_intent_key="publish:1:client:req")
+            session.add(task); session.commit(); session.refresh(task)
+            with self.assertRaises(PublishIntentConflict):
+                refresh_direct_publish_identity(session, task, "new")
+
+    def test_source_owned_intent_is_preserved(self):
+        with Session(self.engine) as session:
+            task = PublishTask(account_id=1, platform="youtube", source_platform="d2y",
+                               content_fingerprint="source-fp",
+                               source_intent_key="d2y:1:9:upload:initial")
+            session.add(task); session.commit(); session.refresh(task)
+            changed = refresh_direct_publish_identity(session, task, "ignored")
+            session.add(task); session.commit(); session.refresh(task)
+            self.assertFalse(changed)
+            self.assertEqual(task.content_fingerprint, "source-fp")
+            self.assertEqual(task.source_intent_key, "d2y:1:9:upload:initial")
+            self.assertEqual(task.source_revision, 1)
 
 
 if __name__ == "__main__":

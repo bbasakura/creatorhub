@@ -8376,7 +8376,25 @@ from .api.publish_contract import (
 from .services.publish_idempotency import (
     PublishIntentConflict as _PublishIntentConflict,
     persist_direct_publish as _persist_direct_publish,
+    refresh_direct_publish_identity as _refresh_direct_publish_identity,
 )
+
+
+def _youtube_upload_snapshot(task_id: int | None) -> dict[str, Any]:
+    if not task_id:
+        return {}
+    try:
+        from .platforms.youtube.client import load
+        record = load("upload_" + str(task_id))
+    except Exception:
+        return {}
+    return {
+        "has_session": bool(record.get("session")),
+        "video_id": str(record.get("video_id") or ""),
+        "processing": str(record.get("processing") or ""),
+        "actual_visibility": str(record.get("actual_visibility") or ""),
+        "thumbnail_done": bool(record.get("thumbnail_done")),
+    }
 
 
 @app.get("/api/publish")
@@ -8386,7 +8404,13 @@ async def list_publish(platform: str | None = None):
         if platform:
             q = q.where(PublishTask.platform == platform)
         rows = s.exec(q.order_by(PublishTask.id.desc())).all()
-        return [_publish_dict(t) for t in rows]
+        payload = []
+        for task in rows:
+            item = _publish_dict(task)
+            if task.platform == "youtube":
+                item["youtube_upload"] = _youtube_upload_snapshot(task.id)
+            payload.append(item)
+        return payload
 
 
 @app.post("/api/publish")
@@ -8428,6 +8452,12 @@ async def add_publish(body: PublishIn):
                     or len(body.title) > _title_limit("youtube", body.media_type)
                     or len(body.desc) > 5000):
                 raise HTTPException(400, "YouTube标题须1至100字，描述最多5000字")
+            thumbnail_path = (body.thumbnail_path or "").strip()
+            if thumbnail_path:
+                thumbnail = Path(thumbnail_path)
+                if (not thumbnail.is_file()
+                        or thumbnail.suffix.lower() not in {".jpg", ".jpeg", ".png"}):
+                    raise HTTPException(400, "YouTube缩略图须为有效 JPG/PNG 文件")
             task = PublishTask(
                 content_fingerprint=fingerprint,
                 source_intent_key=intent_key,
@@ -8437,7 +8467,7 @@ async def add_publish(body: PublishIn):
                 media_json=json.dumps(body.media_paths),
                 youtube_category=body.youtube_category,
                 made_for_kids=body.made_for_kids,
-                thumbnail_path=body.thumbnail_path,
+                thumbnail_path=thumbnail_path,
             )
             try:
                 task, replayed = _persist_direct_publish(
@@ -8550,7 +8580,47 @@ async def update_publish(tid: int, body: PublishUpdate):
         if t.status in ("failed", "canceled"):
             t.status = "pending"
             t.error = ""
-        s.add(t); s.commit(); s.refresh(t)
+
+        if not (t.source_platform or "").strip() or str(t.source_intent_key or "").startswith("publish:"):
+            try:
+                media_paths = json.loads(t.media_json or "[]")
+            except (TypeError, ValueError):
+                media_paths = []
+            semantic = PublishIn(
+                account_id=t.account_id or 0,
+                media_type=t.media_type,
+                title=t.title,
+                desc=t.desc,
+                topics=t.topics,
+                location=t.location,
+                media_paths=media_paths,
+                visibility=t.visibility,
+                youtube_category=t.youtube_category,
+                made_for_kids=t.made_for_kids,
+                thumbnail_path=t.thumbnail_path,
+                collection_name=t.collection_name,
+                operation=t.operation,
+                allow_save=t.allow_save,
+            )
+            fingerprint = _publish_fingerprint(
+                semantic, platform=t.platform, visibility=t.visibility,
+                operation=t.operation, scheduled_at=t.scheduled_at)
+            try:
+                _refresh_direct_publish_identity(s, t, fingerprint)
+            except _PublishIntentConflict as exc:
+                raise HTTPException(409, str(exc)) from exc
+        elif body.model_fields_set:
+            t.source_revision += 1
+
+        s.add(t)
+        try:
+            s.commit()
+        except Exception as exc:
+            s.rollback()
+            if "source_intent_key" in str(exc).lower() or "unique" in str(exc).lower():
+                raise HTTPException(409, "编辑后的发布意图与现有任务重复") from exc
+            raise
+        s.refresh(t)
         return _publish_dict(t)
 
 

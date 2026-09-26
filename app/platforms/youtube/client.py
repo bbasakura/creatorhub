@@ -217,8 +217,10 @@ async def upload_video(task_id, credential_ref, channel_id, video_path, title, d
                 warning = "视频已上传，但平台处理失败；请在 YouTube Studio 检查"
             if thumbnail_path and not record.get("thumbnail_done"):
                 try:
+                    thumbnail = Path(thumbnail_path)
+                    thumbnail_type = "image/png" if thumbnail.suffix.lower() == ".png" else "image/jpeg"
                     response = await client.post(API + "/thumbnails/set", params={"videoId": video_id},
-                        headers={**headers, "Content-Type": "image/jpeg"}, content=Path(thumbnail_path).read_bytes())
+                        headers={**headers, "Content-Type": thumbnail_type}, content=thumbnail.read_bytes())
                     response.raise_for_status()
                     record["thumbnail_done"] = True
                     store(session_key, record)

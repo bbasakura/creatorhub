@@ -41,6 +41,32 @@ class UploadTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(chunks,[b'video'])
             self.assertEqual(client.load('upload_1')['processing'],'processing')
 
+    async def test_png_thumbnail_uses_png_content_type(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(client, 'ROOT', Path(temp)), patch.dict('os.environ', {'YOUTUBE_CLIENT_ID':'id','YOUTUBE_CLIENT_SECRET':'secret'}):
+            video = Path(temp) / 'video.mp4'; video.write_bytes(b'video')
+            thumbnail = Path(temp) / 'thumb.png'; thumbnail.write_bytes(b'png')
+            client.store('credential', {'channel_id':'channel','refresh_token':'refresh'})
+            thumbnail_types = []
+            def handle(request):
+                path = request.url.path
+                if path == '/token': return httpx.Response(200, json={'access_token':'access'})
+                if path.endswith('/channels'): return httpx.Response(200, json={'items':[{'id':'channel'}]})
+                if path.startswith('/upload/'): return httpx.Response(200, headers={'location':'https://www.googleapis.com/session'})
+                if path == '/session':
+                    if request.headers.get('content-range') == 'bytes */5': return httpx.Response(308)
+                    return httpx.Response(200, json={'id':'video-id'})
+                if path.endswith('/videos'):
+                    return httpx.Response(200, json={'items':[{'snippet':{'channelId':'channel'},'status':{'privacyStatus':'private'},'processingDetails':{'processingStatus':'succeeded'}}]})
+                if path.endswith('/thumbnails/set'):
+                    thumbnail_types.append(request.headers.get('content-type'))
+                    return httpx.Response(200, json={'items':[]})
+                raise AssertionError(str(request.url))
+            factory = httpx.AsyncClient
+            with patch.object(client.httpx, 'AsyncClient', side_effect=lambda **kw: factory(transport=httpx.MockTransport(handle), **kw)):
+                result = await client.upload_video(2,'credential','channel',str(video),'Title','Description',[],thumbnail_path=str(thumbnail))
+            self.assertTrue(result[0])
+            self.assertEqual(thumbnail_types, ['image/png'])
+            self.assertTrue(client.load('upload_2')['thumbnail_done'])
     async def test_invalid_visibility_does_not_upload(self):
         ok, _, error = await client.upload_video(1,'ref','channel','missing','title','',[],visibility='friends')
         self.assertFalse(ok)

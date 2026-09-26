@@ -360,6 +360,11 @@ class WriteGateTests(unittest.TestCase):
 
     def test_xhs_publish_uncertain_is_not_retried_or_recorded_as_done(self):
         account_id = self._account(platform="xhs")
+        with db.get_session() as session:
+            account = session.get(DouyinAccount, account_id)
+            account.creator_storage_state = '{"cookies":[{"name":"customerClientId","value":"fixture","expires":-1}]}'
+            session.add(account)
+            session.commit()
         task_id = self._publish_task(account_id, platform="xhs")
         engine = MonitorEngine(self.cfg, _BrowserStub())
         calls = []
