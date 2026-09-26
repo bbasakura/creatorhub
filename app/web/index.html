@@ -1865,7 +1865,7 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
         <button class="navitem notsh-only notyt-only" data-tab="autocomment" onclick="switchTab('autocomment', true)"><svg><use href="#i-msg"/></svg><span class="nav-label">自动评论</span><span class="nav-badge" id="tb-ac">0</span></button>
         <button class="navitem" data-tab="share-download" onclick="switchTab('share-download', true)"><svg><use href="#i-download"/></svg><span class="nav-label">链接下载</span></button>
         <button class="navitem" data-tab="notifications" onclick="switchTab('notifications', true)"><svg><use href="#i-bell"/></svg><span class="nav-label">通知中心</span></button>
-        <button class="navitem notyt-only" data-tab="risk-control" onclick="switchTab('risk-control', true)"><svg><use href="#i-shield"/></svg><span class="nav-label">风控中心</span><span class="nav-badge" id="tb-risk">0</span></button>
+        <button class="navitem" data-tab="risk-control" onclick="switchTab('risk-control', true)"><svg><use href="#i-shield"/></svg><span class="nav-label">风控中心</span><span class="nav-badge" id="tb-risk">0</span></button>
       </div>
     </details>
   </nav>
@@ -2072,6 +2072,22 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
         <thead><tr><th>账号</th><th>状态</th><th>等级</th><th>原因</th><th>冷却 / 探测</th><th>恢复</th><th>任务</th><th>网络</th><th>操作</th></tr></thead>
         <tbody id="risk-account-table"></tbody>
       </table></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-shield"/></svg></span>
+        <h2>平台硬熔断 <span class="sub">紧急停止当前平台全部写操作，读取与核验仍可继续</span></h2>
+        <span class="right status-text" id="risk-platform-circuit-msg" role="status" aria-live="polite"></span>
+      </div>
+      <div class="risk-toolbar" style="margin-bottom:0">
+        <div class="risk-account" style="min-width:220px"><b id="risk-platform-circuit-name">当前平台</b><small id="risk-platform-circuit-detail">正在读取熔断状态…</small></div>
+        <span id="risk-platform-circuit-status" class="risk-status success">未熔断</span>
+        <span class="spacer"></span>
+        <button class="ghost sm" id="risk-platform-circuit-open" type="button" onclick="openPlatformCircuit()"><svg><use href="#i-shield"/></svg>开启硬熔断</button>
+        <button class="ghost sm" id="risk-platform-circuit-clear" type="button" onclick="clearPlatformCircuit()" style="display:none"><svg><use href="#i-check"/></svg>解除硬熔断</button>
+      </div>
+      <div class="form-note" style="margin-top:12px"><svg aria-hidden="true"><use href="#i-info"/></svg><span>硬熔断优先级高于普通风控开关；包括“立即执行”在内的发布、评论、关注/取关和私信都会被阻止。可设置自动到期，也可人工解除。</span></div>
     </div>
 
     <div class="card">
@@ -2594,10 +2610,11 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
               <button type="button" class="sm" style="background:#ff3333;color:#fff;border-color:transparent;font-weight:600" onclick="importD2YBatch()"><svg><use href="#i-play"/></svg>按每日批量设置排期 Shorts</button>
             </div>
             <div class="row" style="gap:14px;font-size:12px;align-items:center;flex-wrap:wrap">
-              <label>可见性: <select id="yt-visibility" style="padding:2px 8px;font-size:12px"><option value="public">公开 (public)</option><option value="private">私密 (private)</option><option value="unlisted">不公开 (unlisted)</option></select></label>
+              <label>可见性: <select id="yt-visibility" style="padding:2px 8px;font-size:12px"><option value="private" selected>私密 (private，默认)</option><option value="unlisted">不公开 (unlisted)</option><option value="public">公开 (public)</option></select></label>
               <label>间隔: <input id="yt-interval" value="150" type="number" style="width:60px;padding:2px 6px;font-size:12px"> 秒</label>
               <label><input type="checkbox" id="yt-kids"> 面向儿童</label>
               <label>分类: <input id="yt-category" value="22" style="width:40px;padding:2px 6px;font-size:12px"></label>
+              <label>缩略图: <input id="yt-thumbnail" type="file" accept="image/jpeg,image/png" style="max-width:220px;padding:2px 4px;font-size:11px"></label>
               <button type="button" class="ghost sm" onclick="disconnectYoutube()" style="margin-left:auto">解除频道绑定</button>
             </div>
           </div>

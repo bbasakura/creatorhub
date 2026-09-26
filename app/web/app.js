@@ -1928,6 +1928,7 @@ async function refreshAccounts() {
 // ═══════════ 风控中心 ═══════════
 let RISK_ACCOUNTS = [];
 let RISK_CONFIG = null;
+let RISK_PLATFORM_CIRCUITS = [];
 
 function riskDate(value) {
   if (!value) return null;
@@ -1965,20 +1966,101 @@ async function refreshRiskCenter(force = false) {
     const shouldFillConfig = !RISK_CONFIG || force;
     const configPromise = shouldFillConfig ? api("/api/risk-control/config") : Promise.resolve(RISK_CONFIG);
     const platformQuery = "?platform=" + encodeURIComponent(PLATFORM);
-    const [summary, accounts, config] = await Promise.all([
+    const [summary, accounts, config, circuits] = await Promise.all([
       api("/api/risk-control/summary" + platformQuery),
       api("/api/risk-control/accounts" + platformQuery),
       configPromise,
+      api("/api/risk-control/platform-circuits"),
     ]);
     RISK_ACCOUNTS = accounts;
     RISK_CONFIG = config;
+    RISK_PLATFORM_CIRCUITS = Array.isArray(circuits) ? circuits : [];
     renderRiskSummary(summary);
     renderRiskAccounts();
+    renderPlatformCircuit();
     if (shouldFillConfig) fillRiskConfig(config);
     if (force) toast("风控状态已刷新", "ok");
   } catch (e) {
     if (force || CURRENT_TAB === "risk-control") toast("风控中心加载失败：" + e.message, "err");
   }
+}
+
+function renderPlatformCircuit() {
+  const name = $("risk-platform-circuit-name");
+  const detail = $("risk-platform-circuit-detail");
+  const status = $("risk-platform-circuit-status");
+  const openButton = $("risk-platform-circuit-open");
+  const clearButton = $("risk-platform-circuit-clear");
+  if (!name || !detail || !status) return;
+  const row = (RISK_PLATFORM_CIRCUITS || []).find(item => item.platform === PLATFORM);
+  const isOpen = !!row?.is_open;
+  name.textContent = `${riskPlatformLabel(PLATFORM)} · 平台写入总闸`;
+  status.className = `risk-status ${isOpen ? "danger" : "success"}`;
+  status.textContent = isOpen ? "硬熔断已开启" : "未熔断";
+  if (isOpen) {
+    const expiry = row.expires_at ? ` · 自动解除 ${riskTime(row.expires_at)}` : " · 需人工解除";
+    detail.textContent = `${row.reason || "未填写原因"}${expiry}`;
+  } else if (row?.closed_at) {
+    detail.textContent = `最近解除 ${riskTime(row.closed_at)} · 当前允许按普通风控规则执行写操作`;
+  } else {
+    detail.textContent = "当前允许按普通风控规则执行写操作";
+  }
+  if (openButton) openButton.style.display = isOpen ? "none" : "inline-flex";
+  if (clearButton) clearButton.style.display = isOpen ? "inline-flex" : "none";
+}
+
+async function openPlatformCircuit() {
+  const reason = await uiPrompt({
+    title: `开启 ${riskPlatformLabel(PLATFORM)} 平台硬熔断`,
+    hint: "填写触发原因。开启后该平台全部写操作都会被硬阻断，读取和人工核验仍可继续。",
+    placeholder: "例如：连续出现验证码/频控，暂停写入排查", multiline: true, rows: 4,
+  });
+  if (reason === null) return;
+  if (reason.trim().length < 3) { toast("请填写至少 3 个字符的熔断原因", "err"); return; }
+  const durationRaw = await uiPrompt({
+    title: "自动解除时间（分钟）",
+    hint: "填 0 表示不自动解除，只允许人工解除。最多 43200 分钟（30 天）。",
+    placeholder: "0", value: "0",
+  });
+  if (durationRaw === null) return;
+  const minutes = Number(durationRaw || 0);
+  if (!Number.isFinite(minutes) || minutes < 0 || minutes > 43200) { toast("自动解除时间须为 0–43200 分钟", "err"); return; }
+  if (!await uiConfirm({
+    title: "确认开启平台硬熔断",
+    message: `开启后 ${riskPlatformLabel(PLATFORM)} 的发布、评论、关注/取关和私信都会立即停止。`,
+    okText: "确认熔断", danger: true,
+  })) return;
+  try {
+    await api(`/api/risk-control/platform-circuits/${encodeURIComponent(PLATFORM)}/open`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmed: true, reason: reason.trim(), duration_seconds: Math.round(minutes * 60) }),
+    });
+    toast(`${riskPlatformLabel(PLATFORM)} 平台硬熔断已开启`, "ok");
+    await refreshRiskCenter();
+  } catch (e) { toast("开启硬熔断失败：" + e.message, "err"); }
+}
+
+async function clearPlatformCircuit() {
+  const reason = await uiPrompt({
+    title: `解除 ${riskPlatformLabel(PLATFORM)} 平台硬熔断`,
+    hint: "请填写恢复依据。解除后被延后的任务可能重新进入调度。",
+    placeholder: "例如：人工检查账号与平台状态正常，允许恢复写入", multiline: true, rows: 4,
+  });
+  if (reason === null) return;
+  if (reason.trim().length < 3) { toast("请填写至少 3 个字符的解除原因", "err"); return; }
+  if (!await uiConfirm({
+    title: "确认解除平台硬熔断",
+    message: `解除后 ${riskPlatformLabel(PLATFORM)} 的待执行写任务可能继续运行。`,
+    okText: "确认解除", danger: true,
+  })) return;
+  try {
+    const result = await api(`/api/risk-control/platform-circuits/${encodeURIComponent(PLATFORM)}/clear`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmed: true, reason: reason.trim() }),
+    });
+    toast(`平台硬熔断已解除${result.woken_tasks ? `，已唤醒 ${result.woken_tasks} 条任务` : ""}`, "ok");
+    await refreshRiskCenter();
+  } catch (e) { toast("解除硬熔断失败：" + e.message, "err"); }
 }
 
 function renderRiskSummary(summary) {
@@ -2189,7 +2271,10 @@ async function showRiskAudit() {
   try {
     const rows = await api("/api/risk-control/audit?limit=100");
     $("risk-event-subtitle").textContent = `最近 ${rows.length} 条 · 包含规则修改、人工探测和解除操作`;
-    const labels = { policy_updated: "规则修改", manual_probe: "人工探测", account_risk_cleared: "人工解除" };
+    const labels = {
+      policy_updated: "规则修改", manual_probe: "人工探测", account_risk_cleared: "人工解除",
+      platform_circuit_opened: "平台硬熔断", platform_circuit_cleared: "解除平台熔断",
+    };
     $("risk-event-list").innerHTML = rows.map(row => {
       const detail = row.detail || {};
       const changeCount = Object.values(detail.changes || {}).reduce((sum, section) => sum + Object.keys(section || {}).length, 0);
@@ -5944,6 +6029,17 @@ async function addPublish() {
         const up = await ur.json();
         paths = (up.files || []).map(f => f.path);
       }
+      let thumbnailPath = "";
+      const thumbnail = PLATFORM === "youtube" ? $("yt-thumbnail")?.files?.[0] : null;
+      if (thumbnail) {
+        const thumbFd = new FormData();
+        thumbFd.append("files", thumbnail);
+        const thumbResp = await fetch("/api/publish/upload", { method: "POST", body: thumbFd });
+        if (!thumbResp.ok) throw new Error("缩略图上传失败 " + thumbResp.status);
+        const thumbData = await thumbResp.json();
+        thumbnailPath = thumbData.files?.[0]?.path || "";
+        if (!thumbnailPath) throw new Error("缩略图上传未返回文件路径");
+      }
       const when = $("pub-when").value || null;
       await api("/api/publish", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -5952,9 +6048,10 @@ async function addPublish() {
           collection_name: $("pub-collection") ? $("pub-collection").value.trim() : "",
           visibility: PLATFORM === "youtube" ? $("yt-visibility").value : ($("pub-visibility") ? $("pub-visibility").value : "public"),
           youtube_category: $("yt-category").value, made_for_kids: $("yt-kids").checked,
+          thumbnail_path: thumbnailPath,
           allow_save: $("pub-allowsave") ? $("pub-allowsave").value !== "0" : true }),
       });
-      pubFilesClear(); $("pub-title").value = ""; $("pub-desc").value = ""; $("pub-topics").value = ""; $("pub-when").value = ""; if ($("pub-location")) $("pub-location").value = ""; if ($("pub-collection")) $("pub-collection").value = ""; dtSyncAll();
+      pubFilesClear(); $("pub-title").value = ""; $("pub-desc").value = ""; $("pub-topics").value = ""; $("pub-when").value = ""; if ($("pub-location")) $("pub-location").value = ""; if ($("pub-collection")) $("pub-collection").value = ""; if ($("yt-thumbnail")) $("yt-thumbnail").value = ""; dtSyncAll();
       $("pub-msg").textContent = when ? "已加入定时队列 ✓" : (PLATFORM === "wechat_mp" ? "已加入存草稿队列 ✓" : "已加入上传队列 ✓");
       toast(PLATFORM === "wechat_mp" ? "已加入公众号草稿队列" : "已加入发布队列", "ok");
     } catch (e) { $("pub-msg").textContent = "失败: " + e.message; toast("发布失败:" + e.message, "err"); }
@@ -5962,6 +6059,18 @@ async function addPublish() {
   refreshPublish();
 }
 const PUB_ST = { pending: "排队中", publishing: "发布中", uncertain: "结果待确认", done: "已发布", failed: "失败", canceled: "已取消" };
+const YT_PROCESSING = { processing: "平台处理中", succeeded: "处理完成", failed: "处理失败", terminated: "处理终止", unknown: "处理状态未知" };
+function youtubeUploadMeta(task) {
+  if (task.platform !== "youtube") return "";
+  const up = task.youtube_upload || {};
+  const bits = [];
+  if (up.processing) bits.push(YT_PROCESSING[up.processing] || up.processing);
+  if (up.actual_visibility) bits.push(`实际 ${up.actual_visibility}`);
+  if (task.thumbnail_path) bits.push(up.thumbnail_done ? "缩略图已设置" : "缩略图待设置/失败");
+  else bits.push("未设置缩略图");
+  if (up.has_session && !up.video_id) bits.push("存在可恢复上传会话");
+  return bits.length ? `<small class="mut" style="display:block;margin-top:5px">${esc(bits.join(" · "))}</small>` : "";
+}
 const PUB_PILL = { pending: "pending", publishing: "downloading", uncertain: "downloading", done: "done", failed: "failed", canceled: "invalid" };
 async function editPublish(id) {
   const task = PUBLISH_TASKS.find(x => x.id === id); if (!task) return;
@@ -6030,7 +6139,7 @@ async function refreshPublish() {
     <td class="num">${t.media_count}</td>
     <td>${t.source_platform ? esc(t.source_platform) + " 转发" : "手动"}</td>
     <td class="mut num">${t.scheduled_at ? new Date(t.scheduled_at).toLocaleString() : "尽快"}</td>
-    <td><span class="pill ${PUB_PILL[t.status] || "pending"}">${t.platform === "wechat_mp" && t.status === "done" ? "已存草稿" : t.platform === "wechat_mp" && t.status === "publishing" ? "存草稿中" : t.status === "done" && t.platform === "youtube" ? "已上传（查看平台状态）" : PUB_ST[t.status] || t.status}</span>${t.error ? ` <span class="warn-ic" title="${esc(t.error)}">${ic("i-info")}</span>` : ""}${t.result_url ? (t.platform === "shipinhao" ? ` <a href="javascript:void(0)" onclick="openPubInBrowser(${t.account_id}, '${esc(t.result_url)}')">查看</a>` : ` <a href="${esc(t.result_url)}" target="_blank">查看</a>`) : ""}</td>
+    <td><span class="pill ${PUB_PILL[t.status] || "pending"}">${t.platform === "wechat_mp" && t.status === "done" ? "已存草稿" : t.platform === "wechat_mp" && t.status === "publishing" ? "存草稿中" : t.status === "done" && t.platform === "youtube" ? "已上传" : PUB_ST[t.status] || t.status}</span>${t.error ? ` <span class="warn-ic" title="${esc(t.error)}">${ic("i-info")}</span>` : ""}${youtubeUploadMeta(t)}${t.result_url ? (t.platform === "shipinhao" ? ` <a href="javascript:void(0)" onclick="openPubInBrowser(${t.account_id}, '${esc(t.result_url)}')">查看</a>` : ` <a href="${esc(t.result_url)}" target="_blank">查看</a>`) : ""}</td>
     <td class="acttd">
       ${["pending", "failed", "canceled"].includes(t.status) ? `<button class="ghost sm" onclick="editPublish(${t.id})">编辑</button>` : ""}
       ${["pending", "failed"].includes(t.status) ? `<button class="ghost sm" onclick="runPublish(${t.id})">${t.platform === "wechat_mp" ? "立即存草稿" : "立即发布"}</button>` : ""}
@@ -6626,6 +6735,27 @@ function taskQueueActionButtons(item) {
   return actions.map(action => `<button type="button" class="ghost sm" onclick="taskQueueAction('${esc(item.queue_type)}',${Number(item.id)},'${esc(action)}')">${esc(TASK_QUEUE_ACTION_LABEL[action] || action)}</button>`).join("");
 }
 
+async function showTaskQueueEvents(queueType, id) {
+  const modal = $("risk-event-modal");
+  $("risk-event-title").textContent = `任务 #${id} · 时间线`;
+  $("risk-event-subtitle").textContent = "正在加载任务控制与核验事件…";
+  $("risk-event-list").innerHTML = '<div class="hint">正在加载任务时间线…</div>';
+  modal.style.display = "flex"; modalOpened(modal);
+  try {
+    const rows = await api(`/api/task-queue/${encodeURIComponent(queueType)}/${Number(id)}/events?limit=100`);
+    const labels = {
+      "control:run-now": "立即执行", "control:cancel": "取消", "control:retry": "重试", "control:resume": "解除阻塞",
+      "uncertain:auto": "自动核验", "uncertain:confirmed_done": "确认已成功", "uncertain:confirmed_not_done": "确认未成功",
+    };
+    $("risk-event-subtitle").textContent = `最近 ${rows.length} 条 · 记录控制动作与 uncertain 核验结论`;
+    $("risk-event-list").innerHTML = rows.map(row => {
+      const transition = `${row.from_status || "—"} → ${row.to_status || "—"}`;
+      const evidence = row.metadata?.evidence?.source ? ` · 证据 ${row.metadata.evidence.source}` : "";
+      return `<div class="risk-event"><time>${esc(riskTime(row.created_at))}</time><span class="risk-status warn">${esc(labels[row.event_type] || row.event_type)}</span><b>${esc(transition)}</b><div class="risk-event-detail">${esc(row.detail || "无补充说明")}<small>${esc(row.actor || "system")}${esc(evidence)}</small></div></div>`;
+    }).join("") || '<div class="hint">暂无时间线事件；后续控制动作和核验会记录在这里。</div>';
+  } catch (e) { $("risk-event-list").innerHTML = `<div class="hint">加载失败：${esc(e.message)}</div>`; }
+}
+
 async function taskQueueAction(queueType, id, action) {
   if (action === "cancel" && !window.confirm("确认取消这个任务？")) return;
   if (action === "confirm-done" && !window.confirm("仅在你已到平台确认实际成功后继续。确认标记为已成功？")) return;
@@ -6661,7 +6791,7 @@ function taskQueueRow(item) {
     <td><div class="queue-time">${scheduled || "尽快执行"}${created}</div></td>
     <td><span class="pill ${stateMeta[1]}">${esc(stateMeta[0])}</span><small class="mut" style="display:block;margin-top:5px">${esc(rawStatus)}</small></td>
     <td><div class="queue-reason${reasonClass}">${esc(reason)}${signal}${nextAllowed}</div></td>
-    <td class="acttd">${queueActions}<button type="button" class="ghost sm" onclick="openTaskQueueSource('${esc(item.source_tab)}')">${esc(taskQueueSourceLabel(item.source_tab))}</button></td>
+    <td class="acttd">${queueActions}<button type="button" class="ghost sm" onclick="showTaskQueueEvents('${esc(item.queue_type)}',${Number(item.id)})">时间线</button><button type="button" class="ghost sm" onclick="openTaskQueueSource('${esc(item.source_tab)}')">${esc(taskQueueSourceLabel(item.source_tab))}</button></td>
   </tr>`;
 }
 
