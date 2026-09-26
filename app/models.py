@@ -173,6 +173,19 @@ class AccountRiskState(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class PlatformRiskCircuit(SQLModel, table=True):
+    """平台级硬熔断；打开后该平台所有写操作均被拒绝。"""
+    platform: str = Field(primary_key=True)
+    is_open: bool = Field(default=False, index=True)
+    reason: str = ""
+    opened_by: str = "system"
+    opened_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = Field(default=None, index=True)
+    closed_by: str = ""
+    closed_at: Optional[datetime] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
 class RiskEvent(SQLModel, table=True):
     """统一平台操作计数事件；不保存 Cookie、代理凭据或响应正文。"""
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -643,4 +656,18 @@ class ShareDownloadRecord(SQLModel, table=True):
     files_json: str = "[]"
     metadata_json: str = "{}"
     error: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class TaskEvent(SQLModel, table=True):
+    """统一任务控制面的轻量审计时间线；不替代各业务表自身状态。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    queue_type: str = Field(index=True)
+    row_id: int = Field(index=True)
+    event_type: str = Field(index=True)
+    from_status: str = ""
+    to_status: str = ""
+    actor: str = "system"
+    detail: str = ""
+    metadata_json: str = "{}"
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)

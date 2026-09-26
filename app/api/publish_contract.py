@@ -5,10 +5,11 @@ shed schema/serialization responsibilities without moving platform execution yet
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..models import PublishTask
 
@@ -30,6 +31,7 @@ class PublishIn(BaseModel):
     operation: str = "publish"
     allow_save: bool = True
     scheduled_at: str | None = None
+    intent_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,100}$")
 
 
 class PublishUpdate(BaseModel):
@@ -83,3 +85,39 @@ def parse_when(value: str | None) -> datetime | None:
         return parsed - timedelta(hours=8)
     except Exception:
         return None
+
+
+def publish_fingerprint(body: PublishIn, *, platform: str, visibility: str,
+                        operation: str, scheduled_at: datetime | None) -> str:
+    """Stable semantic fingerprint for direct publish intent deduplication."""
+    payload = {
+        "account_id": body.account_id,
+        "platform": str(platform or "").strip().lower(),
+        "media_type": str(body.media_type or "").strip().lower(),
+        "title": body.title.strip(),
+        "desc": body.desc,
+        "topics": body.topics.strip(),
+        "location": body.location.strip(),
+        "media_paths": [str(path or "").strip().replace("\\", "/")
+                        for path in body.media_paths],
+        "visibility": str(visibility or "").strip().lower(),
+        "operation": str(operation or "").strip().lower(),
+        "allow_save": bool(body.allow_save),
+        "scheduled_at": scheduled_at.isoformat(timespec="seconds") if scheduled_at else None,
+        "youtube_category": body.youtube_category.strip(),
+        "made_for_kids": bool(body.made_for_kids),
+        "thumbnail_path": body.thumbnail_path.strip().replace("\\", "/"),
+        "collection_name": body.collection_name.strip(),
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                     separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def publish_intent_key(body: PublishIn, fingerprint: str) -> str | None:
+    """Return a unique DB key unless the caller explicitly allows duplicates."""
+    if body.allow_duplicate:
+        return None
+    if body.intent_id:
+        return f"publish:{body.account_id}:client:{body.intent_id}"
+    return f"publish:{body.account_id}:fp:{fingerprint}"

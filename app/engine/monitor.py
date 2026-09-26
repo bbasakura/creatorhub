@@ -2786,6 +2786,14 @@ class MonitorEngine:
                 self._defer_row(t, "账号登录态已失效，等待重新登录", fallback_seconds=900)
                 s.add(t); s.commit()
                 return {"ok": False, "error": "account_invalid"}
+            hard_decision = self.risk.hard_preflight(
+                t.account_id, OperationKind.PUBLISH)
+            if not hard_decision.allowed:
+                self._defer_row(t, hard_decision.reason,
+                                hard_decision.next_allowed_at,
+                                signal=hard_decision.signal)
+                s.add(t); s.commit()
+                return {"ok": False, "error": hard_decision.reason}
             if t.platform == "youtube":
                 if acc.platform != "youtube":
                     return {"ok": False, "error": "账号平台不匹配"}

@@ -6618,6 +6618,7 @@ function taskQueueSourceLabel(tab) {
 
 const TASK_QUEUE_ACTION_LABEL = {
   "run-now": "立即执行", cancel: "取消", retry: "重试", resume: "解除阻塞",
+  "verify-auto": "自动核验", "confirm-done": "确认已成功", "confirm-not-done": "确认未成功",
 };
 
 function taskQueueActionButtons(item) {
@@ -6627,10 +6628,15 @@ function taskQueueActionButtons(item) {
 
 async function taskQueueAction(queueType, id, action) {
   if (action === "cancel" && !window.confirm("确认取消这个任务？")) return;
+  if (action === "confirm-done" && !window.confirm("仅在你已到平台确认实际成功后继续。确认标记为已成功？")) return;
+  if (action === "confirm-not-done" && !window.confirm("仅在你已到平台确认没有产生结果后继续。确认标记为未成功并允许后续重试？")) return;
   try {
     const result = await api(`/api/task-queue/${encodeURIComponent(queueType)}/${Number(id)}/${encodeURIComponent(action)}`, { method: "POST" });
     const label = TASK_QUEUE_ACTION_LABEL[action] || action;
-    toast(result.queued === false ? `${label}成功，任务已重新排队` : `${label}成功`, "ok");
+    const message = (action === "verify-auto" && result.confirmed === false)
+      ? "自动核验未找到足够证据，任务保持 uncertain"
+      : (result.queued === false ? `${label}成功，任务已重新排队` : `${label}成功`);
+    toast(message, result.confirmed === false ? "warn" : "ok");
     await refreshTaskQueue();
   } catch (e) {
     toast(`任务操作失败：${e.message}`, "err");

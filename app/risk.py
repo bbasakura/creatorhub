@@ -25,6 +25,7 @@ from .models import (
     DouyinAccount,
     ProxyPool,
     PublishTask,
+    PlatformRiskCircuit,
     RiskEvent,
 )
 
@@ -278,6 +279,102 @@ class RiskController:
         return until
 
     @staticmethod
+    def _platform_circuit_decision(session, account: DouyinAccount,
+                                   kind: OperationKind, now: datetime) -> RiskDecision:
+        if kind not in RiskController._WRITE_KINDS:
+            return RiskDecision(True)
+        circuit = session.get(PlatformRiskCircuit, account.platform)
+        if circuit is None or not circuit.is_open:
+            return RiskDecision(True)
+        if circuit.expires_at is not None and circuit.expires_at <= now:
+            return RiskDecision(True)
+        reason = circuit.reason or "平台级硬熔断已开启"
+        return RiskDecision(
+            False,
+            f"{account.platform} 平台硬熔断：{reason}",
+            circuit.expires_at,
+            "platform_circuit_open",
+        )
+
+    def hard_preflight(self, account_or_id: DouyinAccount | int | None,
+                       kind: OperationKind, *,
+                       now: datetime | None = None) -> RiskDecision:
+        """Unbypassable safety gate used even by manual write actions."""
+        account_id = self._account_id(account_or_id)
+        if not account_id:
+            return RiskDecision(True)
+        now = now or _utcnow()
+        with self._decision_lock, get_session() as session:
+            account = self._load_account(session, account_or_id)
+            if account is None:
+                return RiskDecision(False, "账号不存在", signal="account_missing")
+            return self._platform_circuit_decision(session, account, kind, now)
+
+    def open_platform_circuit(self, platform: str, *, reason: str,
+                              actor: str = "local-ui",
+                              duration_seconds: int = 0,
+                              now: datetime | None = None) -> PlatformRiskCircuit:
+        platform = str(platform or "").strip().lower()
+        if not platform:
+            raise ValueError("platform 不能为空")
+        reason = str(reason or "").strip()
+        if len(reason) < 3:
+            raise ValueError("熔断原因至少 3 个字符")
+        now = now or _utcnow()
+        duration = max(0, int(duration_seconds or 0))
+        with self._decision_lock, get_session() as session:
+            row = session.get(PlatformRiskCircuit, platform)
+            if row is None:
+                row = PlatformRiskCircuit(platform=platform)
+            row.is_open = True
+            row.reason = reason[:240]
+            row.opened_by = str(actor or "local-ui")[:80]
+            row.opened_at = now
+            row.expires_at = (now + timedelta(seconds=duration)) if duration else None
+            row.closed_by = ""
+            row.closed_at = None
+            row.updated_at = now
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def clear_platform_circuit(self, platform: str, *,
+                               actor: str = "local-ui",
+                               now: datetime | None = None) -> bool:
+        platform = str(platform or "").strip().lower()
+        now = now or _utcnow()
+        with self._decision_lock, get_session() as session:
+            row = session.get(PlatformRiskCircuit, platform)
+            if row is None:
+                return False
+            row.is_open = False
+            row.closed_by = str(actor or "local-ui")[:80]
+            row.closed_at = now
+            row.updated_at = now
+            session.add(row)
+            session.commit()
+            return True
+
+    def list_platform_circuits(self, *, now: datetime | None = None) -> list[dict[str, Any]]:
+        now = now or _utcnow()
+        with self._decision_lock, get_session() as session:
+            rows = session.exec(select(PlatformRiskCircuit).order_by(
+                PlatformRiskCircuit.platform)).all()
+            return [{
+                "platform": row.platform,
+                "is_open": bool(row.is_open and (
+                    row.expires_at is None or row.expires_at > now)),
+                "reason": row.reason,
+                "opened_by": row.opened_by,
+                "opened_at": row.opened_at.isoformat() + "Z" if row.opened_at else None,
+                "expires_at": row.expires_at.isoformat() + "Z" if row.expires_at else None,
+                "closed_by": row.closed_by,
+                "closed_at": row.closed_at.isoformat() + "Z" if row.closed_at else None,
+                "updated_at": row.updated_at.isoformat() + "Z" if row.updated_at else None,
+            } for row in rows]
+
+    @staticmethod
     def _timezone(account: DouyinAccount) -> tzinfo:
         return _resolve_timezone(account.timezone_id or "Asia/Shanghai")
 
@@ -454,8 +551,6 @@ class RiskController:
         now: datetime | None = None,
         allow_invalid_probe: bool = False,
     ) -> RiskDecision:
-        if not self.policy.enabled:
-            return RiskDecision(True)
         account_id = self._account_id(account_or_id)
         if not account_id:
             return RiskDecision(True)
@@ -465,6 +560,11 @@ class RiskController:
             account = self._load_account(session, account_or_id)
             if account is None:
                 return RiskDecision(False, "账号不存在", signal="account_missing")
+            hard = self._platform_circuit_decision(session, account, kind, now)
+            if not hard.allowed:
+                return hard
+            if not self.policy.enabled:
+                return RiskDecision(True)
             if account.status == "invalid" and kind != OperationKind.LOGIN:
                 if not allow_invalid_probe:
                     return RiskDecision(

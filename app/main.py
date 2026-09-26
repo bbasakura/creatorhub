@@ -119,6 +119,7 @@ from .services.task_queue_actions import (
     available_queue_actions as _available_queue_actions,
     perform_queue_action as _perform_queue_action,
 )
+from .services.task_events import list_task_events as _list_task_events
 from .services.platform_capabilities import (
     media_capability as _media_capability,
     media_types_for as _media_types_for,
@@ -1815,6 +1816,11 @@ async def list_task_queue(platform: str | None = None, queue_type: str = "",
     }
 
 
+@app.get("/api/task-queue/{queue_type}/{row_id}/events")
+async def task_queue_events(queue_type: str, row_id: int, limit: int = 100):
+    return _list_task_events(queue_type, row_id, limit=limit)
+
+
 @app.post("/api/task-queue/{queue_type}/{row_id}/{action}")
 async def control_task_queue(queue_type: str, row_id: int, action: str):
     """Operate an actionable queue row through the existing worker/state machine."""
@@ -2151,6 +2157,71 @@ async def probe_account_risk(account_id: int, request: Request):
 class RiskClearIn(BaseModel):
     confirmed: bool = False
     reason: str = ""
+
+
+class PlatformCircuitIn(BaseModel):
+    confirmed: bool = False
+    reason: str = ""
+    duration_seconds: int = 0
+
+
+@app.get("/api/risk-control/platform-circuits")
+async def list_platform_risk_circuits():
+    controller = engine.risk if engine else RiskController(cfg)
+    return controller.list_platform_circuits()
+
+
+@app.post("/api/risk-control/platform-circuits/{platform}/open")
+async def open_platform_risk_circuit(platform: str, body: PlatformCircuitIn,
+                                     request: Request):
+    actor = _require_risk_admin(request)
+    platform = platform.strip().lower()
+    supported = {"douyin", "xhs", "kuaishou", "shipinhao", "wechat_mp", "youtube"}
+    reason = body.reason.strip()
+    if platform not in supported:
+        raise HTTPException(400, "不支持的平台")
+    if not body.confirmed or len(reason) < 3:
+        raise HTTPException(400, "打开平台硬熔断前需要确认并填写至少 3 个字符的原因")
+    if body.duration_seconds < 0 or body.duration_seconds > 2592000:
+        raise HTTPException(400, "duration_seconds 须在 0–2592000 之间，0 表示手动解除")
+    controller = engine.risk if engine else RiskController(cfg)
+    try:
+        controller.open_platform_circuit(
+            platform, reason=reason, actor=actor,
+            duration_seconds=body.duration_seconds)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    _record_risk_admin_audit(
+        "platform_circuit_opened", actor=actor,
+        detail={"platform": platform, "reason": reason,
+                "duration_seconds": body.duration_seconds})
+    return {"ok": True, "platform": platform,
+            "circuits": controller.list_platform_circuits()}
+
+
+@app.post("/api/risk-control/platform-circuits/{platform}/clear")
+async def clear_platform_risk_circuit(platform: str, body: RiskClearIn,
+                                      request: Request):
+    actor = _require_risk_admin(request)
+    platform = platform.strip().lower()
+    reason = body.reason.strip()
+    if not body.confirmed or len(reason) < 3:
+        raise HTTPException(400, "解除平台硬熔断前需要确认并填写至少 3 个字符的原因")
+    controller = engine.risk if engine else RiskController(cfg)
+    cleared = controller.clear_platform_circuit(platform, actor=actor)
+    woken = 0
+    if engine is not None and cleared:
+        with get_session() as session:
+            account_ids = session.exec(select(DouyinAccount.id).where(
+                DouyinAccount.platform == platform)).all()
+        for account_id in account_ids:
+            woken += engine._wake_deferred_tasks(account_id)
+    _record_risk_admin_audit(
+        "platform_circuit_cleared", actor=actor,
+        detail={"platform": platform, "reason": reason,
+                "woken_tasks": woken})
+    return {"ok": True, "platform": platform, "cleared": cleared,
+            "woken_tasks": woken}
 
 
 @app.post("/api/risk-control/accounts/{account_id}/clear")
@@ -8299,6 +8370,12 @@ from .api.publish_contract import (
     PublishUpdate,
     parse_when as _parse_when,
     publish_dict as _publish_dict,
+    publish_fingerprint as _publish_fingerprint,
+    publish_intent_key as _publish_intent_key,
+)
+from .services.publish_idempotency import (
+    PublishIntentConflict as _PublishIntentConflict,
+    persist_direct_publish as _persist_direct_publish,
 )
 
 
@@ -8314,40 +8391,65 @@ async def list_publish(platform: str | None = None):
 
 @app.post("/api/publish")
 async def add_publish(body: PublishIn):
-    import hashlib
-    fingerprint = hashlib.sha256(json.dumps({"account": body.account_id,
-        "type": body.media_type, "title": body.title, "desc": body.desc,
-        "files": body.media_paths, "tags": body.topics}, sort_keys=True).encode()).hexdigest()
-    with get_session() as session:
-        previous = session.exec(select(PublishTask).where(PublishTask.content_fingerprint == fingerprint,
-            PublishTask.status.in_(["pending", "publishing", "uncertain", "done"]))).first()
-        if previous and not body.allow_duplicate:
-            raise HTTPException(409, "相同内容已有任务，请先核对结果；确需再次上传须明确允许重复")
+    scheduled_at = _parse_when(body.scheduled_at)
+    if body.scheduled_at and scheduled_at is None:
+        raise HTTPException(400, "定时发布时间格式无效")
+
     with get_session() as session:
         account = session.get(DouyinAccount, body.account_id)
-        if account and account.platform == "youtube":
-            if body.media_type not in _media_types_for("youtube") or len(body.media_paths) != 1 or not Path(body.media_paths[0]).is_file():
+        if not account or account.platform not in {
+                "xhs", "kuaishou", "douyin", "shipinhao", "wechat_mp", "youtube"}:
+            raise HTTPException(400, "请选择一个有效的发布账号")
+
+        platform = account.platform
+        operation = _normalize_operation(platform, body.operation)
+        visibility = _normalize_visibility(
+            platform, body.visibility,
+            explicitly_set=("visibility" in body.model_fields_set)
+            if platform == "youtube" else True)
+        fingerprint = _publish_fingerprint(
+            body, platform=platform, visibility=visibility,
+            operation=operation, scheduled_at=scheduled_at)
+        intent_key = _publish_intent_key(body, fingerprint)
+
+        if platform == "youtube":
+            if (body.media_type not in _media_types_for("youtube")
+                    or len(body.media_paths) != 1
+                    or not Path(body.media_paths[0]).is_file()):
                 raise HTTPException(400, "YouTube需要一个有效视频文件")
             if not account.credential_ref or account.status != "active":
                 raise HTTPException(400, "请先完成YouTube频道授权")
             if ("visibility" in body.model_fields_set and
                     not _visibility_allowed("youtube", body.visibility)):
-                raise HTTPException(400, "可见性无效或使用了尚不支持的定时上传")
-            visibility = _normalize_visibility(
-                "youtube", body.visibility,
-                explicitly_set="visibility" in body.model_fields_set)
+                raise HTTPException(400, "YouTube可见性无效")
             if body.scheduled_at and not _supports_schedule("youtube"):
-                raise HTTPException(400, "可见性无效或使用了尚不支持的定时上传")
-            if not body.title.strip() or len(body.title) > _title_limit("youtube", body.media_type) or len(body.desc) > 5000:
+                raise HTTPException(400, "YouTube当前不支持定时上传")
+            if (not body.title.strip()
+                    or len(body.title) > _title_limit("youtube", body.media_type)
+                    or len(body.desc) > 5000):
                 raise HTTPException(400, "YouTube标题须1至100字，描述最多5000字")
-            task = PublishTask(content_fingerprint=fingerprint, platform="youtube", account_id=account.id, media_type="video",
+            task = PublishTask(
+                content_fingerprint=fingerprint,
+                source_intent_key=intent_key,
+                platform="youtube", account_id=account.id, media_type="video",
                 title=body.title, desc=body.desc, topics=body.topics,
-                visibility=visibility, operation=_normalize_operation("youtube", body.operation), media_json=json.dumps(body.media_paths),
-                youtube_category=body.youtube_category, made_for_kids=body.made_for_kids,
-                thumbnail_path=body.thumbnail_path)
-            session.add(task); session.commit(); session.refresh(task)
-            return _publish_dict(task)
-        if account and account.platform == "wechat_mp":
+                visibility=visibility, operation=operation,
+                media_json=json.dumps(body.media_paths),
+                youtube_category=body.youtube_category,
+                made_for_kids=body.made_for_kids,
+                thumbnail_path=body.thumbnail_path,
+            )
+            try:
+                task, replayed = _persist_direct_publish(
+                    session, task, explicit_intent=bool(body.intent_id))
+            except _PublishIntentConflict as exc:
+                raise HTTPException(409, str(exc)) from exc
+            payload = _publish_dict(task)
+            if replayed:
+                payload["idempotent_replay"] = True
+            return payload
+
+        if platform == "wechat_mp":
             mp_types = _media_types_for("wechat_mp")
             if body.media_type not in mp_types:
                 raise HTTPException(400, "公众号草稿类型须为 article / images / video / podcast")
@@ -8360,45 +8462,53 @@ async def add_publish(body: PublishIn):
             if body.media_type == "video" and len(body.media_paths) != 1:
                 raise HTTPException(400, "公众号视频草稿需要且只能上传1个视频文件")
             if body.media_type == "podcast" and (len(body.media_paths) != 1 or
-                    Path(body.media_paths[0]).suffix.lower() not in _media_capability("wechat_mp", "podcast").extensions):
+                    Path(body.media_paths[0]).suffix.lower()
+                    not in _media_capability("wechat_mp", "podcast").extensions):
                 raise HTTPException(400, "公众号播客草稿需要且只能上传1个 mp3/m4a/wav/amr/wma 音频文件")
             if body.media_type == "images" and not body.media_paths:
                 raise HTTPException(400, "公众号贴图草稿至少需要1张图片")
             if any(not Path(p).is_file() for p in body.media_paths):
                 raise HTTPException(400, "公众号上传文件不存在，不允许静默遗漏")
-    paths = [p for p in body.media_paths if Path(p).exists()] if body.media_paths else []
-    with get_session() as s:
-        acc = s.get(DouyinAccount, body.account_id)
-        if not acc or acc.platform not in ("xhs", "kuaishou", "douyin", "shipinhao", "wechat_mp"):
-            raise HTTPException(400, "请选择一个已登录的抖音 / 小红书 / 快手 / 视频号账号")
-        is_mp_item = acc.platform == "wechat_mp" and body.media_type in _media_types_for("wechat_mp")
-        if is_mp_item:
+
+        paths = [p for p in body.media_paths if Path(p).exists()] if body.media_paths else []
+        if platform == "wechat_mp":
             if not body.title.strip():
                 raise HTTPException(400, "公众号草稿需要标题")
-        elif body.media_type not in _media_types_for(acc.platform):
+        elif body.media_type not in _media_types_for(platform):
             raise HTTPException(400, "media_type 须为 images 或 video")
+
         pname = {"kuaishou": "快手", "douyin": "抖音",
-                 "shipinhao": "视频号", "wechat_mp": "微信公众号"}.get(acc.platform, "小红书")
-        if acc.platform in ("kuaishou", "douyin", "shipinhao", "wechat_mp"):
-            # 抖音 / 快手 / 视频号发布走浏览器自动化,登录态在该账号持久 profile 里
-            if not (acc.creator_storage_state or acc.storage_state):
+                 "shipinhao": "视频号", "wechat_mp": "微信公众号"}.get(platform, "小红书")
+        if platform in ("kuaishou", "douyin", "shipinhao", "wechat_mp"):
+            if not (account.creator_storage_state or account.storage_state):
                 raise HTTPException(400, f"该{pname}账号不可发布:请先在账号页完成登录")
-        elif not (has_creator_cookies(acc.creator_storage_state) or has_creator_cookies(acc.storage_state)):
+        elif not (has_creator_cookies(account.creator_storage_state)
+                  or has_creator_cookies(account.storage_state)):
             raise HTTPException(400, "该账号小红书创作者登录态已过期，请在「账号」页点击「小红书创作者登录」完成扫码")
-        vis = _normalize_visibility(acc.platform, body.visibility)
-        t = PublishTask(
+
+        task = PublishTask(
             content_fingerprint=fingerprint,
-            operation=_normalize_operation(acc.platform, body.operation),
-            platform=acc.platform, account_id=body.account_id, media_type=body.media_type,
-            title=body.title.strip()[:_title_limit(acc.platform, body.media_type)], desc=body.desc, topics=body.topics,
+            source_intent_key=intent_key,
+            operation=operation,
+            platform=platform, account_id=body.account_id,
+            media_type=body.media_type,
+            title=body.title.strip()[:_title_limit(platform, body.media_type)],
+            desc=body.desc, topics=body.topics,
             location=(body.location or "").strip()[:60],
             collection_name=(body.collection_name or "").strip()[:50],
-            visibility=vis, allow_save=bool(body.allow_save),
+            visibility=visibility, allow_save=bool(body.allow_save),
             thumbnail_path=(body.thumbnail_path or "").strip(),
-            media_json=json.dumps(paths), scheduled_at=_parse_when(body.scheduled_at),
+            media_json=json.dumps(paths), scheduled_at=scheduled_at,
         )
-        s.add(t); s.commit(); s.refresh(t)
-        return _publish_dict(t)
+        try:
+            task, replayed = _persist_direct_publish(
+                session, task, explicit_intent=bool(body.intent_id))
+        except _PublishIntentConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        payload = _publish_dict(task)
+        if replayed:
+            payload["idempotent_replay"] = True
+        return payload
 
 
 @app.put("/api/publish/{tid}")

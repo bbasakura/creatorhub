@@ -16,7 +16,10 @@ class TaskQueueActionsTests(unittest.TestCase):
             ["resume", "cancel"],
         )
         self.assertEqual(available_queue_actions("publishes", "failed"), ["retry"])
-        self.assertEqual(available_queue_actions("publishes", "uncertain"), [])
+        self.assertEqual(
+            available_queue_actions("publishes", "uncertain"),
+            ["verify-auto", "confirm-done", "confirm-not-done"],
+        )
         self.assertEqual(available_queue_actions("collections", "running"), ["cancel"])
         self.assertEqual(available_queue_actions("monitor_downloads", "pending"), [])
 

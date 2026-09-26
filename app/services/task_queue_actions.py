@@ -16,6 +16,8 @@ from ..models import (
     KeywordCollectionJob,
     PublishTask,
 )
+from .task_events import add_task_event
+from .task_uncertainty import UncertainVerificationError, verify_uncertain
 
 
 ACTIONABLE_QUEUE_TYPES = frozenset({"collections", "publishes", "comments", "actions"})
@@ -36,6 +38,11 @@ _RETRYABLE_STATUS = {
     "publishes": frozenset({"failed", "canceled"}),
     "comments": frozenset({"failed", "canceled"}),
     "actions": frozenset({"failed", "canceled"}),
+}
+_UNCERTAIN_ACTIONS = {
+    "verify-auto": "auto",
+    "confirm-done": "confirmed_done",
+    "confirm-not-done": "confirmed_not_done",
 }
 
 
@@ -76,8 +83,11 @@ def available_queue_actions(queue_type: str, status: str, *,
     if queue_type not in ACTIONABLE_QUEUE_TYPES:
         return []
     running = _RUNNING_STATUS[queue_type]
-    if status in {"done", "uncertain"}:
+    if status == "done":
         return []
+    if status == "uncertain":
+        return (["verify-auto", "confirm-done", "confirm-not-done"]
+                if queue_type in {"publishes", "comments", "actions"} else [])
     if status == running:
         return ["cancel"] if queue_type == "collections" else []
     blocked = bool(str(blocked_reason or "").strip() or next_allowed_at)
@@ -188,8 +198,16 @@ def _load_and_transition(queue_type: str, row_id: int, action: str) -> Any:
         row = session.get(model, row_id)
         if row is None:
             raise QueueActionError("任务不存在", 404)
+        before_status = str(getattr(row, "status", "") or "")
         apply_queue_transition(row, queue_type, action)
         session.add(row)
+        add_task_event(
+            session, queue_type=queue_type, row_id=row_id,
+            event_type=f"control:{action}",
+            from_status=before_status,
+            to_status=str(getattr(row, "status", "") or ""),
+            actor="task_queue",
+        )
         session.commit()
         session.refresh(row)
         return row
@@ -211,6 +229,11 @@ async def perform_queue_action(queue_type: str, row_id: int, action: str,
                                *, engine: Any = None) -> dict[str, Any]:
     queue_type = str(queue_type or "").strip().lower()
     action = str(action or "").strip().lower()
+    if action in _UNCERTAIN_ACTIONS:
+        try:
+            return verify_uncertain(queue_type, row_id, _UNCERTAIN_ACTIONS[action])
+        except UncertainVerificationError as exc:
+            raise QueueActionError(str(exc), exc.status_code) from exc
     if action == "run-now" and engine is None:
         raise QueueActionError("引擎未就绪", 503)
 
