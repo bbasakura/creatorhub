@@ -7,9 +7,11 @@ cannot be proven, so the queue never silently duplicates a tweet/reply.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Sequence
 from urllib.parse import urlparse
@@ -191,11 +193,73 @@ async def interactive_x_login(
     return logged, state_json, nickname
 
 
+def _x_count(raw: str) -> int:
+    text = str(raw or "").replace(",", "").strip()
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*([KMB万]?)", text, re.I)
+    if not match:
+        return 0
+    value = float(match.group(1))
+    scale = {"k": 1_000, "m": 1_000_000, "b": 1_000_000_000, "万": 10_000}.get(match.group(2).lower(), 1)
+    return int(value * scale)
+
+
+def _x_epoch(raw: str) -> int:
+    value = str(raw or "").strip()
+    if not value:
+        return 0
+    try:
+        return int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp())
+    except Exception:
+        return 0
+
+
+async def _x_profile_snapshot(page: Any, base: dict | None = None) -> dict:
+    profile = dict(base or {})
+    handle = str(profile.get("handle") or "").strip()
+    if not handle:
+        profile.update(await _profile_from_page(page))
+        handle = str(profile.get("handle") or "").strip()
+    if handle and f"/{handle}" not in str(getattr(page, "url", "")):
+        await page.goto(f"https://x.com/{handle}", wait_until="domcontentloaded", timeout=30_000)
+        await page.wait_for_timeout(700)
+    try:
+        followers = page.locator(f'a[href="/{handle}/verified_followers"], a[href="/{handle}/followers"]').first
+        if await followers.count():
+            profile["follower_count"] = _x_count(await followers.inner_text())
+    except Exception:
+        pass
+    try:
+        following = page.locator(f'a[href="/{handle}/following"]').first
+        if await following.count():
+            profile["following_count"] = _x_count(await following.inner_text())
+    except Exception:
+        pass
+    try:
+        avatar = page.locator('a[href$="/photo"] img').first
+        if await avatar.count():
+            profile["avatar"] = str(await avatar.get_attribute("src") or "")
+    except Exception:
+        pass
+    try:
+        header = page.locator('[data-testid="primaryColumn"]').first
+        raw = str(await header.inner_text() or "") if await header.count() else ""
+        post_match = re.search(r"([0-9.,]+(?:[KMB万])?)\s*(?:Posts?|帖子|贴文)", raw, re.I)
+        if post_match:
+            profile["aweme_count"] = _x_count(post_match.group(1))
+    except Exception:
+        pass
+    profile.setdefault("follower_count", 0)
+    profile.setdefault("following_count", 0)
+    profile.setdefault("aweme_count", 0)
+    return profile
+
+
 async def fetch_x_self_profile(mgr: BrowserManager, identity: Identity) -> dict:
     async with mgr.visible_page(identity, url=X_HOME_URL) as page:
         if await _page_logged_out(page):
             raise RuntimeError("logged_out:X 登录态已失效，请重新登录")
-        return await _profile_from_page(page)
+        base = await _profile_from_page(page)
+        return await _x_profile_snapshot(page, base)
 
 
 async def _fill_editor(page: Any, text: str) -> Any:
@@ -367,6 +431,211 @@ async def fetch_x_following_timeline(
             await page.mouse.wheel(0, 1400)
             await page.wait_for_timeout(700)
     return items
+
+
+async def _x_metric(card: Any, selector: str) -> int:
+    try:
+        node = card.locator(selector).first
+        if not await node.count():
+            return 0
+        raw = str(await node.get_attribute("aria-label") or "") or str(await node.inner_text() or "")
+        return _x_count(raw)
+    except Exception:
+        return 0
+
+
+async def fetch_x_my_works(
+        mgr: BrowserManager, identity: Identity, limit: int = 100) -> tuple[list[dict], dict]:
+    limit = max(1, min(200, int(limit or 100)))
+    async with mgr.visible_page(identity, url=X_HOME_URL) as page:
+        if await _page_logged_out(page):
+            raise RuntimeError("logged_out:X 登录态已失效，请重新登录")
+        profile = await _x_profile_snapshot(page, await _profile_from_page(page))
+        handle = str(profile.get("handle") or "").lower()
+        items: list[dict] = []
+        seen: set[str] = set()
+        for _ in range(14):
+            cards = page.locator('article[data-testid="tweet"]')
+            for index in range(await cards.count()):
+                card = cards.nth(index)
+                try:
+                    user_text = str(await card.locator('[data-testid="User-Name"]').first.inner_text() or "")
+                    hm = re.search(r"@([A-Za-z0-9_]{1,15})", user_text)
+                    if handle and (not hm or hm.group(1).lower() != handle):
+                        continue
+                    link = card.locator('a[href*="/status/"]').first
+                    href = str(await link.get_attribute("href") or "")
+                    match = _STATUS_RE.search(href)
+                    if not match or match.group(1) in seen:
+                        continue
+                    tweet_id = match.group(1); seen.add(tweet_id)
+                    text_node = card.locator('[data-testid="tweetText"]').first
+                    desc = str(await text_node.inner_text() or "") if await text_node.count() else ""
+                    time_node = card.locator("time").first
+                    created = str(await time_node.get_attribute("datetime") or "") if await time_node.count() else ""
+                    has_video = bool(await card.locator('video, [data-testid="videoPlayer"], [data-testid="videoComponent"]').count())
+                    media_img = card.locator('img[src*="pbs.twimg.com/media"], img[src*="pbs.twimg.com/ext_tw_video_thumb"]').first
+                    cover = str(await media_img.get_attribute("src") or "") if await media_img.count() else ""
+                    has_image = bool(cover)
+                    media_type = "video" if has_video else "images" if has_image else "text"
+                    views = await _x_metric(card, 'a[href*="/analytics"], [aria-label*="View"], [aria-label*="查看"]')
+                    item = {
+                        "item_id": tweet_id,
+                        "desc": desc.strip(),
+                        "media_type": media_type,
+                        "cover_url": cover,
+                        "create_time": _x_epoch(created),
+                        "like_count": await _x_metric(card, '[data-testid="like"], [data-testid="unlike"]'),
+                        "comment_count": await _x_metric(card, '[data-testid="reply"]'),
+                        "collect_count": 0,
+                        "share_count": await _x_metric(card, '[data-testid="retweet"], [data-testid="unretweet"]'),
+                        "play_count": views,
+                        "status": "public",
+                        "raw_json": json.dumps({"url": f"https://x.com/{handle}/status/{tweet_id}"}, ensure_ascii=False),
+                    }
+                    items.append(item)
+                    if len(items) >= limit:
+                        return items, profile
+                except Exception:
+                    continue
+            await page.mouse.wheel(0, 1600)
+            await page.wait_for_timeout(650)
+        return items, profile
+
+
+async def fetch_x_relationships(
+        mgr: BrowserManager, identity: Identity, direction: str,
+        limit: int = 300) -> tuple[list[dict], dict]:
+    if direction not in {"following", "fan"}:
+        raise ValueError("direction must be following or fan")
+    limit = max(1, min(500, int(limit or 300)))
+    async with mgr.visible_page(identity, url=X_HOME_URL) as page:
+        if await _page_logged_out(page):
+            raise RuntimeError("logged_out:X 登录态已失效，请重新登录")
+        profile = await _x_profile_snapshot(page, await _profile_from_page(page))
+        handle = str(profile.get("handle") or "").strip()
+        suffix = "following" if direction == "following" else "followers"
+        await page.goto(f"https://x.com/{handle}/{suffix}", wait_until="domcontentloaded", timeout=30_000)
+        await page.wait_for_timeout(700)
+        users: list[dict] = []
+        seen: set[str] = set()
+        for _ in range(16):
+            cells = page.locator('[data-testid="UserCell"]')
+            for index in range(await cells.count()):
+                cell = cells.nth(index)
+                try:
+                    raw = str(await cell.inner_text() or "")
+                    hm = re.search(r"@([A-Za-z0-9_]{1,15})", raw)
+                    if not hm:
+                        continue
+                    other = hm.group(1)
+                    key = other.casefold()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+                    nickname = next((line for line in lines if not line.startswith("@") and line not in {"Follow", "Following", "关注", "正在关注", "Follows you", "关注了你"}), other)
+                    desc_node = cell.locator('[data-testid="UserDescription"]').first
+                    signature = str(await desc_node.inner_text() or "") if await desc_node.count() else ""
+                    img = cell.locator('img[src*="profile_images"]').first
+                    avatar = str(await img.get_attribute("src") or "") if await img.count() else ""
+                    unfollow = cell.locator('button[data-testid$="-unfollow"]').first
+                    is_following = direction == "following" or bool(await unfollow.count())
+                    users.append({
+                        "uid": other,
+                        "sec_uid": other,
+                        "nickname": nickname,
+                        "avatar": avatar,
+                        "signature": signature,
+                        "is_mutual": bool(direction == "fan" and is_following),
+                        "is_following": bool(is_following),
+                        "raw_json": json.dumps({"handle": other}, ensure_ascii=False),
+                    })
+                    if len(users) >= limit:
+                        return users, profile
+                except Exception:
+                    continue
+            await page.mouse.wheel(0, 1500)
+            await page.wait_for_timeout(650)
+        return users, profile
+
+
+async def fetch_x_dm_conversations(
+        mgr: BrowserManager, identity: Identity, limit: int = 100) -> list[dict]:
+    limit = max(1, min(200, int(limit or 100)))
+    async with mgr.visible_page(identity, url="https://x.com/messages") as page:
+        if await _page_logged_out(page):
+            raise RuntimeError("logged_out:X 登录态已失效，请重新登录")
+        await page.wait_for_timeout(900)
+        convs: list[dict] = []
+        seen: set[str] = set()
+        links = page.locator('a[href^="/messages/"]')
+        for index in range(await links.count()):
+            link = links.nth(index)
+            try:
+                href = str(await link.get_attribute("href") or "")
+                conv_id = href.split("/messages/", 1)[-1].split("?", 1)[0].strip("/")
+                if not conv_id or conv_id == "compose" or conv_id in seen:
+                    continue
+                seen.add(conv_id)
+                raw = str(await link.inner_text() or "").strip()
+                lines = [line.strip() for line in raw.splitlines() if line.strip()]
+                nickname = lines[0] if lines else "X 会话"
+                last_text = lines[-1] if len(lines) > 1 else ""
+                img = link.locator('img[src*="profile_images"]').first
+                avatar = str(await img.get_attribute("src") or "") if await img.count() else ""
+                time_node = link.locator("time").first
+                created = str(await time_node.get_attribute("datetime") or "") if await time_node.count() else ""
+                convs.append({
+                    "conv_id": conv_id,
+                    "peer_uid": "",
+                    "peer_sec_uid": "",
+                    "peer_nickname": nickname,
+                    "peer_avatar": avatar,
+                    "last_text": last_text,
+                    "last_time": _x_epoch(created),
+                    "unread_count": 0,
+                    "raw_json": json.dumps({"url": f"https://x.com/messages/{conv_id}"}, ensure_ascii=False),
+                })
+                if len(convs) >= limit:
+                    break
+            except Exception:
+                continue
+        return convs
+
+
+async def fetch_x_dm_history(
+        mgr: BrowserManager, identity: Identity, conv_id: str,
+        limit: int = 100) -> list[dict]:
+    target = f"https://x.com/messages/{str(conv_id or '').strip('/')}"
+    async with mgr.visible_page(identity, url=target) as page:
+        if await _page_logged_out(page):
+            raise RuntimeError("logged_out:X 登录态已失效，请重新登录")
+        await page.wait_for_timeout(900)
+        entries = page.locator('[data-testid="messageEntry"]')
+        messages: list[dict] = []
+        viewport = page.viewport_size or {"width": 1280}
+        for index in range(max(0, await entries.count() - limit), await entries.count()):
+            entry = entries.nth(index)
+            try:
+                text = str(await entry.inner_text() or "").strip()
+                if not text:
+                    continue
+                time_node = entry.locator("time").first
+                created = str(await time_node.get_attribute("datetime") or "") if await time_node.count() else ""
+                box = await entry.bounding_box()
+                direction = "out" if box and box.get("x", 0) + box.get("width", 0) / 2 > viewport.get("width", 1280) / 2 else "in"
+                stable = f"{conv_id}|{created}|{text}|{direction}"
+                messages.append({
+                    "msg_id": "x:" + hashlib.sha1(stable.encode("utf-8")).hexdigest(),
+                    "direction": direction,
+                    "msg_type": "text",
+                    "text": text,
+                    "create_time": _x_epoch(created),
+                })
+            except Exception:
+                continue
+        return messages
 
 
 async def reply_x(

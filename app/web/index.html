@@ -2672,22 +2672,6 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
       </div>
     </div>
 
-    <div class="card x-only hidden" id="x-engagement-card">
-      <div class="card-head">
-        <span class="card-ic"><svg><use href="#i-msg"/></svg></span>
-        <h2>X 互动 <span class="sub">Following 时间线 · 回复 · 关注管理</span></h2>
-        <button class="ghost sm" style="margin-left:auto" onclick="loadXTimeline()">刷新正在关注</button>
-      </div>
-      <div class="form-note"><svg aria-hidden="true"><use href="#i-info"/></svg><span>回复、关注、取关均由 CreatorHub 使用当前 X 账号执行，并经过同一套账号锁与写操作风控。</span></div>
-      <div class="row" style="margin-top:12px">
-        <input id="x-rel-handle" maxlength="100" placeholder="@handle 或 X 用户主页链接" style="flex:1">
-        <button class="sm" onclick="xRelationship('follow')">关注</button>
-        <button class="ghost sm" onclick="xRelationship('unfollow')">取关</button>
-      </div>
-      <div id="x-timeline" class="stack" style="margin-top:12px"></div>
-      <div class="mut" id="x-timeline-msg">选择 X 发布账号后，点“刷新正在关注”读取 Following 时间线。</div>
-    </div>
-
     <!-- 发布任务列表 -->
     <div class="card">
       <div class="card-head">
@@ -3233,7 +3217,7 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
 
       <div data-hubpanel="dm" style="display:none">
         <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:12px">
-          <div class="hint" style="margin:0;flex:1"><span class="ic-text"><svg aria-hidden="true"><use href="#i-msg"/></svg><b>抖音私信</b></span>：点「<b>同步</b>」拉取会话列表，打开会话后自动加载完整聊天记录。发消息使用「<b>打开浏览器收发</b>」。小红书网页端暂未开放私信，快手能力待验证。</div>
+          <div class="hint" id="hub-dm-hint" style="margin:0;flex:1"><span class="ic-text"><svg aria-hidden="true"><use href="#i-msg"/></svg><b>抖音私信</b></span>：点「<b>同步</b>」拉取会话列表，打开会话后自动加载完整聊天记录。发消息使用「<b>打开浏览器收发</b>」。小红书网页端暂未开放私信，快手能力待验证。</div>
           <button class="ghost sm" style="flex:0 0 auto" onclick="syncDm()"><svg><use href="#i-download"/></svg>同步</button>
           <button style="flex:0 0 auto" onclick="openHubAccountBrowser()"><svg><use href="#i-send"/></svg>打开浏览器收发</button>
         </div>
@@ -3241,7 +3225,7 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
           <div class="dm-list" id="dm-convs"></div>
           <div class="dm-main">
             <div class="dm-thread" id="dm-thread"><div class="empty"><div class="empty-ic"><svg><use href="#i-send"/></svg></div><div class="empty-t">选择左侧会话查看消息</div></div></div>
-            <div class="dm-composer">
+            <div class="dm-composer" id="dm-composer">
               <input id="dm-input" placeholder="输入私信内容…" aria-label="私信内容" onkeydown="if(event.key==='Enter')sendDm()">
               <button onclick="sendDm()"><svg><use href="#i-send"/></svg>发送</button>
             </div>
@@ -3256,7 +3240,7 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
         </div>
         <div id="stats-kpi" class="kpi-grid"></div>
         <div id="stats-trend"></div>
-        <div class="table-wrap"><table aria-label="账号作品数据"><thead><tr><th>作品</th><th>播放</th><th>点赞</th><th>评论</th><th>状态</th></tr></thead><tbody id="stats-works"></tbody></table></div>
+        <div class="table-wrap"><table aria-label="账号作品数据"><thead><tr><th>作品</th><th id="stats-view-head">播放</th><th>点赞</th><th>评论</th><th>状态</th></tr></thead><tbody id="stats-works"></tbody></table></div>
       </div>
     </div>
   </section>

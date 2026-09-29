@@ -74,12 +74,13 @@ def test_x_frontend_contract_is_wired():
     js = Path("app/web/app.js").read_text(encoding="utf-8")
     assert "data-pf=\"x\"" in index
     assert "startXLogin()" in index
-    assert "X 互动" in index
+    assert 'data-tab="hub"' in index
+    assert 'id="x-engagement-card"' not in index
     assert 'loginStartUrl("/api/login/x/start"' in js
     assert 'api("/api/x/reply"' in js
     assert 'api("/api/x/relationship"' in js
-    assert "xRelationship('follow')" in index
-    assert "xRelationship('unfollow')" in index
+    assert 'api("/api/x/relationship"' in js
+    assert 'PLATFORM === "x"' in js
     assert "/api/x/timeline?account_id=" in js
     main = Path("app/main.py").read_text(encoding="utf-8")
     assert '"x": "x.com"' in main

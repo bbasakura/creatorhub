@@ -76,7 +76,11 @@ from .platforms.wechat_mp import parse_self_user as parse_mp_self_user
 from .platforms.wechat_mp.resolve import (resolve_mp_user_id,
                                           resolve_mp_article_id,
                                           looks_like_article)
-from .platforms.x.client import interactive_x_login, fetch_x_self_profile, compose_x_text
+from .platforms.x.client import (
+    interactive_x_login, fetch_x_self_profile, compose_x_text,
+    fetch_x_my_works, fetch_x_relationships,
+    fetch_x_dm_conversations, fetch_x_dm_history,
+)
 from .engine import Downloader, MonitorEngine
 from .engine.share_downloader import (
     ShareDownloadError,
@@ -772,6 +776,10 @@ async def _enrich_account_profile(account_id: int, state: str, *,
                     "nickname": u.get("nickname", ""),
                     "sec_uid": u.get("handle", "") or u.get("sec_uid", ""),
                     "douyin_id": u.get("handle", ""),
+                    "avatar": u.get("avatar", ""),
+                    "follower_count": u.get("follower_count"),
+                    "following_count": u.get("following_count"),
+                    "aweme_count": u.get("aweme_count"),
                 }
             elif platform == "kuaishou":
                 p = parse_ks_self_user(u)
@@ -3280,6 +3288,74 @@ async def sync_account_works(account_id: int):
         except Exception as e:
             raise HTTPException(400, f"YouTube 视频同步失败: {e}")
 
+    if platform == "x":
+        if browser is None:
+            raise HTTPException(503, "浏览器未就绪")
+        if engine is None:
+            raise HTTPException(503, "引擎未就绪")
+        identity = browser.identity_for(acc)
+        async def _fetch_x_works():
+            items, profile = await fetch_x_my_works(browser, identity, limit=200)
+            return {"items": items, "profile": profile}, ""
+        result, err = await engine.guarded_read_pair(
+            account_id, OperationKind.READ_LIGHT, f"x-works:{account_id}",
+            _fetch_x_works, empty_result={"items": [], "profile": {}})
+        if err.startswith("risk_deferred:"):
+            return {"ok": True, "fetched": 0, "added": 0, "skipped": True,
+                    "reason": err.split(":", 1)[-1]}
+        if err:
+            raise HTTPException(400, f"X 帖子同步失败: {err}")
+        items = result.get("items") or []
+        profile = result.get("profile") or {}
+        now = datetime.utcnow()
+        added = 0
+        with get_session() as s:
+            cur = s.get(DouyinAccount, account_id)
+            if cur:
+                cur.nickname = profile.get("nickname") or cur.nickname
+                cur.sec_uid = profile.get("handle") or cur.sec_uid
+                cur.douyin_id = profile.get("handle") or cur.douyin_id
+                cur.avatar = profile.get("avatar") or cur.avatar
+                if profile.get("follower_count") is not None:
+                    cur.follower_count = int(profile.get("follower_count") or 0)
+                if profile.get("following_count") is not None:
+                    cur.following_count = int(profile.get("following_count") or 0)
+                cur.aweme_count = int(profile.get("aweme_count") or cur.aweme_count or len(items))
+                s.add(cur)
+            for w in items:
+                existing = s.exec(select(AccountWork).where(
+                    AccountWork.account_id == account_id,
+                    AccountWork.item_id == w["item_id"])).first()
+                if existing:
+                    for key, value in w.items():
+                        setattr(existing, key, value)
+                    existing.fetched_at = now
+                    s.add(existing)
+                else:
+                    s.add(AccountWork(platform="x", account_id=account_id,
+                                      fetched_at=now, **w))
+                    added += 1
+            today = datetime.now().strftime("%Y-%m-%d")
+            snap = s.exec(select(AccountStatSnapshot).where(
+                AccountStatSnapshot.account_id == account_id,
+                AccountStatSnapshot.date == today)).first()
+            totals = {
+                "follower_count": int(profile.get("follower_count") or (cur.follower_count if cur else 0)),
+                "aweme_count": int(profile.get("aweme_count") or (cur.aweme_count if cur else len(items))),
+                "total_like": sum(int(w.get("like_count") or 0) for w in items),
+                "total_comment": sum(int(w.get("comment_count") or 0) for w in items),
+                "total_play": sum(int(w.get("play_count") or 0) for w in items),
+            }
+            if snap:
+                for key, value in totals.items(): setattr(snap, key, value)
+                s.add(snap)
+            else:
+                s.add(AccountStatSnapshot(platform="x", account_id=account_id,
+                                          date=today, **totals))
+            s.commit()
+        return {"ok": True, "fetched": len(items), "added": added,
+                "total": int(profile.get("aweme_count") or len(items))}
+
     if browser is None:
         raise HTTPException(503, "浏览器未就绪")
     if engine is None:
@@ -3367,7 +3443,9 @@ async def account_stats(account_id: int, days: int = 30):
                   if prev else 0)
     return {
         "account": {"id": acc.id, "platform": acc.platform, "nickname": acc.nickname,
-                    "follower_count": acc.follower_count, "aweme_count": acc.aweme_count},
+                    "follower_count": acc.follower_count,
+                    "following_count": acc.following_count,
+                    "aweme_count": acc.aweme_count},
         "fans_delta": fans_delta,
         "trend": trend,
         "works": [_work_dict(w) for w in works],
@@ -3488,6 +3566,48 @@ async def sync_follows(account_id: int, direction: str = "following"):
         except Exception as e:
             raise HTTPException(400, f"YouTube 订阅频道同步失败: {e}")
 
+    if platform == "x":
+        if browser is None:
+            raise HTTPException(503, "浏览器未就绪")
+        if engine is None:
+            raise HTTPException(503, "引擎未就绪")
+        identity = browser.identity_for(acc)
+        async def _fetch_x_follows():
+            users, profile = await fetch_x_relationships(browser, identity, direction, limit=500)
+            return {"users": users, "profile": profile}, ""
+        result, err = await engine.guarded_read_pair(
+            account_id, OperationKind.READ_LIGHT,
+            f"x-follows:{account_id}:{direction}", _fetch_x_follows,
+            empty_result={"users": [], "profile": {}})
+        if err.startswith("risk_deferred:"):
+            return {"ok": True, "fetched": 0, "added": 0, "skipped": True,
+                    "reason": err.split(":", 1)[-1]}
+        if err:
+            raise HTTPException(400, f"X 关系列表同步失败: {err}")
+        users = result.get("users") or []
+        profile = result.get("profile") or {}
+        now = datetime.utcnow()
+        with get_session() as s:
+            for old in s.exec(select(FollowEdge).where(
+                    FollowEdge.account_id == account_id,
+                    FollowEdge.direction == direction)).all():
+                s.delete(old)
+            for u in users:
+                s.add(FollowEdge(platform="x", account_id=account_id,
+                                 direction=direction, fetched_at=now, **u))
+            cur = s.get(DouyinAccount, account_id)
+            if cur:
+                if profile.get("follower_count") is not None:
+                    cur.follower_count = int(profile.get("follower_count") or 0)
+                if profile.get("following_count") is not None:
+                    cur.following_count = int(profile.get("following_count") or 0)
+                s.add(cur)
+            s.commit()
+        total = (profile.get("follower_count") if direction == "fan"
+                 else profile.get("following_count"))
+        return {"ok": True, "fetched": len(users), "added": len(users),
+                "total": int(total or len(users))}
+
     if browser is None:
         raise HTTPException(503, "浏览器未就绪")
     with get_session() as s:
@@ -3577,6 +3697,8 @@ async def sync_dm(account_id: int):
     if engine is None:
         raise HTTPException(503, "引擎未就绪")
     async def _fetch_conversations():
+        if platform == "x":
+            return await fetch_x_dm_conversations(browser, identity, limit=100), ""
         return await fetch_dm_conversations(browser, identity, platform)
 
     convs, err = await engine.guarded_read_pair(
@@ -3702,6 +3824,34 @@ async def fetch_dm_conversation_history(account_id: int, conv_id: str,
             self_uid = (json.loads(conv.raw_json or "{}")).get("self_uid", "")
         except Exception:
             pass
+    if platform == "x":
+        if engine is None:
+            raise HTTPException(503, "引擎未就绪")
+        async def _fetch_x_history():
+            return await fetch_x_dm_history(browser, identity, conv_id, limit=100), ""
+        msgs, err = await engine.guarded_read_pair(
+            account_id, OperationKind.READ_LIGHT,
+            f"x-dm-history:{account_id}:{conv_id}", _fetch_x_history,
+            empty_result=[])
+        if err.startswith("risk_deferred:"):
+            return {"ok": True, "messages": 0, "added": 0, "skipped": True,
+                    "reason": err.split(":", 1)[-1]}
+        if err:
+            raise HTTPException(400, err)
+        with get_session() as s:
+            for old in s.exec(select(DmMessage).where(
+                    DmMessage.account_id == account_id,
+                    DmMessage.conv_id == conv_id)).all():
+                s.delete(old)
+            for m in msgs:
+                s.add(DmMessage(
+                    platform="x", account_id=account_id, conv_id=conv_id,
+                    msg_id=m["msg_id"], direction=m.get("direction") or "in",
+                    msg_type=m.get("msg_type") or "text", text=m.get("text") or "",
+                    create_time=int(m.get("create_time") or 0)))
+            s.commit()
+        return {"ok": True, "fetched": len(msgs), "added": len(msgs)}
+
     if not short_id:
         raise HTTPException(400, "该会话缺 conversation_short_id,请重新同步会话列表")
     if engine is None:
@@ -3776,9 +3926,10 @@ async def hub_summary(account_id: int):
                          .where(DmConversation.account_id == account_id))
 
         is_yt = acc and acc.platform == "youtube"
-        works = works_scraped
-        following = following_scraped
-        fans = (acc.follower_count or 0) if is_yt else fans_scraped
+        is_x = acc and acc.platform == "x"
+        works = ((acc.aweme_count or works_scraped) if is_x else works_scraped)
+        following = ((acc.following_count or following_scraped) if is_x else following_scraped)
+        fans = ((acc.follower_count or fans_scraped) if (is_yt or is_x) else fans_scraped)
 
         return {
             "works": works,

@@ -7,35 +7,52 @@ from __future__ import annotations
 
 from importlib import import_module
 
-from .client import (
-    XWriteOutcome,
-    compose_x_text,
-    fetch_x_following_timeline,
-    fetch_x_self_profile,
-    interactive_x_login,
-    normalize_tweet_ref,
-    publish_x,
-    reply_x,
-)
-from .relationship import (
-    XRelationshipOutcome,
-    normalize_x_handle,
-    set_x_following,
-)
+_CORE_EXPORTS = []
+try:
+    from .client import (
+        XWriteOutcome,
+        compose_x_text,
+        fetch_x_following_timeline,
+        fetch_x_self_profile,
+        fetch_x_my_works,
+        fetch_x_relationships,
+        fetch_x_dm_conversations,
+        fetch_x_dm_history,
+        interactive_x_login,
+        normalize_tweet_ref,
+        publish_x,
+        reply_x,
+    )
+    _CORE_EXPORTS.extend([
+        "XWriteOutcome",
+        "compose_x_text",
+        "fetch_x_following_timeline",
+        "fetch_x_self_profile",
+        "fetch_x_my_works",
+        "fetch_x_relationships",
+        "fetch_x_dm_conversations",
+        "fetch_x_dm_history",
+        "interactive_x_login",
+        "normalize_tweet_ref",
+        "publish_x",
+        "reply_x",
+    ])
+except Exception:
+    pass
 
-_CORE_EXPORTS = [
-    "XWriteOutcome",
-    "compose_x_text",
-    "fetch_x_following_timeline",
-    "fetch_x_self_profile",
-    "interactive_x_login",
-    "normalize_tweet_ref",
-    "publish_x",
-    "reply_x",
-    "XRelationshipOutcome",
-    "normalize_x_handle",
-    "set_x_following",
-]
+try:
+    from .relationship import (
+        XRelationshipOutcome,
+        normalize_x_handle,
+        set_x_following,
+    )
+    _CORE_EXPORTS.extend([
+        "XRelationshipOutcome",
+        "normalize_x_handle",
+        "set_x_following",
+    ])
+except Exception:
+    pass
 _TOPIC_EXPORTS = {
     "XPostingEngine": (".posting_engine", "XPostingEngine"),
     "XReplyEngine": (".reply_engine", "XReplyEngine"),

@@ -950,8 +950,8 @@ function applyPlatformUI() {
   }
   document.querySelectorAll(".notsh-only").forEach(e => e.classList.toggle("hidden", pfIsChannels(PLATFORM)));
   document.querySelectorAll(".notyt-only").forEach(e => e.classList.toggle("hidden", PLATFORM === "youtube"));
-  document.querySelectorAll('[data-tab="hub"], [data-tab="monitors"], [data-tab="comments"], [data-tab="autocomment"]').forEach(e => e.classList.toggle("hidden", PLATFORM === "x"));
-  if (PLATFORM === "x" && ["hub", "monitors", "comments", "autocomment"].includes(CURRENT_TAB)) switchTab("publish");
+  document.querySelectorAll('[data-tab="monitors"], [data-tab="comments"], [data-tab="autocomment"]').forEach(e => e.classList.toggle("hidden", PLATFORM === "x"));
+  if (PLATFORM === "x" && ["monitors", "comments", "autocomment"].includes(CURRENT_TAB)) switchTab("publish");
   if (PLATFORM === "youtube" && HUB_TAB === "dm") switchHubTab("myworks");
   const fLabel = $("hb-following-label");
   if (fLabel) fLabel.textContent = PLATFORM === "youtube" ? "订阅频道" : "关注";
@@ -979,6 +979,11 @@ function applyPlatformUI() {
   }
   if ($("pub-topics")) $("pub-topics").placeholder = isX ? "话题，逗号分隔；发布时自动加 #" : "逗号分隔，不用带 #；例如：露营,户外";
   if ($("pub-queue-content-head")) $("pub-queue-content-head").textContent = isX ? "帖子内容" : "标题";
+  if ($("stats-view-head")) $("stats-view-head").textContent = isX ? "浏览" : "播放";
+  if ($("hub-dm-hint")) $("hub-dm-hint").innerHTML = isX
+    ? `<span class="ic-text"><svg aria-hidden="true"><use href="#i-msg"/></svg><b>X 私信</b></span>：点「<b>同步</b>」读取会话列表；打开会话后读取当前可见历史。发送消息使用「<b>打开浏览器收发</b>」，避免自动化误发。`
+    : `<span class="ic-text"><svg aria-hidden="true"><use href="#i-msg"/></svg><b>抖音私信</b></span>：点「<b>同步</b>」拉取会话列表，打开会话后自动加载完整聊天记录。发消息使用「<b>打开浏览器收发</b>」。小红书网页端暂未开放私信，快手能力待验证。`;
+  if ($("dm-composer")) $("dm-composer").classList.toggle("hidden", isX);
   const pubHintText = dy
     ? "发布通过自动化抖音创作平台完成。首次登录或触发验证时，请在弹出窗口中完成短信验证或扫码；视频上传后还需等待转码。注意：定时发布可能因本人验证而暂停，建议发布时在场。"
     : ks
@@ -1008,7 +1013,7 @@ function applyPlatformUI() {
   } else if (isX) {
     $("pub-type").disabled = false;
     $("pub-when").disabled = false;
-    if (!["text", "images", "video"].includes($("pub-type").value)) $("pub-type").value = "text";
+    if (!["text", "media"].includes($("pub-type").value)) $("pub-type").value = "text";
     onPubType();
   } else if (mp) {
     $("pub-type").disabled = false;
@@ -2337,10 +2342,11 @@ function loadHubAcc() { try { HUB_ACC = localStorage.getItem(hubAccKey()) || "";
 function setHubAcc(id) { HUB_ACC = String(id || ""); try { localStorage.setItem(hubAccKey(), HUB_ACC); } catch (e) {} if (HUB_TAB === "dm") startDmStream(); }
 
 // 用该账号登录态弹出真实浏览器窗口,留给用户手动操作(收发私信 / 维护 / F12 抓接口)
-async function openAccountBrowser(id) {
+async function openAccountBrowser(id, url = "") {
   await withBusy(evtBtn(), "打开中", async () => {
     try {
-      const result = await api("/api/accounts/" + id + "/open-browser", { method: "POST" });
+      const suffix = url ? `?url=${encodeURIComponent(url)}` : "";
+      const result = await api("/api/accounts/" + id + "/open-browser" + suffix, { method: "POST" });
       const checkHint = result.environment_check_opened
         ? " 已同时打开 BrowserScan 环境体检标签。" : "";
       if (result.logged_out) {
@@ -2380,7 +2386,8 @@ async function checkBrowserEnvironment(id) {
 // 私信页:用当前选中账号打开真实浏览器手动收发(抖音私信走 WS,只能这样)
 function openHubAccountBrowser() {
   if (!HUB_ACC) { toast("请先选择账号", "err"); return; }
-  openAccountBrowser(+HUB_ACC);
+  const url = PLATFORM === "x" ? "https://x.com/messages" : "";
+  openAccountBrowser(+HUB_ACC, url);
 }
 
 // 从「账号」面板某行跳转查看该账号的本账号数据(作品/关注/粉丝/私信)
@@ -2470,7 +2477,8 @@ async function loadHubStats() {
     const d = await api("/api/account-stats/" + HUB_ACC + "?days=30");
     if ($("hb-stats")) $("hb-stats").textContent = (d.works || []).length;
     kpi.innerHTML = _kpiCard("粉丝", d.account.follower_count || 0, d.fans_delta)
-      + _kpiCard("作品数", d.account.aweme_count || 0)
+      + (PLATFORM === "x" ? _kpiCard("关注", d.account.following_count || 0) : "")
+      + _kpiCard(PLATFORM === "x" ? "帖子数" : "作品数", d.account.aweme_count || 0)
       + _kpiCard("近30天快照", (d.trend || []).length);
     if (tr) {
       const vals = (d.trend || []).map(x => x.follower_count);
@@ -2523,13 +2531,14 @@ function renderMyWorks() {
   }
   const a = ACCOUNTS.find(x => x.id === +HUB_ACC);
   const authWorks = a && a.aweme_count;
-  if ($("hb-myworks")) $("hb-myworks").textContent = fmtNum(list.length);
+  if ($("hb-myworks")) $("hb-myworks").textContent = fmtNum(PLATFORM === "x" && authWorks ? authWorks : list.length);
   grid.innerHTML = list.length ? list.map(workCard).join("")
     : hubGridEmpty("暂无作品", "点右上「同步作品」抓取本账号已发布作品");
 }
 function workLink(platform, id) {
   id = encodeURIComponent(id);
   if (platform === "youtube") return "https://www.youtube.com/watch?v=" + id;
+  if (platform === "x") return "https://x.com/i/web/status/" + id;
   if (platform === "xhs") return "https://www.xiaohongshu.com/explore/" + id;
   if (platform === "kuaishou") return "https://www.kuaishou.com/short-video/" + id;
   if (platform === "shipinhao") return "https://channels.weixin.qq.com/platform/post/list";
@@ -2547,9 +2556,12 @@ function workCard(w) {
   const ytBadge = (w.platform === "youtube" && w.status)
     ? `<span class="pill ${w.status === "public" ? "active" : "bare"}" style="font-size:10px;padding:1px 6px;margin-left:4px;border-radius:4px">${w.status === "public" ? "公开" : w.status === "private" ? "私密" : "不公开"}</span>`
     : "";
+  const typeLabel = w.platform === "x"
+    ? (w.media_type === "video" ? "X · 视频" : w.media_type === "images" ? "X · 图片" : "X · 文字")
+    : (w.media_type === "video" ? "视频" : "图文");
   return `<div class="ncard">
     ${cover}
-    <span class="ncard-type">${ic(w.media_type === "video" ? "i-play" : "i-image")}${w.media_type === "video" ? "视频" : "图文"}${ytBadge}</span>
+    <span class="ncard-type">${ic(w.media_type === "video" ? "i-play" : "i-image")}${typeLabel}${ytBadge}</span>
     <div class="ncard-body">
       <p class="ncard-title" style="cursor:pointer" title="${title}" ${oc}>${title}</p>
       <div class="ncard-foot">
@@ -2562,6 +2574,8 @@ function workCard(w) {
         ${w.platform === "douyin" ? '<button class="ghost sm" onclick="monitorOwnWorkDanmaku(\'' + esc(w.item_id) + '\',' + (w.account_id || "null") + ')">' + ic("i-msg") + '弹幕</button>' : ""}
         ${w.platform === "youtube"
           ? `<button class="ghost sm" onclick="openWork('youtube','${esc(w.item_id)}')">${ic("i-play")}播放</button>`
+          : w.platform === "x"
+          ? `<button class="ghost sm" onclick="openWork('x','${esc(w.item_id)}')">${ic("i-next")}打开帖子</button>`
           : `<button class="ghost sm" onclick="openWorkComments(${w.id},'${esc(w.platform)}','${title.replace(/'/g, "\'")}')">${ic("i-msg")}评论</button>`}
         <button class="ghost sm danger" style="flex:0 0 34px;padding:0;display:grid;place-items:center" onclick="delAccountWork(${w.id}, event)" title="从本地列表中移除该作品记录">${ic("i-trash")}</button>
       </div>
@@ -2584,6 +2598,8 @@ async function syncMyWorks() {
     try { const r = await api("/api/accounts/" + HUB_ACC + "/works/sync", { method: "POST" }); toast(`同步完成:抓到 ${r.fetched} 条,新增 ${r.added}`, "ok"); }
     catch (e) { toast("同步失败:" + e.message, "err"); }
   });
+  await refreshAccounts();
+  refreshHubSummary();
   refreshMyWorks();
 }
 
@@ -2676,7 +2692,7 @@ async function refreshFollows(direction) {
     const a = ACCOUNTS.find(x => x.id === +HUB_ACC);
     const authTotal = direction === "fan" ? (a && a.follower_count) : (a && a.following_count);
     const badge = $(direction === "fan" ? "hb-fans" : "hb-following");
-    if (badge) badge.textContent = fmtNum(list.length);
+    if (badge) badge.textContent = fmtNum(PLATFORM === "x" && authTotal ? authTotal : list.length);
     const hintEl = $(direction === "fan" ? "hb-fans-hint" : "hb-following-hint");
     if (hintEl && authTotal) {
       hintEl.innerHTML = direction === "fan"
@@ -2698,7 +2714,7 @@ function followRow(f, direction) {
   return `<tr>
     <td><div class="fu-cell">
       ${f.avatar ? `<img class="avatar" src="${f.avatar}" referrerpolicy="no-referrer" alt="">` : `<span class="avatar"></span>`}
-      <div><div><b>${esc(f.nickname)}</b></div>${f.signature ? `<div class="fu-sign">${esc(f.signature)}</div>` : ""}</div>
+      <div><div><b>${esc(f.nickname)}</b>${f.platform === "x" && f.sec_uid ? ` <span class="mut">@${esc(f.sec_uid)}</span>` : ""}</div>${f.signature ? `<div class="fu-sign">${esc(f.signature)}</div>` : ""}</div>
     </div></td>
     <td>${rel}</td>
     <td class="acttd">${act}</td>
@@ -2711,6 +2727,8 @@ async function syncFollows(direction) {
     try { const r = await api(`/api/accounts/${HUB_ACC}/follows/sync?direction=${direction}`, { method: "POST" }); toast(`同步完成:抓到 ${r.fetched} 条,新增 ${r.added}`, "ok"); }
     catch (e) { toast("同步失败:" + e.message, "err"); }
   });
+  await refreshAccounts();
+  refreshHubSummary();
   refreshFollows(direction);
 }
 async function actFollow(action, edgeId) {
@@ -2723,14 +2741,21 @@ async function actFollow(action, edgeId) {
   if (!await uiConfirm({ title: label + "确认", message: `确认对「${edge.nickname}」${label}?将打开浏览器窗口执行(有头窗口,可手动过验证码)。`, danger: action === "unfollow" })) return;
   await withBusy(evtBtn(), label + "中", async () => {
     try {
-      await api("/api/account-actions", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ account_id: +HUB_ACC, action, target_uid: edge.uid, target_sec_uid: edge.sec_uid || "", target_nick: edge.nickname, run_now: true })
-      });
+      if (PLATFORM === "x") {
+        await api("/api/x/relationship", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account_id: +HUB_ACC, target: edge.sec_uid || edge.uid, action })
+        });
+      } else {
+        await api("/api/account-actions", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account_id: +HUB_ACC, action, target_uid: edge.uid, target_sec_uid: edge.sec_uid || "", target_nick: edge.nickname, run_now: true })
+        });
+      }
       toast(label + "成功", "ok");
     } catch (e) { toast(label + "失败:" + e.message, "err"); }
   });
-  refreshFollows(dir);
+  if (PLATFORM === "x") await syncFollows(dir); else refreshFollows(dir);
 }
 
 // ── 私信 ──
@@ -2782,6 +2807,7 @@ async function syncDm() {
     try { const r = await api("/api/accounts/" + HUB_ACC + "/dm/sync", { method: "POST" }); toast(`同步完成:抓到 ${r.fetched} 个会话,新增 ${r.added}`, "ok"); }
     catch (e) { toast("同步失败:" + e.message, "err"); }
   });
+  refreshHubSummary();
   refreshDmConvs();
 }
 async function openDmConv(convId) {
@@ -2789,8 +2815,8 @@ async function openDmConv(convId) {
   document.querySelectorAll("#dm-convs .dm-conv").forEach(e => e.classList.toggle("active", e.dataset.conv === convId));
   const thread = $("dm-thread");
   if (thread) thread.innerHTML = `<div class="empty"><div class="empty-t">加载聊天记录…</div></div>`;
-  // 抖音:点开会话时无头拉历史(imapi get_by_conversation),落库后再渲染
-  if (PLATFORM === "douyin") {
+  // 抖音与 X：点开会话时抓取当前会话历史，落库后再渲染。
+  if (PLATFORM === "douyin" || PLATFORM === "x") {
     try { await api(`/api/accounts/${HUB_ACC}/dm/conversations/${convId}/fetch-history`, { method: "POST" }); }
     catch (e) { /* 拉取失败也照常显示库里已有的(最后一条) */ }
   }
@@ -2838,6 +2864,11 @@ async function sendDm() {
   const inp = $("dm-input"); const text = (inp.value || "").trim();
   if (!HUB_ACC) { toast("请先选择账号", "err"); return; }
   if (!DM_CONV) { toast("请先选择左侧会话", "err"); return; }
+  if (PLATFORM === "x") {
+    await openAccountBrowser(+HUB_ACC, `https://x.com/messages/${encodeURIComponent(DM_CONV)}`);
+    toast("已打开 X 对应会话，请在真实页面发送消息", "info", 6000);
+    return;
+  }
   if (!text) return;
   const c = DM_CONVS.find(x => x.conv_id === DM_CONV) || {};
   await withBusy(evtBtn(), "发送中", async () => {
