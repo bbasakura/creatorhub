@@ -14,10 +14,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Sequence
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from ...browser.identity import Identity
 from ...browser.manager import BrowserManager
+from .risk_probe import detect_x_write_risk, dismiss_x_benign_overlay
 
 X_HOME_URL = "https://x.com/home"
 X_COMPOSE_URL = "https://x.com/compose/post"
@@ -263,12 +264,37 @@ async def fetch_x_self_profile(mgr: BrowserManager, identity: Identity) -> dict:
 
 
 async def _fill_editor(page: Any, text: str) -> Any:
-    editor = page.locator('[data-testid="tweetTextarea_0"]').first
+    editors = page.locator('[data-testid="tweetTextarea_0"]')
+    editor = None
     try:
-        await editor.wait_for(state="visible", timeout=15_000)
-    except Exception as exc:
-        raise RuntimeError("未找到 X 帖子输入框，页面可能已改版或登录失效") from exc
-    await editor.click()
+        deadline = asyncio.get_running_loop().time() + 15.0
+        while asyncio.get_running_loop().time() < deadline:
+            count = await editors.count()
+            for index in range(count - 1, -1, -1):
+                candidate = editors.nth(index)
+                try:
+                    if await candidate.is_visible():
+                        editor = candidate
+                        break
+                except Exception:
+                    continue
+            if editor is not None:
+                break
+            await page.wait_for_timeout(200)
+    except Exception:
+        editor = None
+    if editor is None:
+        raise RuntimeError("未找到 X 帖子输入框，页面可能已改版或登录失效")
+
+    # X 的回复弹层会放置 modal mask；鼠标 click 可能被 mask 拦截。
+    # DOM focus 不产生平台写副作用，也不会跨过 submit boundary。
+    try:
+        await editor.evaluate("el => el.focus()")
+    except Exception:
+        try:
+            await editor.click(timeout=3000)
+        except Exception as exc:
+            raise RuntimeError("X 输入框无法获得焦点") from exc
     try:
         await editor.fill(text)
     except Exception:
@@ -308,6 +334,9 @@ async def _submit_once(page: Any, submitted: dict, evidence: dict, on_submit=Non
         await page.wait_for_timeout(250)
     else:
         raise RuntimeError("X 发送按钮一直不可用，请检查正文、媒体或页面提示")
+    risk_marker = await detect_x_write_risk(page)
+    if risk_marker:
+        raise RuntimeError(f"risk_blocked:X 写入前检测到平台风控/验证提示: {risk_marker}")
     if callable(on_submit):
         on_submit()
     submitted["clicked"] = True
@@ -356,6 +385,9 @@ async def publish_x(
             if text:
                 await _fill_editor(page, text)
             await _set_media(page, media_paths, media_type)
+            risk_marker = await detect_x_write_risk(page)
+            if risk_marker:
+                return False, "", f"risk_blocked:X 发帖前检测到平台风控/验证提示: {risk_marker}"
             page.on("response", listener)
             try:
                 await asyncio.wait_for(
@@ -376,6 +408,62 @@ async def publish_x(
     except Exception as exc:
         status = "uncertain" if submitted["clicked"] else "failed"
         return XWriteOutcome(status, error=f"X 发布异常: {exc!r}").legacy()
+
+
+async def fetch_x_search(
+        mgr: BrowserManager, identity: Identity, query: str,
+        limit: int = 20, product: str = "Latest") -> list[dict]:
+    text = str(query or "").strip()
+    if not text:
+        raise ValueError("X 搜索关键词不能为空")
+    limit = max(1, min(80, int(limit or 20)))
+    product_key = str(product or "Latest").strip().lower()
+    filter_suffix = "&f=live" if product_key == "latest" else "&f=media" if product_key == "media" else ""
+    url = f"https://x.com/search?q={quote(text)}&src=typed_query{filter_suffix}"
+    items: list[dict] = []
+    seen: set[str] = set()
+    async with mgr.visible_page(identity, url=url) as page:
+        if await _page_logged_out(page):
+            raise RuntimeError("logged_out:X 登录态已失效，请重新登录")
+        await page.wait_for_timeout(900)
+        for _ in range(8):
+            cards = page.locator('article[data-testid="tweet"]')
+            for index in range(await cards.count()):
+                card = cards.nth(index)
+                try:
+                    link = card.locator('a[href*="/status/"]').first
+                    href = str(await link.get_attribute("href") or "")
+                    match = _STATUS_RE.search(href)
+                    if not match or match.group(1) in seen:
+                        continue
+                    tweet_id = match.group(1)
+                    seen.add(tweet_id)
+                    text_node = card.locator('[data-testid="tweetText"]').first
+                    tweet_text = str(await text_node.inner_text() or "") if await text_node.count() else ""
+                    user_node = card.locator('[data-testid="User-Name"]').first
+                    user_text = str(await user_node.inner_text() or "") if await user_node.count() else ""
+                    handle_match = re.search(r"@([A-Za-z0-9_]{1,15})", user_text)
+                    time_node = card.locator("time").first
+                    created_at = str(await time_node.get_attribute("datetime") or "") if await time_node.count() else ""
+                    items.append({
+                        "id": tweet_id,
+                        "url": f"https://x.com/i/web/status/{tweet_id}",
+                        "text": tweet_text.strip(),
+                        "author": {
+                            "handle": handle_match.group(1) if handle_match else "",
+                            "name": user_text.splitlines()[0].strip() if user_text else "",
+                            "id": "",
+                        },
+                        "created_at": created_at,
+                        "metrics": {"reply": 0, "retweet": 0, "like": 0, "view": 0},
+                    })
+                    if len(items) >= limit:
+                        return items
+                except Exception:
+                    continue
+            await page.mouse.wheel(0, 1400)
+            await page.wait_for_timeout(650)
+    return items
 
 
 async def fetch_x_following_timeline(
@@ -652,7 +740,7 @@ async def fetch_x_dm_history(
 
 async def reply_x(
         mgr: BrowserManager, identity: Identity, tweet_ref: str, text: str,
-        *, timeout_seconds: int = 90) -> tuple[bool, str, str]:
+        *, timeout_seconds: int = 90, on_submit=None) -> tuple[bool, str, str]:
     reply = str(text or "").strip()
     if not reply:
         return False, "", "X 回复内容不能为空"
@@ -674,6 +762,19 @@ async def reply_x(
                 await article.wait_for(state="visible", timeout=12_000)
             except Exception:
                 return False, "", "未找到目标推文"
+            source_link = article.locator(f'a[href*="/status/{tweet_id}"]').first
+            try:
+                if not await source_link.count():
+                    return False, "", f"X 目标推文身份校验失败: 页面首条推文不是 {tweet_id}"
+            except Exception:
+                return False, "", f"X 目标推文身份校验失败: 无法确认 {tweet_id}"
+            risk_marker = await detect_x_write_risk(page)
+            if risk_marker:
+                return False, "", f"risk_blocked:X 回复前检测到平台风控/验证提示: {risk_marker}"
+            if await dismiss_x_benign_overlay(page):
+                risk_marker = await detect_x_write_risk(page)
+                if risk_marker:
+                    return False, "", f"risk_blocked:X 回复前检测到平台风控/验证提示: {risk_marker}"
             button = article.locator('[data-testid="reply"]').first
             try:
                 await button.click(timeout=8_000)
@@ -683,7 +784,7 @@ async def reply_x(
             page.on("response", listener)
             try:
                 await asyncio.wait_for(
-                    _submit_once(page, submitted, evidence),
+                    _submit_once(page, submitted, evidence, on_submit=on_submit),
                     timeout=max(20, timeout_seconds))
             except asyncio.TimeoutError:
                 if submitted["clicked"]:

@@ -76,6 +76,20 @@ class XBatchReplier:
                 "绝不当大冤种，每次必搜优惠券👍",
             ]
             return random.choice(options)
+        if "iphone" in text or "android" in text or "安卓" in text or "苹果" in text or "充值" in text:
+            options = [
+                "苹果有抽成，安卓往往便宜一些😂",
+                "同问，苹果端确实普遍要贵一点",
+                "安卓端好像便宜几块钱，苹果税太狠了",
+            ]
+            return random.choice(options)
+        if "限制" in text or "风控" in text or "天塌了" in text or "封" in text:
+            options = [
+                "稳住心态，歇半小时再搞，别硬顶🔥",
+                "太真实了，老马的算法日常搞人心态😂",
+                "同病相怜，放慢点节奏就好了🤝",
+            ]
+            return random.choice(options)
         if "互关" in text or "诚信" in text or "浇好朋友" in text or "浇朋友" in text:
             options = [
                 "诚信互暖，一起把号做起来🤝",
@@ -84,6 +98,22 @@ class XBatchReplier:
             ]
             return random.choice(options)
         return self.engine.generate_micro_reply(tweet_text, author_name)
+
+    def enqueue_reply_draft(self, account_id: int, author_nick: str,
+                            author_handle: str, tweet_link: str,
+                            tweet_text: str, reply_text: str) -> Dict[str, Any]:
+        """Create a durable CommentTask draft. This method never writes to X."""
+        from app.services.x_workflow import create_x_reply_draft
+        result = create_x_reply_draft(
+            account_id, tweet_link, reply_text,
+            author_handle=author_handle, source_text=tweet_text)
+        result.update({
+            "author_nick": author_nick,
+            "author_handle": author_handle,
+            "tweet_link": tweet_link,
+            "reply_text": reply_text,
+        })
+        return result
 
     def record_success(self, author_nick: str, author_handle: str, tweet_link: str, tweet_text: str, reply_text: str):
         now_str = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -113,7 +143,7 @@ class XBatchReplier:
                 tweet_link=tweet_link,
                 actions=["留言"],
                 refollow_status="—",
-                note=f"100条挑战 [第{self.progress['completed_count']}条]",
+                note=f"第2轮100条 [第{self.progress['completed_count']}条]",
             )
             print(f"[Feishu] Synced record #{self.progress['completed_count']} -> {author_handle}: {ok}")
         except Exception as e:

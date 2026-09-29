@@ -42,7 +42,7 @@ def twikit_provider_capability() -> XProviderCapability:
         read=available, write=False, search=available, timeline=available,
         relationships=available, dm=False, authoritative_for_writes=False,
         note=(
-            "Optional read/search accelerator only; browser remains the write backend."
+            "Optional read/search/mentions accelerator only; browser remains the write backend."
             if available else
             "Optional dependency is not installed; browser read backend remains active."
         ),
@@ -50,9 +50,12 @@ def twikit_provider_capability() -> XProviderCapability:
 
 
 def x_provider_status() -> dict:
-    providers = [browser_provider_capability(), twikit_provider_capability()]
+    browser = browser_provider_capability()
+    twikit = twikit_provider_capability()
+    providers = [browser, twikit]
     return {
-        "default_read": "browser",
+        "default_read": "twikit" if twikit.available else "browser",
+        "fallback_read": "browser",
         "write_provider": "browser",
         "providers": [asdict(provider) for provider in providers],
     }

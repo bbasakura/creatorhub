@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 from ...browser.identity import Identity
 from ...browser.manager import BrowserManager
+from .risk_probe import detect_x_write_risk
 
 _HANDLE_RE = re.compile(r"^[A-Za-z0-9_]{1,15}$")
 _RESERVED_PATHS = {
@@ -134,6 +135,12 @@ async def set_x_following(
                     error="logged_out:X 登录态已失效，请重新登录",
                 )
             await page.wait_for_timeout(700)
+            risk_marker = await detect_x_write_risk(page)
+            if risk_marker:
+                return XRelationshipOutcome(
+                    "failed", action, handle,
+                    error=f"risk_blocked:X {action} 前检测到平台风控/验证提示: {risk_marker}",
+                )
             state, button = await _relationship_state(page)
 
             if should_follow and state in {"following", "pending"}:
