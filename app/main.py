@@ -24,7 +24,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import uuid as _uuid
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field as PydanticField, ValidationError
 from sqlalchemy import func, or_
@@ -83,6 +83,7 @@ from .platforms.x.client import (
 )
 from .engine import Downloader, MonitorEngine
 from .services.executor_instance import ExecutorInstanceLock
+from .services.runtime_health import build_runtime_readiness
 from .engine.share_downloader import (
     ShareDownloadError,
     ShareDownloader,
@@ -9781,6 +9782,15 @@ app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/ready")
+@app.get("/health/ready")
+async def ready():
+    payload = build_runtime_readiness(
+        engine=engine, browser=browser,
+        executor_lock=executor_instance_lock)
+    return JSONResponse(payload, status_code=200 if payload["ready"] else 503)
 
 
 class YoutubeConfigIn(BaseModel):

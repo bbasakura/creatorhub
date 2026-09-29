@@ -68,11 +68,18 @@ from ..risk import (
     RiskController,
 )
 from ..settings import get_setting
+from ..services.task_events import add_task_event
 from .downloader import Downloader
 from .collection import KeywordCollector
 
 MAX_AUTO_RETRY = 3
 _BROWSER_SUBMIT_MARKER = "write_submitted:browser"
+_TASK_QUEUE_TYPE_BY_MODEL = {
+    PublishTask: "publishes",
+    CommentTask: "comments",
+    AccountActionTask: "actions",
+    KeywordCollectionJob: "collections",
+}
 # 评论入库只认 CommentRecord 的列;公众号解析出的 avatar/is_elected 等额外字段
 # 若直接 **c 展开会导致 TypeError,统一在这里裁剪。
 _RECORD_KEYS = frozenset({"comment_id", "text", "user_nickname", "like_count",
@@ -263,6 +270,13 @@ class MonitorEngine:
         self._last_risk_prune_day = None
         self._task: Optional[asyncio.Task] = None
         self._running = False
+        self._started_at: datetime | None = None
+        self._last_loop_started_at: datetime | None = None
+        self._last_loop_finished_at: datetime | None = None
+        self._last_scheduler_heartbeat_at: datetime | None = None
+        self._scheduler_stage = "stopped"
+        self._last_loop_error = ""
+        self._loop_iterations = 0
 
     async def _xhs_gap(self, seconds: float | None = None) -> None:
         base = max(0.0, float(
@@ -303,8 +317,60 @@ class MonitorEngine:
     def start(self):
         if self._task is None:
             self._running = True
+            self._started_at = datetime.utcnow()
+            self._last_scheduler_heartbeat_at = self._started_at
+            self._scheduler_stage = "starting"
             self._task = asyncio.create_task(self._loop())
             log.info("监控引擎已启动")
+
+    def _mark_scheduler_progress(self, stage: str) -> None:
+        self._scheduler_stage = str(stage or "unknown")[:80]
+        self._last_scheduler_heartbeat_at = datetime.utcnow()
+
+    def runtime_status(self, *, now: datetime | None = None) -> dict:
+        current = now or datetime.utcnow()
+        heartbeat_age = None
+        if self._last_scheduler_heartbeat_at is not None:
+            heartbeat_age = max(
+                0.0, (current - self._last_scheduler_heartbeat_at).total_seconds())
+        task_alive = bool(self._task is not None and not self._task.done())
+
+        def _iso(value: datetime | None):
+            return value.isoformat() + "Z" if value else None
+
+        return {
+            "running": bool(self._running),
+            "task_alive": task_alive,
+            "started_at": _iso(self._started_at),
+            "last_loop_started_at": _iso(self._last_loop_started_at),
+            "last_loop_finished_at": _iso(self._last_loop_finished_at),
+            "last_scheduler_heartbeat_at": _iso(self._last_scheduler_heartbeat_at),
+            "scheduler_heartbeat_age_seconds": heartbeat_age,
+            "scheduler_stage": self._scheduler_stage,
+            "last_loop_error": self._last_loop_error,
+            "loop_iterations": self._loop_iterations,
+            "active": {
+                "publishing": len(self._publishing),
+                "commenting": len(self._commenting),
+                "actioning": len(self._actioning),
+                "collections": len(self._collection_tasks),
+                "scans": len(self._inflight),
+            },
+        }
+
+    @staticmethod
+    def _record_task_event(session, model, row, event_type: str, *,
+                           from_status: str = "", detail: str = "",
+                           metadata: dict | None = None) -> None:
+        queue_type = _TASK_QUEUE_TYPE_BY_MODEL.get(model)
+        row_id = getattr(row, "id", None)
+        if not queue_type or not row_id:
+            return
+        add_task_event(
+            session, queue_type=queue_type, row_id=row_id,
+            event_type=event_type, from_status=from_status,
+            to_status=str(getattr(row, "status", "") or ""),
+            actor="worker", detail=detail, metadata=metadata)
 
     def recover_interrupted_tasks(self, *, now: datetime | None = None,
                                   delay_seconds: int = 300) -> int:
@@ -334,6 +400,10 @@ class MonitorEngine:
                         row.status = "pending"
                         row.scheduled_at = scheduled_at
                         row.error = "服务重启后已恢复到待执行队列"
+                    self._record_task_event(
+                        s, model, row, "worker:recovered",
+                        from_status=transient, detail=row.error,
+                        metadata={"submitted": submitted})
                     s.add(row)
                     recovered += 1
             for job in s.exec(
@@ -348,6 +418,9 @@ class MonitorEngine:
                     job.current_step = "服务重启后等待继续"
                     job.started_at = None
                     job.finished_at = None
+                self._record_task_event(
+                    s, KeywordCollectionJob, job, "worker:recovered",
+                    from_status="running", detail=job.current_step)
                 s.add(job)
                 recovered += 1
             if recovered:
@@ -361,12 +434,19 @@ class MonitorEngine:
             row = s.get(model, task_id)
             if row is None:
                 raise RuntimeError("待提交任务已不存在")
+            before = str(getattr(row, "status", "") or "")
             row.error = _BROWSER_SUBMIT_MARKER
+            MonitorEngine._record_task_event(
+                s, model, row, "worker:submit_boundary",
+                from_status=before,
+                detail="浏览器最终提交边界已持久化；此后结果不明禁止自动重试")
             s.add(row)
             s.commit()
 
     async def stop(self):
         self._running = False
+        self._scheduler_stage = "stopping"
+        self._last_scheduler_heartbeat_at = datetime.utcnow()
         if self._task:
             self._task.cancel()
             self._task = None
@@ -376,6 +456,8 @@ class MonitorEngine:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._collection_tasks.clear()
+        self._scheduler_stage = "stopped"
+        self._last_scheduler_heartbeat_at = datetime.utcnow()
 
     # ── 账号隔离调度 ──
     @staticmethod
@@ -638,26 +720,40 @@ class MonitorEngine:
             return 0
 
     async def _loop(self):
+        stages = (
+            ("risk_prune", lambda sampled_at, sampled_epoch: self._prune_risk_events_if_due(sampled_at)),
+            ("browser_gc", lambda sampled_at, sampled_epoch: self._collect_idle_browser_sessions(sampled_epoch)),
+            ("scan_targets", lambda sampled_at, sampled_epoch: self._scan_once()),
+            ("scan_comment_watches", lambda sampled_at, sampled_epoch: self._scan_comment_watches()),
+            ("scan_danmaku", lambda sampled_at, sampled_epoch: self._scan_danmaku_watches()),
+            ("retry_failed", lambda sampled_at, sampled_epoch: self._retry_failed()),
+            ("risk_recovery", lambda sampled_at, sampled_epoch: self._process_risk_recovery()),
+            ("account_check", lambda sampled_at, sampled_epoch: self._check_accounts()),
+            ("work_health", lambda sampled_at, sampled_epoch: self._check_work_health()),
+            ("publish_queue", lambda sampled_at, sampled_epoch: self._process_publish()),
+            ("comment_rules", lambda sampled_at, sampled_epoch: self._process_comment_rules()),
+            ("comment_queue", lambda sampled_at, sampled_epoch: self._process_comment_tasks()),
+            ("action_queue", lambda sampled_at, sampled_epoch: self._process_action_tasks()),
+            ("collection_queue", lambda sampled_at, sampled_epoch: self._process_collection_jobs()),
+        )
         while self._running:
+            self._last_loop_started_at = datetime.utcnow()
+            self._last_loop_error = ""
             try:
-                sampled_at = datetime.utcnow()
+                sampled_at = self._last_loop_started_at
                 sampled_epoch = time.time()
-                self._prune_risk_events_if_due(sampled_at)
-                await self._collect_idle_browser_sessions(sampled_epoch)
-                await self._scan_once()
-                await self._scan_comment_watches()
-                await self._scan_danmaku_watches()
-                await self._retry_failed()
-                await self._process_risk_recovery()
-                await self._check_accounts()
-                await self._check_work_health()
-                await self._process_publish()
-                await self._process_comment_rules()
-                await self._process_comment_tasks()
-                await self._process_action_tasks()
-                await self._process_collection_jobs()
+                for stage, operation in stages:
+                    self._mark_scheduler_progress(stage)
+                    result = operation(sampled_at, sampled_epoch)
+                    if asyncio.iscoroutine(result):
+                        await result
             except Exception as e:
+                self._last_loop_error = repr(e)[:1000]
                 log.exception("scan loop error: %s", e)
+            finally:
+                self._last_loop_finished_at = datetime.utcnow()
+                self._loop_iterations += 1
+                self._mark_scheduler_progress("sleep")
             await asyncio.sleep(15)
 
     def enqueue_collection_job(self, job_id: int) -> bool:
@@ -757,11 +853,16 @@ class MonitorEngine:
                     job = s.get(KeywordCollectionJob, job_id)
                     if not job:
                         return {"ok": False, "error": "任务不存在"}
+                    before_status = job.status
                     job.status = "running"
                     job.current_step = "准备搜索"
                     self._clear_row_block(job)
                     job.started_at = job.started_at or datetime.utcnow()
                     job.finished_at = None
+                    self._record_task_event(
+                        s, KeywordCollectionJob, job, "worker:claimed",
+                        from_status=before_status,
+                        detail=f"{job.platform} 关键词采集任务已被单执行器领取")
                     s.add(job); s.commit()
                     account = s.get(DouyinAccount, account_id)
                 result = await self.keyword_collector.run(job_id, account)
@@ -783,6 +884,16 @@ class MonitorEngine:
                     job.status = "done"
                     job.current_step = "已完成"
                 job.finished_at = datetime.utcnow()
+                event_type = {
+                    "done": "worker:completed",
+                    "partial": "worker:partial",
+                    "failed": "worker:failed",
+                    "canceled": "worker:canceled",
+                }.get(job.status, "worker:state_changed")
+                self._record_task_event(
+                    s, KeywordCollectionJob, job, event_type,
+                    from_status="running",
+                    detail=str(job.error or job.current_step or "")[:1000])
                 s.add(job); s.commit()
                 status = job.status
                 job_error = job.error or ""
@@ -811,6 +922,10 @@ class MonitorEngine:
                     else:
                         job.status = "pending"
                         job.current_step = "服务停止，等待恢复"
+                    self._record_task_event(
+                        s, KeywordCollectionJob, job,
+                        "worker:canceled" if job.status == "canceled" else "worker:deferred",
+                        from_status="running", detail=job.current_step)
                     s.add(job); s.commit()
             raise
         except Exception as exc:
@@ -823,6 +938,10 @@ class MonitorEngine:
                     job.status = "partial" if job.content_count else "failed"
                     job.current_step = "异常中止"
                     job.finished_at = datetime.utcnow()
+                    self._record_task_event(
+                        s, KeywordCollectionJob, job,
+                        "worker:partial" if job.status == "partial" else "worker:failed",
+                        from_status="running", detail=str(exc)[:1000])
                     s.add(job); s.commit()
             return {"ok": False, "error": str(exc)}
 
@@ -2800,7 +2919,12 @@ class MonitorEngine:
                 files = _loads_list(t.media_json)
                 if len(files) != 1:
                     return {"ok": False, "error": "YouTube需要一个视频"}
+                before_status = t.status
                 t.status = "publishing"
+                self._record_task_event(
+                    s, PublishTask, t, "worker:claimed",
+                    from_status=before_status,
+                    detail="YouTube 发布任务已被单执行器领取")
                 s.add(t); s.commit()
                 ok, url, err = await upload_video(t.id, acc.credential_ref, acc.sec_uid,
                     files[0], t.title, t.desc, [x.strip() for x in t.topics.split(",") if x.strip()],
@@ -2846,8 +2970,13 @@ class MonitorEngine:
             operation = getattr(t, "operation", "") or "publish"
             platform = t.platform
             files = _loads_list(t.media_json)
+            before_status = t.status
             t.status = "publishing"; t.error = ""
             self._clear_row_block(t)
+            self._record_task_event(
+                s, PublishTask, t, "worker:claimed",
+                from_status=before_status,
+                detail=f"{platform} 发布任务已被单执行器领取")
             s.add(t); s.commit()
 
         if platform == "x":
@@ -2958,6 +3087,7 @@ class MonitorEngine:
             t = s.get(PublishTask, task_id)
             if t:
                 account_id = t.account_id
+                before_status = t.status
                 if ok:
                     t.status = "done"
                     if platform == "wechat_mp" and "#draft=" in url:
@@ -2980,6 +3110,17 @@ class MonitorEngine:
                 t.result_url = url or t.result_url
                 t.error = "" if ok else err
                 t.source_revision += 1
+                event_type = {
+                    "done": "worker:completed",
+                    "uncertain": "worker:uncertain",
+                    "pending": "worker:deferred",
+                    "failed": "worker:failed",
+                }.get(t.status, "worker:state_changed")
+                self._record_task_event(
+                    s, PublishTask, t, event_type,
+                    from_status=before_status,
+                    detail="" if ok else str(err or "")[:1000],
+                    metadata={"platform": platform, "result_url": url or ""})
                 s.add(t); s.commit()
         try:
             from ..services.d2y import reconcile_d2y
@@ -3794,8 +3935,13 @@ class MonitorEngine:
             # commit 会 expire 本 session 内的实例,先把所需原语取出来再 commit
             native_mode = acc.identity_mode == "native"
             identity = self.browser.identity_for(acc)
+            before_status = t.status
             t.status = "doing"; t.method = "browser"; t.error = ""
             self._clear_row_block(t)
+            self._record_task_event(
+                s, AccountActionTask, t, "worker:claimed",
+                from_status=before_status,
+                detail=f"{platform} {action} 已被单执行器领取")
             s.add(t); s.commit()
 
         try:
@@ -3845,6 +3991,7 @@ class MonitorEngine:
             t = s.get(AccountActionTask, task_id)
             account_id = t.account_id if t else None
             if t:
+                before_status = t.status
                 if ok:
                     t.status = "done"
                 elif uncertain:
@@ -3860,6 +4007,17 @@ class MonitorEngine:
                 t.error = "" if ok else err
                 t.result = "ok" if ok else ""
                 t.done_at = datetime.utcnow() if ok else t.done_at
+                event_type = {
+                    "done": "worker:completed",
+                    "uncertain": "worker:uncertain",
+                    "pending": "worker:deferred",
+                    "failed": "worker:failed",
+                }.get(t.status, "worker:state_changed")
+                self._record_task_event(
+                    s, AccountActionTask, t, event_type,
+                    from_status=before_status,
+                    detail="" if ok else str(err or "")[:1000],
+                    metadata={"platform": platform, "action": action})
                 s.add(t); s.commit()
                 if ok and action in ("follow", "unfollow"):
                     # 同一个人可能同时有两行:关注列表(following)+ 粉丝列表(fan)。
@@ -3973,8 +4131,13 @@ class MonitorEngine:
             proxy = acc.proxy or ""
             native_mode = acc.identity_mode == "native"
             identity = self.browser.identity_for(acc)
+            before_status = t.status
             t.status = "doing"; t.error = ""
             self._clear_row_block(t)
+            self._record_task_event(
+                s, CommentTask, t, "worker:claimed",
+                from_status=before_status,
+                detail=f"{platform} 评论任务已被单执行器领取")
             s.add(t); s.commit()
 
         ok, result, err, method = False, "", "", ""
@@ -4052,6 +4215,7 @@ class MonitorEngine:
             t = s.get(CommentTask, task_id)
             account_id = t.account_id if t else None
             if t:
+                before_status = t.status
                 # “立即发”在 manual 模式下也只能回到草稿,不能变成失败后重试循环。
                 if ok:
                     t.status = "done"
@@ -4071,6 +4235,18 @@ class MonitorEngine:
                 t.error = "" if ok else err
                 t.method = method
                 t.done_at = datetime.utcnow() if ok else t.done_at
+                event_type = {
+                    "done": "worker:completed",
+                    "draft": "worker:draft",
+                    "uncertain": "worker:uncertain",
+                    "pending": "worker:deferred",
+                    "failed": "worker:failed",
+                }.get(t.status, "worker:state_changed")
+                self._record_task_event(
+                    s, CommentTask, t, event_type,
+                    from_status=before_status,
+                    detail="" if ok else str(err or "")[:1000],
+                    metadata={"platform": platform, "method": method})
                 s.add(t); s.commit()
         if ok:
             self.risk.record_success(account_id, OperationKind.COMMENT)
