@@ -84,6 +84,7 @@ from .platforms.x.client import (
 from .engine import Downloader, MonitorEngine
 from .services.executor_instance import ExecutorInstanceLock
 from .services.runtime_health import build_runtime_readiness
+from .services.runtime_context import bind_runtime, clear_runtime
 from .engine.share_downloader import (
     ShareDownloadError,
     ShareDownloader,
@@ -533,6 +534,7 @@ async def lifespan(app: FastAPI):
         fingerprint_default_runtime_id=default_runtime_id)
     await browser.start()
     engine = MonitorEngine(cfg, browser)
+    bind_runtime(browser=browser, engine=engine)
     startup_now = datetime.utcnow()
     pruned_risk_events = engine._prune_risk_events_if_due(startup_now)
     if pruned_risk_events:
@@ -548,6 +550,7 @@ async def lifespan(app: FastAPI):
         await im_receiver.stop_all()
     if engine:
         await engine.stop()
+    clear_runtime()
     if browser:
         await browser.stop()
     if executor_instance_lock:

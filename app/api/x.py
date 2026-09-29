@@ -20,17 +20,24 @@ from ..platforms.x.client import (
 )
 from ..platforms.x.relationship import normalize_x_handle, set_x_following
 from ..risk import OperationKind
+from ..services.runtime_context import get_runtime
+from ..platforms.x.providers import x_provider_status
 
 router = APIRouter(prefix="/api/x", tags=["x"])
 
 
 def _runtime():
-    from .. import main as main_app
-    if main_app.browser is None:
+    runtime = get_runtime()
+    if runtime is None or runtime.browser is None:
         raise HTTPException(503, "浏览器未就绪")
-    if main_app.engine is None:
+    if runtime.engine is None:
         raise HTTPException(503, "引擎未就绪")
-    return main_app.browser, main_app.engine
+    return runtime.browser, runtime.engine
+
+
+@router.get("/providers")
+async def providers():
+    return {"ok": True, **x_provider_status()}
 
 
 def _x_account(account_id: int) -> DouyinAccount:
