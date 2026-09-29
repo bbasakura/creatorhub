@@ -821,7 +821,7 @@ async function exportModuleReport(module, full = false, explicitBtn = null) {
 }
 
 let PLATFORM = "douyin";
-const PF_NAME = { youtube: "YouTube", douyin: "抖音", xhs: "小红书", kuaishou: "快手", shipinhao: "视频号", wechat_mp: "微信公众号" };
+const PF_NAME = { youtube: "YouTube", x: "X", douyin: "抖音", xhs: "小红书", kuaishou: "快手", shipinhao: "视频号", wechat_mp: "微信公众号" };
 let CURRENT_TAB = "overview";
 const PAGE_META = {
   overview: {
@@ -876,11 +876,11 @@ function updatePageContext(name = CURRENT_TAB) {
   document.title = `${meta.title} · ${PF_NAME[PLATFORM] || ""} | CreatorHub`;
 }
 // 是否支持「发布」面板(四平台均有)
-function pfHasPublish(pf) { return pf === "youtube" || pf === "xhs" || pf === "kuaishou" || pf === "douyin" || pf === "shipinhao" || pf === "wechat_mp"; }
+function pfHasPublish(pf) { return pf === "youtube" || pf === "x" || pf === "xhs" || pf === "kuaishou" || pf === "douyin" || pf === "shipinhao" || pf === "wechat_mp"; }
 // 视频号只有「本账号」数据(助手接口本账号),不支持监控他人作品/评论
 function pfIsChannels(pf) { return pf === "shipinhao"; }
 function switchPlatform(pf) {
-  if (!["douyin", "xhs", "kuaishou", "shipinhao", "wechat_mp", "youtube"].includes(pf)) pf = "douyin";
+  if (!["douyin", "xhs", "kuaishou", "shipinhao", "wechat_mp", "youtube", "x"].includes(pf)) pf = "douyin";
   PLATFORM = pf;
   CONTENT_SRC = CONTENT_GROUP = CONTENT_TAG = "";
   COMMENT_SRC = COMMENT_GROUP = COMMENT_TAG = "";
@@ -913,6 +913,7 @@ function applyPlatformUI() {
   document.body.classList.toggle("pf-shipinhao", PLATFORM === "shipinhao");
   document.body.classList.toggle("pf-wechat_mp", PLATFORM === "wechat_mp");
   document.body.classList.toggle("pf-youtube", PLATFORM === "youtube");
+  document.body.classList.toggle("pf-x", PLATFORM === "x");
   // 视频号:只有本账号数据,隐藏「监控他人作品/评论」相关入口(.notsh-only)
   document.body.classList.toggle("pf-channels", pfIsChannels(PLATFORM));
   if (PLATFORM !== "douyin" && CURRENT_TAB === "danmaku") switchTab("overview");
@@ -927,6 +928,7 @@ function applyPlatformUI() {
   document.querySelectorAll(".ks-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "kuaishou"));
   document.querySelectorAll(".sh-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "shipinhao"));
   document.querySelectorAll(".mp-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "wechat_mp"));
+  document.querySelectorAll(".x-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "x"));
   // 公众号固定四类草稿：文章 / 贴图 / 视频 / 播客。
   const pubType = $("pub-type");
   if (pubType) {
@@ -934,7 +936,9 @@ function applyPlatformUI() {
     const podcastOpt = pubType.querySelector('option[value="podcast"]');
     const imgOpt = pubType.querySelector('option[value="images"]');
     const vidOpt = pubType.querySelector('option[value="video"]');
+    const textOpt = pubType.querySelector('option[value="text"]');
     if (PLATFORM === "wechat_mp") {
+      if (textOpt) textOpt.classList.add("hidden");
       if (artOpt) { artOpt.classList.remove("hidden"); artOpt.textContent = "文章"; }
       if (podcastOpt) { podcastOpt.classList.remove("hidden"); podcastOpt.textContent = "播客"; }
       if (imgOpt) imgOpt.textContent = "贴图";
@@ -942,13 +946,18 @@ function applyPlatformUI() {
     } else {
       if (artOpt) artOpt.classList.add("hidden");
       if (podcastOpt) podcastOpt.classList.add("hidden");
-      if (imgOpt) imgOpt.textContent = "图集 (多图)";
+      if (textOpt) textOpt.classList.toggle("hidden", PLATFORM !== "x");
+      if (imgOpt) imgOpt.textContent = PLATFORM === "x" ? "图片（1-4 张）" : "图集 (多图)";
       if (vidOpt) vidOpt.textContent = "视频";
+      if (PLATFORM === "x" && (pubType.value === "article" || pubType.value === "podcast")) pubType.value = "text";
+      if (PLATFORM !== "x" && pubType.value === "text") pubType.value = "images";
       if (pubType.value === "article" || pubType.value === "podcast") pubType.value = "images";
     }
   }
   document.querySelectorAll(".notsh-only").forEach(e => e.classList.toggle("hidden", pfIsChannels(PLATFORM)));
   document.querySelectorAll(".notyt-only").forEach(e => e.classList.toggle("hidden", PLATFORM === "youtube"));
+  document.querySelectorAll('[data-tab="hub"], [data-tab="monitors"], [data-tab="comments"], [data-tab="autocomment"]').forEach(e => e.classList.toggle("hidden", PLATFORM === "x"));
+  if (PLATFORM === "x" && ["hub", "monitors", "comments", "autocomment"].includes(CURRENT_TAB)) switchTab("publish");
   if (PLATFORM === "youtube" && HUB_TAB === "dm") switchHubTab("myworks");
   const fLabel = $("hb-following-label");
   if (fLabel) fLabel.textContent = PLATFORM === "youtube" ? "订阅频道" : "关注";
@@ -959,13 +968,13 @@ function applyPlatformUI() {
   // 发布面板入口:抖音 / 小红书 / 快手均显示
   document.querySelectorAll(".pub-only").forEach(e => e.classList.toggle("hidden", !pfHasPublish(PLATFORM)));
   // 发布面板文案随平台切换
-  const ks = PLATFORM === "kuaishou", dy = PLATFORM === "douyin", sph = PLATFORM === "shipinhao"; const mp = PLATFORM === "wechat_mp";
+  const ks = PLATFORM === "kuaishou", dy = PLATFORM === "douyin", sph = PLATFORM === "shipinhao"; const mp = PLATFORM === "wechat_mp", isX = PLATFORM === "x";
   const pubSub = $("pub-head-sub");
   if (pubSub) pubSub.textContent = dy ? "上传图集 / 视频到抖音创作平台(实验性)"
     : ks ? "上传图集 / 视频到快手创作平台(实验性)"
-    : sph ? "上传视频到视频号助手(实验性)" : mp ? "推送文章 / 贴图 / 视频 / 播客到公众号草稿箱" : "上传图集 / 视频到小红书(实验性)";
-  if ($("pub-head-lead")) $("pub-head-lead").textContent = (ks || dy || sph) ? "发布作品" : mp ? "发布" : "发布笔记";
-  if ($("pub-title")) $("pub-title").placeholder = (ks || dy || sph) ? "给作品起个标题" : "给笔记起个标题";
+    : sph ? "上传视频到视频号助手(实验性)" : mp ? "推送文章 / 贴图 / 视频 / 播客到公众号草稿箱" : isX ? "发布纯文本 / 图片 / 视频到 X" : "上传图集 / 视频到小红书(实验性)";
+  if ($("pub-head-lead")) $("pub-head-lead").textContent = isX ? "发布 X 帖子" : (ks || dy || sph) ? "发布作品" : mp ? "发布" : "发布笔记";
+  if ($("pub-title")) $("pub-title").placeholder = isX ? "可选：一句开头" : (ks || dy || sph) ? "给作品起个标题" : "给笔记起个标题";
   const pubHintText = dy
     ? "发布通过自动化抖音创作平台完成。首次登录或触发验证时，请在弹出窗口中完成短信验证或扫码；视频上传后还需等待转码。注意：定时发布可能因本人验证而暂停，建议发布时在场。"
     : ks
@@ -973,6 +982,7 @@ function applyPlatformUI() {
     : sph
     ? "发布通过自动化视频号助手完成。视频需等待转码，发布前可能要求补充封面、实名或人脸验证，请在弹出窗口中处理。注意：平台页面改版后可能需要重新适配。"
     : mp ? "公众号仅保存草稿。文章需封面，贴图需图片，视频需视频，播客需音频。"
+    : isX ? "X 使用账号独立的可见 Chrome Profile 发布。发送只点击一次；结果不明确时任务会停在“结果待确认”，不会自动重复发帖。"
     : "发布通过账号独立的可见 Chrome 页面完成。提交只点击一次；若显示“结果待确认”，请先到小红书核对，系统不会自动重发。";
   const pubHint = $("pub-hint");
   if (pubHint) {
@@ -991,6 +1001,11 @@ function applyPlatformUI() {
     if (hint) hint.textContent = "需Google OAuth授权；未审核API项目可能仅允许私密上传。";
     onPubType();
     $("pub-title").maxLength = 100;
+  } else if (isX) {
+    $("pub-type").disabled = false;
+    $("pub-when").disabled = false;
+    if (!["text", "images", "video"].includes($("pub-type").value)) $("pub-type").value = "text";
+    onPubType();
   } else if (mp) {
     $("pub-type").disabled = false;
     $("pub-when").disabled = false;
@@ -1025,10 +1040,10 @@ function applyPlatformUI() {
     : PLATFORM === "kuaishou" ? "作品链接=盯单条作品;主页或 user_id=盯创作者近期作品"
     : "作品链接=盯单条视频;主页链接或 sec_uid=盯账号近期作品";
   const ckl = $("ck-label");
-  if (ckl) ckl.textContent = PLATFORM === "xhs"
+  if (ckl) ckl.textContent = PLATFORM === "x" ? "完整 X Cookie（需 auth_token）" : PLATFORM === "xhs"
     ? "完整 Cookie(含 a1;发布需创作者会话)"
     : PLATFORM === "kuaishou" ? "完整 Cookie(含 userId 与 web_st)" : "完整 Cookie(含 sessionid)";
-  if ($("ck-val")) $("ck-val").placeholder = PLATFORM === "xhs"
+  if ($("ck-val")) $("ck-val").placeholder = PLATFORM === "x" ? "从 x.com 已登录会话复制完整 Cookie" : PLATFORM === "xhs"
     ? "从 creator.xiaohongshu.com 登录后复制完整 Cookie"
     : PLATFORM === "kuaishou" ? "从 www.kuaishou.com 登录后复制完整 Cookie"
     : "从浏览器开发者工具复制完整 Cookie";
@@ -1350,6 +1365,23 @@ async function startCreatorLogin() {
 }
 
 // ─── 小红书扫码登录 ───
+async function startXLogin() {
+  const browserBackend = await choosePreLoginBrowserBackend();
+  if (browserBackend === null) return;
+  const proxy = await choosePreLoginProxy();
+  if (proxy === null) return;
+  const fingerprint = await configurePreLoginFingerprint(browserBackend);
+  if (fingerprint === null) return;
+  $("cookiebox").style.display = "none";
+  $("qrbox").style.display = "block";
+  $("qrstatus").textContent = "正在打开 X 登录窗口…";
+  try {
+    const res = await api(loginStartUrl("/api/login/x/start", proxy, browserBackend), loginStartOptions(fingerprint));
+    $("qrstatus").innerHTML = `${ic("i-eye")} <b>X 已打开</b>，请在独立浏览器窗口完成登录。登录成功后会保存该账号 Profile，可用于时间线、发帖和单条回复。`;
+    pollLogin(res.task_id);
+  } catch (e) { $("qrstatus").textContent = "启动失败: " + e.message; toast("X 登录启动失败:" + e.message, "err"); }
+}
+
 async function startXhsLogin() {
   const browserBackend = await choosePreLoginBrowserBackend();
   if (browserBackend === null) return;
@@ -1824,8 +1856,9 @@ async function refreshAccounts() {
     const isXhs = a.platform === "xhs";
     const isKs = a.platform === "kuaishou";
     const isChannels = a.platform === "shipinhao";
-    const idName = isXhs ? "小红书号 " : isKs ? "快手号 " : isChannels ? "视频号 " : "抖音号 ";
-    const secName = isChannels ? "finder_id " : (isXhs || isKs) ? "user_id " : "sec_uid ";
+    const isX = a.platform === "x";
+    const idName = isX ? "X @" : isXhs ? "小红书号 " : isKs ? "快手号 " : isChannels ? "视频号 " : "抖音号 ";
+    const secName = isX ? "handle @" : isChannels ? "finder_id " : (isXhs || isKs) ? "user_id " : "sec_uid ";
     const idline = [
       a.douyin_id ? idName + esc(a.douyin_id) : null,
       a.sec_uid ? secName + esc(a.sec_uid).slice(0, 16) + "…" : null,
@@ -1845,7 +1878,9 @@ async function refreshAccounts() {
       `被 ${a.monitor_count} 个监控使用`,
       a.created_at ? "登录于 " + new Date(a.created_at + "Z").toLocaleString() : null,
     ].filter(Boolean).join(" · ");
-    const pill = isXhs
+    const pill = isX
+      ? `<span class="pill active has-ic ic-text" title="X 登录态可用于时间线、发布和单条回复">${ic("i-card")}X 账号</span>`
+      : isXhs
       ? (a.has_creator
           ? `<span class="pill active has-ic ic-text" title="已完成创作者登录,可发布">${ic("i-film")}创作者号</span>`
           : `<span class="pill bare has-ic ic-text" title="仅监控/读取,未授权创作平台,不能发布">${ic("i-eye")}读取号</span>`)
@@ -1901,8 +1936,8 @@ async function refreshAccounts() {
         ${reloginButton}
         ${creatorLoginButton}
         <button class="ghost sm" onclick="refreshProfile(${a.id})">刷新资料</button>
-        <button class="ghost sm" onclick="openAccountHub(${a.id})" title="查看该账号的作品 / 关注 / 粉丝 / 私信">数据</button>
-        <button class="ghost sm" onclick="openAccountBrowser(${a.id})" title="用该账号登录态弹出真实浏览器窗口,手动收发私信 / 维护 / 抓接口(关窗即保存)">打开浏览器</button>
+        ${isX ? "" : `<button class="ghost sm" onclick="openAccountHub(${a.id})" title="查看该账号的作品 / 关注 / 粉丝 / 私信">数据</button>`}
+        <button class="ghost sm" onclick="openAccountBrowser(${a.id})" title="用该账号登录态弹出真实浏览器窗口,手动维护或核对平台状态(关窗即保存)">打开浏览器</button>
         <button class="ghost sm" onclick="setBrowserBackend(${a.id})" title="选择本地 Chrome/Patchright 或开源 Fingerprint Chromium 内核">环境</button>
         <button class="ghost sm" onclick="manageFingerprint(${a.id})" title="根据账号当前出口 IP 生成稳定指纹、时区、语言和地理位置">指纹</button>
         ${environmentCheck && environmentCheck.enabled ? `<button class="ghost sm" onclick="checkBrowserEnvironment(${a.id})" title="在该账号独立 Profile 中打开 BrowserScan，查看实际 IP、时区、WebRTC 和指纹">环境检测</button>` : ""}
@@ -5944,7 +5979,8 @@ function populatePubAcc() {
   // 小红书发布需创作者号;抖音 / 快手发布有登录态即可(走浏览器自动化)
   const list = PLATFORM === "xhs" ? ACCOUNTS.filter(a => a.has_creator) : ACCOUNTS;
   const ph = list.length ? "选择发布账号"
-    : (PLATFORM === "kuaishou" ? "请先完成「快手扫码/创作者登录」"
+    : (PLATFORM === "x" ? "请先完成「X 登录」"
+      : PLATFORM === "kuaishou" ? "请先完成「快手扫码/创作者登录」"
       : PLATFORM === "douyin" ? "请先完成「抖音扫码/创作者登录」" : "请先完成「小红书创作者登录」");
   sel.innerHTML = accOptions(list, ph);
   if (list.length) sel.value = String(list[0].id);
@@ -5954,7 +5990,14 @@ function onPubType() {
   const v = $("pub-type").value, inp = $("pub-files"), lbl = $("pub-files-label");
   if (!inp) return;
   const isMp = PLATFORM === "wechat_mp";
-  if (v === "article") {
+  const textOnly = v === "text" && PLATFORM === "x";
+  if ($("pub-drop")) $("pub-drop").classList.toggle("hidden", textOnly);
+  if (v === "text" && PLATFORM === "x") {
+    inp.accept = ""; inp.multiple = false;
+    lbl.textContent = "纯文本帖无需选择媒体文件";
+    $("pub-title").maxLength = 280;
+    $("pub-title").previousElementSibling.textContent = "开头（可选，总正文 ≤ 280 字符）";
+  } else if (v === "article") {
     inp.accept = "image/*"; inp.multiple = true;
     lbl.textContent = "选择文章封面/插图（第一张为封面）";
     $("pub-title").maxLength = 64;
@@ -5967,12 +6010,12 @@ function onPubType() {
   } else if (v === "video") {
     inp.accept = "video/*"; inp.multiple = false;
     lbl.textContent = "选择视频文件(单个)";
-    $("pub-title").maxLength = isMp ? 64 : 20;
-    $("pub-title").previousElementSibling.textContent = isMp ? "视频标题(≤ 64 字)" : "标题";
+    $("pub-title").maxLength = PLATFORM === "x" ? 280 : (isMp ? 64 : 20);
+    $("pub-title").previousElementSibling.textContent = PLATFORM === "x" ? "开头（可选，总正文 ≤ 280 字符）" : (isMp ? "视频标题(≤ 64 字)" : "标题");
   } else {
     inp.accept = "image/*"; inp.multiple = true;
-    lbl.textContent = isMp ? "选择贴图图片(可多选)" : "选择图片(可多选,最多 18 张)";
-    $("pub-title").maxLength = isMp ? 20 : 64;
+    lbl.textContent = PLATFORM === "x" ? "选择图片（1-4 张）" : (isMp ? "选择贴图图片(可多选)" : "选择图片(可多选,最多 18 张)");
+    $("pub-title").maxLength = PLATFORM === "x" ? 280 : (isMp ? 20 : 64);
     $("pub-title").previousElementSibling.textContent = isMp ? "标题(≤ 20 字)" : "标题";
   }
   pubFilesClear();
@@ -5984,7 +6027,7 @@ function pubAddFiles(files) {
   for (const f of files) {
     if (isVideo) { pubFilesDT = new DataTransfer(); pubFilesDT.items.add(f); break; }
     if ([...pubFilesDT.files].some(x => x.name === f.name && x.size === f.size)) continue;
-    if (pubFilesDT.files.length >= 18) break;
+    if (pubFilesDT.files.length >= (PLATFORM === "x" ? 4 : 18)) break;
     pubFilesDT.items.add(f);
   }
   _pubSync();
@@ -6015,7 +6058,7 @@ async function addPublish() {
   const acc = $("pub-acc").value;
   if (!acc) { toast("请选择" + (PF_NAME[PLATFORM] || "发布") + "账号", "err"); return; }
   const files = $("pub-files").files;
-  if (!files.length) { toast(PLATFORM === "wechat_mp" ? "请先选择该草稿类型需要的封面/图片/视频/音频文件" : "请先选择要发布的文件", "err"); return; }
+  if (!files.length && !(PLATFORM === "x" && $("pub-type").value === "text")) { toast(PLATFORM === "wechat_mp" ? "请先选择该草稿类型需要的封面/图片/视频/音频文件" : "请先选择要发布的文件", "err"); return; }
   const btn = evtBtn();
   $("pub-msg").textContent = "上传中…";
   await withBusy(btn, "上传中", async () => {
@@ -6058,6 +6101,76 @@ async function addPublish() {
   });
   refreshPublish();
 }
+let X_TIMELINE = [];
+async function suggestXPost() {
+  try {
+    const r = await api("/api/x/post/suggest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    $("pub-type").value = "text"; onPubType();
+    $("pub-title").value = ""; $("pub-desc").value = r.text || "";
+    toast("已生成 X 文案，确认后再加入发布队列", "ok");
+  } catch (e) { toast("生成失败:" + e.message, "err"); }
+}
+async function loadXTimeline() {
+  const acc = $("pub-acc").value;
+  if (!acc) { toast("请先选择 X 账号", "err"); return; }
+  $("x-timeline-msg").textContent = "正在读取 Following 时间线…";
+  try {
+    const r = await api(`/api/x/timeline?account_id=${encodeURIComponent(acc)}&limit=20`);
+    X_TIMELINE = r.items || [];
+    $("x-timeline").innerHTML = X_TIMELINE.map((t, i) => `<div class="card" style="margin:0;padding:12px"><div><b>${esc(t.author || (t.handle ? "@" + t.handle : "X 用户"))}</b>${t.handle ? ` <span class="mut">@${esc(t.handle)}</span>` : ""}</div><div style="white-space:pre-wrap;margin:8px 0">${esc(t.text || "(无文字)")}</div><div class="row"><input id="x-reply-${i}" maxlength="280" placeholder="先生成建议，或自己写回复" style="flex:1"><button class="ghost sm" onclick="xSuggestReply(${i})">生成回复</button><button class="sm" onclick="xSendReply(${i})">回复</button><a class="ghost sm" href="${esc(t.url)}" target="_blank">打开</a></div></div>`).join("");
+    $("x-timeline-msg").textContent = X_TIMELINE.length ? `已读取 ${X_TIMELINE.length} 条` : "当前未读取到 Following 推文";
+  } catch (e) { $("x-timeline-msg").textContent = "读取失败: " + e.message; toast("X 时间线读取失败:" + e.message, "err"); }
+}
+async function xSuggestReply(i) {
+  const t = X_TIMELINE[i]; if (!t) return;
+  try {
+    const r = await api("/api/x/reply/suggest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tweet_text: t.text || "", author_name: t.author || "" }) });
+    $("x-reply-" + i).value = r.text || "";
+  } catch (e) { toast("回复建议生成失败:" + e.message, "err"); }
+}
+async function xSendReply(i) {
+  const t = X_TIMELINE[i]; if (!t) return;
+  const input = $("x-reply-" + i); const text = (input?.value || "").trim();
+  if (!text) { toast("请先填写回复内容", "err"); return; }
+  if (!await uiConfirm({ title: "发送 X 回复", message: `确认回复 @${t.handle || "该用户"}：\n${text}`, okText: "回复" })) return;
+  const acc = $("pub-acc").value;
+  try {
+    const r = await api("/api/x/reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account_id: +acc, tweet_ref: t.url || t.tweet_id, text, author_handle: t.handle || "" }) });
+    toast(r.uncertain ? "已提交，但结果待核对" : "回复成功 ✓", r.uncertain ? "info" : "ok", 6000);
+  } catch (e) { toast("回复失败:" + e.message, "err"); }
+}
+
+async function xRelationship(action) {
+  const acc = $("pub-acc").value;
+  if (!acc) { toast("请先选择 X 账号", "err"); return; }
+  const input = $("x-rel-handle");
+  const handle = (input?.value || "").trim();
+  if (!handle) { toast("请输入 @handle 或 X 用户主页链接", "err"); return; }
+  const isFollow = action === "follow";
+  const verb = isFollow ? "关注" : "取关";
+  const targetLabel = handle.startsWith("@") ? handle : "@" + handle;
+  if (!await uiConfirm({
+    title: "X " + verb,
+    message: "确认对 " + targetLabel + " 执行“" + verb + "”？",
+    okText: verb,
+  })) return;
+  try {
+    const r = await api("/api/x/relationship", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account_id: +acc, handle, action }),
+    });
+    if (input && r.handle) input.value = "@" + r.handle;
+    if (r.uncertain) {
+      toast(verb + "已触发，但结果待核对", "info", 6000);
+    } else if (!r.changed) {
+      toast(isFollow ? "该账号已经处于关注状态" : "该账号已经处于未关注状态", "info");
+    } else {
+      toast(verb + "成功 ✓", "ok");
+    }
+  } catch (e) { toast(verb + "失败:" + e.message, "err"); }
+}
+
 const PUB_ST = { pending: "排队中", publishing: "发布中", uncertain: "结果待确认", done: "已发布", failed: "失败", canceled: "已取消" };
 const YT_PROCESSING = { processing: "平台处理中", succeeded: "处理完成", failed: "处理失败", terminated: "处理终止", unknown: "处理状态未知" };
 function youtubeUploadMeta(task) {
@@ -6093,8 +6206,8 @@ async function editPublish(id) {
     $("ui-body").innerHTML = `
       <div><label class="field" for="ep-account">发布账号</label>
         <select id="ep-account">${accountOptions}</select></div>
-      <div><label class="field" for="ep-title">标题（≤${task.platform === "wechat_mp" && ["article", "video"].includes(task.media_type) ? 64 : 20} 字）</label>
-        <input id="ep-title" maxlength="${task.platform === "wechat_mp" && ["article", "video"].includes(task.media_type) ? 64 : 20}" value="${esc(task.title || "")}"></div>
+      <div><label class="field" for="ep-title">${task.platform === "x" ? "开头（可选）" : "标题"}（≤${task.platform === "x" ? 280 : task.platform === "wechat_mp" && ["article", "video"].includes(task.media_type) ? 64 : 20} 字）</label>
+        <input id="ep-title" maxlength="${task.platform === "x" ? 280 : task.platform === "wechat_mp" && ["article", "video"].includes(task.media_type) ? 64 : 20}" value="${esc(task.title || "")}"></div>
       <div><label class="field" for="ep-desc">正文</label>
         <textarea id="ep-desc" rows="4">${esc(task.desc || "")}</textarea></div>
       <div><label class="field" for="ep-topics">话题</label>
@@ -6135,7 +6248,7 @@ async function refreshPublish() {
   if ($("tb-pub")) $("tb-pub").textContent = rows.length;
   $("pub-table").innerHTML = rows.map(t => `<tr>
     <td class="wrap" style="max-width:220px">${esc(t.title || "(无标题)")}</td>
-    <td>${t.platform === "wechat_mp" ? ({article: "文章", images: "贴图", video: "视频", podcast: "播客"}[t.media_type] || esc(t.media_type)) : t.media_type === "video" ? "视频" : "图文"}</td>
+    <td>${t.platform === "wechat_mp" ? ({article: "文章", images: "贴图", video: "视频", podcast: "播客"}[t.media_type] || esc(t.media_type)) : t.platform === "x" ? ({text: "纯文本", images: "图片", video: "视频"}[t.media_type] || esc(t.media_type)) : t.media_type === "video" ? "视频" : "图文"}</td>
     <td class="num">${t.media_count}</td>
     <td>${t.source_platform ? esc(t.source_platform) + " 转发" : "手动"}</td>
     <td class="mut num">${t.scheduled_at ? new Date(t.scheduled_at).toLocaleString() : "尽快"}</td>
@@ -6932,7 +7045,7 @@ switchTab((() => {
 switchHubTab(HUB_TAB);   // 恢复上次停留的子标签(我的作品/关注/粉丝/私信)
 
 // restore last-selected platform (default: 抖音)
-PLATFORM = (() => { try { const p = localStorage.getItem("dym-pf"); return ["xhs", "douyin", "kuaishou", "shipinhao", "wechat_mp", "youtube"].includes(p) ? p : "douyin"; } catch (e) { return "douyin"; } })();
+PLATFORM = (() => { try { const p = localStorage.getItem("dym-pf"); return ["xhs", "douyin", "kuaishou", "shipinhao", "wechat_mp", "youtube", "x"].includes(p) ? p : "douyin"; } catch (e) { return "douyin"; } })();
 applyPlatformUI();
 updateTaskQueuePlatformLabel();
 
@@ -6980,7 +7093,7 @@ setInterval(loop, 8000);
 
 // Export all onclick-referenced functions to window for inline handler resolution
 Object.assign(window, {
-  switchPlatform, switchTab, startLogin, startCreatorLogin, startXhsLogin,
+  switchPlatform, switchTab, startLogin, startCreatorLogin, startXLogin, startXhsLogin,
   startXhsCreatorLogin, startKsLogin, startKsCreatorLogin, startChannelsLogin,
   startMpLogin, toggleCookie, saveCookie, scanBrowserRuntimes, addBrowserRuntime,
   detectProxy, importProxies, testAllProxies, assignAllProxies, addProxy,
@@ -6992,7 +7105,7 @@ Object.assign(window, {
   shareHistoryBatchDelete, exportShareHistoryReport, goShareHistoryPage,
   changeShareHistoryPage, handleShareHistoryPageInput, jumpShareHistoryPage,
   saveSettings, toggleSecretInput, testAi, saveAiSettings,
-  addPublish, loadPublished, addCommentRule, approveAllDrafts,
+  addPublish, suggestXPost, loadXTimeline, xSuggestReply, xSendReply, loadPublished, addCommentRule, approveAllDrafts,
   addChannel, exportModuleReport, contentSelAllToggle, contentSelClear,
   contentBatchDelete, goContentPage, changeContentPage, handleContentPageInput, jumpContentPage,
   addWatch, commentSelAllToggle, commentBatchDelete, clearComments,

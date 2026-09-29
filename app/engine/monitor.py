@@ -52,6 +52,7 @@ from ..platforms.channels import (parse_channels_feed, parse_channels_comment,
 from ..platforms.wechat_mp import (parse_mp_feed, parse_mp_comment,
                    flatten_mp_comments, parse_self_user as parse_mp_self_user,
                    publish_mp, send_mp_heartbeat)
+from ..platforms.x.client import publish_x
 from ..models import (ContentRecord, CommentRecord, CommentRule, CommentTask,
                       CommentWatch, DanmakuWatch, DanmakuRecord,
                        DouyinAccount, MonitorTarget, AccountRiskState,
@@ -2850,6 +2851,19 @@ class MonitorEngine:
             t.status = "publishing"; t.error = ""
             self._clear_row_block(t)
             s.add(t); s.commit()
+
+        if platform == "x":
+            if acc.platform != "x" or not state:
+                return await self._finish_publish(
+                    task_id, False, "", "X 账号未登录，请先在账号页完成 X 登录",
+                    platform="x")
+            try:
+                ok, url, err = await publish_x(
+                    self.browser, identity, media_type, title, desc, files,
+                    topics=topics)
+            except Exception as e:
+                ok, url, err = False, "", f"X 发布异常: {e!r}"
+            return await self._finish_publish(task_id, ok, url, err, platform="x")
 
         if platform == "kuaishou":
             # 快手发布:登录态在该账号持久 profile 里(creator/storage 任一即可),走浏览器自动化

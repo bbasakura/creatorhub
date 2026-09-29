@@ -91,6 +91,17 @@ PLATFORM_CAPABILITIES: dict[str, PlatformCapability] = {
         default_operation="upload",
         supports_schedule=False,
     ),
+    "x": PlatformCapability(
+        media={
+            "text": MediaCapability(title_max=280, require_title=False),
+            "images": MediaCapability(title_max=280, require_title=False, min_media=1, max_media=4),
+            "video": MediaCapability(title_max=280, require_title=False, min_media=1, max_media=1),
+        },
+        visibilities=frozenset({"public"}),
+        default_visibility="public",
+        operations=frozenset({"publish"}),
+        default_operation="publish",
+    ),
 }
 
 

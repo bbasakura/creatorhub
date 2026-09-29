@@ -76,6 +76,7 @@ from .platforms.wechat_mp import parse_self_user as parse_mp_self_user
 from .platforms.wechat_mp.resolve import (resolve_mp_user_id,
                                           resolve_mp_article_id,
                                           looks_like_article)
+from .platforms.x.client import interactive_x_login, fetch_x_self_profile, compose_x_text
 from .engine import Downloader, MonitorEngine
 from .engine.share_downloader import (
     ShareDownloadError,
@@ -185,6 +186,7 @@ def _login_scope_label(platform: str, creator: bool) -> str:
         "shipinhao": "视频号",
         "wechat_mp": "微信公众号",
         "douyin": "抖音",
+        "x": "X",
     }.get(platform, platform or "平台")
     return f"{label}创作者" if creator else label
 
@@ -741,6 +743,9 @@ async def _enrich_account_profile(account_id: int, state: str, *,
                 u, err = await _xhs_profile(
                     state, proxy, detailed=detailed,
                     user_agent=_direct_request_ua(identity))
+        elif platform == "x":
+            u = await fetch_x_self_profile(browser, identity)
+            err = ""
         elif platform == "kuaishou":
             u, err = await fetch_ks_self_profile(browser, identity)
         elif platform == "wechat_mp":
@@ -762,6 +767,12 @@ async def _enrich_account_profile(account_id: int, state: str, *,
         if u:
             if platform == "xhs":
                 p = parse_xhs_self_user(u)
+            elif platform == "x":
+                p = {
+                    "nickname": u.get("nickname", ""),
+                    "sec_uid": u.get("handle", "") or u.get("sec_uid", ""),
+                    "douyin_id": u.get("handle", ""),
+                }
             elif platform == "kuaishou":
                 p = parse_ks_self_user(u)
             elif platform == "wechat_mp":
@@ -877,6 +888,7 @@ async def _run_login(task_id: str, creator: bool = False, account_id: int | None
           else "快手账号" if platform == "kuaishou"
           else "微信公众号" if platform == "wechat_mp"
           else "视频号账号" if platform == "shipinhao"
+          else "X 账号" if platform == "x"
           else "创作者账号" if creator else "扫码账号")
     try:
         # 1) 准备画像 + identity(新建账号此时不写库,只用临时 profile)
@@ -1010,6 +1022,10 @@ async def _run_login(task_id: str, creator: bool = False, account_id: int | None
                     ok, state_json, nickname = await interactive_xhs_login(
                         browser, identity, timeout_seconds=300,
                         **reauth_options)
+            elif platform == "x":
+                reauth_options = {"force_reauth": True} if account_id else {}
+                ok, state_json, nickname = await interactive_x_login(
+                    browser, identity, timeout_seconds=300, **reauth_options)
             elif platform == "kuaishou":
                 reauth_options = {"force_reauth": True} if account_id else {}
                 if creator:
@@ -1444,6 +1460,32 @@ async def login_mp_start(proxy: str = "auto", browser_backend: str = "default",
             "hint": "已打开微信公众号登录窗口,请用微信扫码登录"}
 
 
+@app.post("/api/login/x/start")
+async def login_x_start(proxy: str = "auto", browser_backend: str = "default",
+                        browser_runtime_id: str = "",
+                        fingerprint: dict[str, Any] | None = None):
+    """X 扫码/网页登录；读取、发帖和回复共用同一持久 Profile。"""
+    if browser is None:
+        raise HTTPException(503, "浏览器未就绪")
+    browser_backend, browser_runtime_id = _validate_login_browser_backend(
+        browser_backend, browser_runtime_id)
+    fingerprint_overrides = _validate_prelogin_fingerprint(
+        fingerprint, browser_backend, browser_runtime_id)
+    reused = await _reuse_or_reject_interactive_login("x", False)
+    if reused is not None:
+        return reused
+    task_id = uuid.uuid4().hex
+    login_tasks[task_id] = _login_task_state(
+        status="opening", platform="x", creator=False, account_id=None)
+    asyncio.create_task(_run_login(
+        task_id, platform="x", proxy_choice=proxy,
+        browser_backend=browser_backend,
+        browser_runtime_id=browser_runtime_id,
+        fingerprint_overrides=fingerprint_overrides))
+    return {"task_id": task_id, "status": "opening",
+            "hint": "已打开 X 登录窗口，请完成登录；成功后会保存独立账号 Profile"}
+
+
 @app.get("/api/login/browser/poll")
 async def login_browser_poll(task_id: str):
     info = login_tasks.get(task_id)
@@ -1465,7 +1507,7 @@ class CookieIn(BaseModel):
 async def login_cookie(body: CookieIn):
     """Cookie 粘贴兜底登录:转成浏览器登录态。"""
     platform = (body.platform if body.platform in
-                ("douyin", "xhs", "kuaishou", "wechat_mp", "shipinhao") else "douyin")
+                ("douyin", "xhs", "kuaishou", "wechat_mp", "shipinhao", "x") else "douyin")
     state = cookie_string_to_state(body.cookie, platform)
     with get_session() as s:
         acc = DouyinAccount(
@@ -2176,7 +2218,7 @@ async def open_platform_risk_circuit(platform: str, body: PlatformCircuitIn,
                                      request: Request):
     actor = _require_risk_admin(request)
     platform = platform.strip().lower()
-    supported = {"douyin", "xhs", "kuaishou", "shipinhao", "wechat_mp", "youtube"}
+    supported = {"douyin", "xhs", "kuaishou", "shipinhao", "wechat_mp", "youtube", "x"}
     reason = body.reason.strip()
     if platform not in supported:
         raise HTTPException(400, "不支持的平台")
@@ -3837,7 +3879,7 @@ async def cancel_account_action(task_id: int):
 
 
 _PLATFORM_HOST = {"douyin": "douyin.com", "xhs": "xiaohongshu.com",
-                  "kuaishou": "kuaishou.com", "shipinhao": "weixin.qq.com", "wechat_mp": "weixin.qq.com"}
+                  "kuaishou": "kuaishou.com", "shipinhao": "weixin.qq.com", "wechat_mp": "weixin.qq.com", "x": "x.com"}
 _XHS_USER_ME_API = "/api/sns/web/v2/user/me"
 
 
@@ -3969,7 +4011,8 @@ async def open_account_browser(
                      else "https://www.xiaohongshu.com/"),
             "kuaishou": "https://www.kuaishou.com/",
             "shipinhao": "https://channels.weixin.qq.com/platform",
-            "wechat_mp": "https://mp.weixin.qq.com/"}.get(
+            "wechat_mp": "https://mp.weixin.qq.com/",
+            "x": "https://x.com/home"}.get(
                 platform, "https://www.douyin.com/")
     # 传了 url 且属于本平台域名 -> 停在该地址(否则回首页,防被当跳转开任意站)
     tgt = (url or "").strip()
@@ -4288,6 +4331,7 @@ async def _probe_proxy(url: str, platform: str = "douyin", timeout: float = 15):
                 else "https://www.kuaishou.com/" if platform == "kuaishou"
                 else "https://mp.weixin.qq.com/" if platform == "wechat_mp"
                 else "https://channels.weixin.qq.com/" if platform == "shipinhao"
+                else "https://x.com/home" if platform == "x"
                 else "https://www.douyin.com/")
     try:
         async with httpx.AsyncClient(proxy=url, timeout=timeout, follow_redirects=True) as cli:
@@ -8422,7 +8466,7 @@ async def add_publish(body: PublishIn):
     with get_session() as session:
         account = session.get(DouyinAccount, body.account_id)
         if not account or account.platform not in {
-                "xhs", "kuaishou", "douyin", "shipinhao", "wechat_mp", "youtube"}:
+                "xhs", "kuaishou", "douyin", "shipinhao", "wechat_mp", "youtube", "x"}:
             raise HTTPException(400, "请选择一个有效的发布账号")
 
         platform = account.platform
@@ -8479,6 +8523,22 @@ async def add_publish(body: PublishIn):
                 payload["idempotent_replay"] = True
             return payload
 
+        if platform == "x":
+            if body.media_type not in _media_types_for("x"):
+                raise HTTPException(400, "X 作品类型须为 text / images / video")
+            try:
+                compose_x_text(body.title, body.desc, body.topics)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            if body.media_type == "images" and not (1 <= len(body.media_paths) <= 4):
+                raise HTTPException(400, "X 图片帖需要 1 至 4 张图片")
+            if body.media_type == "video" and len(body.media_paths) != 1:
+                raise HTTPException(400, "X 视频帖需要且只能上传 1 个视频")
+            if body.media_type != "text" and any(not Path(p).is_file() for p in body.media_paths):
+                raise HTTPException(400, "X 上传文件不存在")
+            if not account.storage_state or account.status != "active":
+                raise HTTPException(400, "请先完成 X 账号登录")
+
         if platform == "wechat_mp":
             mp_types = _media_types_for("wechat_mp")
             if body.media_type not in mp_types:
@@ -8505,11 +8565,12 @@ async def add_publish(body: PublishIn):
             if not body.title.strip():
                 raise HTTPException(400, "公众号草稿需要标题")
         elif body.media_type not in _media_types_for(platform):
-            raise HTTPException(400, "media_type 须为 images 或 video")
+            raise HTTPException(400, "media_type 不受该平台支持")
 
         pname = {"kuaishou": "快手", "douyin": "抖音",
-                 "shipinhao": "视频号", "wechat_mp": "微信公众号"}.get(platform, "小红书")
-        if platform in ("kuaishou", "douyin", "shipinhao", "wechat_mp"):
+                 "shipinhao": "视频号", "wechat_mp": "微信公众号",
+                 "x": "X"}.get(platform, "小红书")
+        if platform in ("kuaishou", "douyin", "shipinhao", "wechat_mp", "x"):
             if not (account.creator_storage_state or account.storage_state):
                 raise HTTPException(400, f"该{pname}账号不可发布:请先在账号页完成登录")
         elif not (has_creator_cookies(account.creator_storage_state)
@@ -9726,6 +9787,8 @@ async def youtube_resume(task_id: int, request: Request):
 
 
 from .api.d2y import router as d2y_router
+from .api.x import router as x_router
 
 app.include_router(d2y_router)
+app.include_router(x_router)
 
