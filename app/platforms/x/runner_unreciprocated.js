@@ -79,6 +79,7 @@ export async function remindConfirmedBatch(agent, count = 3, accountId = null) {
   }
 
   const results = [];
+  const draftCandidates = [];
 
   for (let i = 0; i < targets.length; i++) {
     const target = targets[i];
@@ -149,7 +150,7 @@ export async function remindConfirmedBatch(agent, count = 3, accountId = null) {
       continue;
     }
 
-    // 随机选用真诚求关文案
+    // 文案选择改为确定性，重跑同一目标时可命中 durable draft 的语义去重。
     const remindPhrases = [
       "大佬顺手回个关🤝，一起交流交流～",
       "已关注大佬，求翻牌回个关呀🔥",
@@ -158,39 +159,17 @@ export async function remindConfirmedBatch(agent, count = 3, accountId = null) {
       "同频好友来串门啦，大佬记得回个关呀☕️",
       "关注大佬好几天了，顺手回个关并肩作战呀🔥",
     ];
-    const replyText = remindPhrases[Math.floor(Math.random() * remindPhrases.length)];
+    const phraseIndex = Array.from(cleanHandle).reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % remindPhrases.length;
+    const replyText = remindPhrases[phraseIndex];
 
-    console.log(`Queueing reminder draft for @${cleanHandle}'s tweet (${latestTweet.link}): "${replyText}"`);
-
-    if (!accountId) {
-      results.push({
-        handle: cleanHandle,
-        status: "dry_run_requires_account_id",
-        tweet: latestTweet.link,
-        text: replyText
-      });
-      continue;
-    }
-
-    const draftPayload = [{
+    draftCandidates.push({
       authorNick: target.nick || cleanHandle,
       authorHandle: cleanHandle,
       tweetLink: latestTweet.link,
       tweetText: latestTweet.text || "",
       replyText,
-    }];
-    const draftFile = join(os.tmpdir(), `unreciprocated_${cleanHandle}_draft.json`);
-    const queuedFile = join(os.tmpdir(), `unreciprocated_${cleanHandle}_queued.json`);
-    fs.writeFileSync(draftFile, JSON.stringify(draftPayload, null, 2), "utf-8");
-    execSync(`${PYTHON_EXE} ${STREAM_REPLIER_CLI} enqueue-drafts ${Number(accountId)} "${draftFile}" "${queuedFile}"`, { encoding: "utf-8" });
-    const queued = JSON.parse(fs.readFileSync(queuedFile, "utf-8"));
-    results.push({
-      handle: cleanHandle,
-      status: "draft_waiting_approval",
-      tweet: latestTweet.link,
-      text: replyText,
-      task: queued[0] || null,
     });
+    results.push({ handle: cleanHandle, status: "draft_candidate", tweet: latestTweet.link, text: replyText });
 
     // 顺手点击回到主页，彻底清除推文页 SPA 路由锁定
     try {
@@ -208,8 +187,24 @@ export async function remindConfirmedBatch(agent, count = 3, accountId = null) {
     }
   }
 
+  let queued = [];
+  if (draftCandidates.length && accountId) {
+    const selectedFile = join(os.tmpdir(), "x_unreciprocated_reply_drafts.json");
+    const queuedFile = join(os.tmpdir(), "x_unreciprocated_reply_queued.json");
+    fs.writeFileSync(selectedFile, JSON.stringify(draftCandidates, null, 2), "utf-8");
+    execSync(`${PYTHON_EXE} ${STREAM_REPLIER_CLI} enqueue-drafts ${Number(accountId)} "${selectedFile}" "${queuedFile}"`, { encoding: "utf-8" });
+    queued = JSON.parse(fs.readFileSync(queuedFile, "utf-8"));
+  }
+
   const summaryStr = execSync(`python ${PYTHON_CLI} summary`, { encoding: "utf-8" });
   const summary = JSON.parse(summaryStr.trim());
-
-  return { reminded: results.length, results, summary };
+  return {
+    candidates: results.length,
+    queued,
+    dryRun: !accountId,
+    status: !accountId ? "dry_run_requires_account_id" : "drafts_queued",
+    results,
+    summary,
+    note: "未直接写 X；真实回复只能由 CreatorHub CommentTask worker 执行",
+  };
 }
