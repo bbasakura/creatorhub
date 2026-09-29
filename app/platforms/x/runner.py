@@ -20,7 +20,6 @@ if _PROJECT_ROOT not in sys.path:
 from typing import Dict, Any, List, Optional
 from app.platforms.x.posting_engine import XPostingEngine
 from app.platforms.x.reply_engine import XReplyEngine
-from app.platforms.x.browser_ops import XBrowserOps
 from app.platforms.x.feishu_sync import XFeishuSync
 
 
@@ -30,7 +29,6 @@ class XRunner:
     def __init__(self):
         self.poster = XPostingEngine()
         self.replier = XReplyEngine()
-        self.browser_ops = XBrowserOps()
         self.feishu = XFeishuSync()
 
     def plan_next_post(self, category: Optional[str] = None) -> Dict[str, Any]:
@@ -42,7 +40,8 @@ class XRunner:
             "category": category or "general",
             "is_valid": val["valid"],
             "reason": val["reason"],
-            "inject_code": self.browser_ops.get_post_workflow_code(text),
+            "write_path": "/api/x/post/draft",
+            "requires_task_queue": True,
         }
 
     def on_post_success(self, post_text: str, post_link: str = "", category: str = "", note: str = ""):
@@ -67,7 +66,8 @@ class XRunner:
             "intent": intent,
             "reply_text": reply_text,
             "tweet_link": tweet_link,
-            "inject_code": self.browser_ops.get_reply_workflow_code("", reply_text),
+            "write_path": "/api/x/reply/draft",
+            "requires_task_queue": True,
         }
 
     def on_reply_success(

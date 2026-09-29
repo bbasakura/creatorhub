@@ -34,59 +34,15 @@ class XBrowserOps:
         self.posting_engine = XPostingEngine()
 
     def get_reply_workflow_code(self, tweet_id: str, reply_text: str) -> str:
-        """生成在浏览器中安全回复某条推文的 JavaScript 执行代码"""
-        return f"""
-const replyText = {repr(reply_text)};
-// 1. 找到回复输入框
-const replyBox = document.querySelector('[data-testid="tweetTextarea_0"]') || document.querySelector('[role="textbox"]');
-if (!replyBox) throw new Error("Reply textbox not found");
-
-// 2. paste 注入
-replyBox.focus();
-const dt = new DataTransfer();
-dt.setData('text/plain', replyText);
-replyBox.dispatchEvent(new ClipboardEvent('paste', {{ bubbles: true, cancelable: true, clipboardData: dt }}));
-
-// 3. 回读校验
-await new Promise(r => setTimeout(r, 800));
-const currentText = replyBox.innerText || replyBox.textContent || '';
-if (!currentText.includes(replyText.slice(0, 5))) {{
-  throw new Error("Text paste verification failed: " + currentText);
-}}
-
-// 4. 点击发送按钮
-const sendBtn = document.querySelector('[data-testid="tweetButtonInline"]') || document.querySelector('[data-testid="tweetButton"]');
-if (!sendBtn || sendBtn.getAttribute('aria-disabled') === 'true') {{
-  throw new Error("Send button disabled or not found");
-}}
-sendBtn.click();
-"""
+        """Legacy compatibility surface; direct browser writes are disabled."""
+        return (
+            'throw new Error("CreatorHub direct X reply injection is disabled; '
+            'create a durable CommentTask draft and execute it through the task queue");'
+        )
 
     def get_post_workflow_code(self, post_text: str) -> str:
-        """生成在浏览器中安全发布主帖的 JavaScript 执行代码"""
-        return f"""
-const postText = {repr(post_text)};
-// 1. 找到发帖主输入框
-const postBox = document.querySelector('[data-testid="tweetTextarea_0"]') || document.querySelector('[role="textbox"]');
-if (!postBox) throw new Error("Post textbox not found");
-
-// 2. paste 注入
-postBox.focus();
-const dt = new DataTransfer();
-dt.setData('text/plain', postText);
-postBox.dispatchEvent(new ClipboardEvent('paste', {{ bubbles: true, cancelable: true, clipboardData: dt }}));
-
-// 3. 回读文本校验
-await new Promise(r => setTimeout(r, 1000));
-const currentText = postBox.innerText || postBox.textContent || '';
-if (currentText.length < 5) {{
-  throw new Error("Post text verification failed: length too short");
-}}
-
-// 4. 点击发送
-const postBtn = document.querySelector('[data-testid="tweetButtonInline"]') || document.querySelector('[data-testid="tweetButton"]');
-if (!postBtn || postBtn.getAttribute('aria-disabled') === 'true') {{
-  throw new Error("Post button disabled or not found");
-}}
-postBtn.click();
-"""
+        """Legacy compatibility surface; direct browser writes are disabled."""
+        return (
+            'throw new Error("CreatorHub direct X post injection is disabled; '
+            'create a durable PublishTask draft and execute it through the task queue");'
+        )
