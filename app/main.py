@@ -132,6 +132,7 @@ from .services.platform_capabilities import (
     media_capability as _media_capability,
     media_types_for as _media_types_for,
     normalize_operation as _normalize_operation,
+    operation_allowed as _operation_allowed,
     normalize_visibility as _normalize_visibility,
     supports_schedule as _supports_schedule,
     title_limit as _title_limit,
@@ -8633,11 +8634,16 @@ async def add_publish(body: PublishIn):
             raise HTTPException(400, "请选择一个有效的发布账号")
 
         platform = account.platform
+        if ("operation" in body.model_fields_set
+                and not _operation_allowed(platform, body.operation)):
+            raise HTTPException(400, f"{platform} 不支持 operation={body.operation}")
+        if ("visibility" in body.model_fields_set
+                and not _visibility_allowed(platform, body.visibility)):
+            raise HTTPException(400, f"{platform} 不支持 visibility={body.visibility}")
         operation = _normalize_operation(platform, body.operation)
         visibility = _normalize_visibility(
             platform, body.visibility,
-            explicitly_set=("visibility" in body.model_fields_set)
-            if platform == "youtube" else True)
+            explicitly_set=("visibility" in body.model_fields_set))
         fingerprint = _publish_fingerprint(
             body, platform=platform, visibility=visibility,
             operation=operation, scheduled_at=scheduled_at)
@@ -8650,9 +8656,6 @@ async def add_publish(body: PublishIn):
                 raise HTTPException(400, "YouTube需要一个有效视频文件")
             if not account.credential_ref or account.status != "active":
                 raise HTTPException(400, "请先完成YouTube频道授权")
-            if ("visibility" in body.model_fields_set and
-                    not _visibility_allowed("youtube", body.visibility)):
-                raise HTTPException(400, "YouTube可见性无效")
             if body.scheduled_at and not _supports_schedule("youtube"):
                 raise HTTPException(400, "YouTube当前不支持定时上传")
             if (not body.title.strip()

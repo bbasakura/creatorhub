@@ -34,34 +34,36 @@ _GENERIC_MEDIA = {
     "video": MediaCapability(title_max=20),
 }
 _GENERIC_VISIBILITY = frozenset({"public", "friends", "private"})
+_PUBLIC_ONLY = frozenset({"public"})
+_PUBLISH_ONLY = frozenset({"publish"})
 _GENERIC_OPERATIONS = frozenset({"draft", "publish"})
 
 
 PLATFORM_CAPABILITIES: dict[str, PlatformCapability] = {
     "xhs": PlatformCapability(
         media=_GENERIC_MEDIA,
-        visibilities=_GENERIC_VISIBILITY,
+        visibilities=_PUBLIC_ONLY,
         default_visibility="public",
-        operations=_GENERIC_OPERATIONS,
+        operations=_PUBLISH_ONLY,
         default_operation="publish",
     ),
     "douyin": PlatformCapability(
         media=_GENERIC_MEDIA,
         visibilities=_GENERIC_VISIBILITY,
         default_visibility="public",
-        operations=_GENERIC_OPERATIONS,
+        operations=_PUBLISH_ONLY,
         default_operation="publish",
     ),
     "kuaishou": PlatformCapability(
         media=_GENERIC_MEDIA,
-        visibilities=_GENERIC_VISIBILITY,
+        visibilities=_PUBLIC_ONLY,
         default_visibility="public",
-        operations=_GENERIC_OPERATIONS,
+        operations=_PUBLISH_ONLY,
         default_operation="publish",
     ),
     "shipinhao": PlatformCapability(
         media=_GENERIC_MEDIA,
-        visibilities=_GENERIC_VISIBILITY,
+        visibilities=_PUBLIC_ONLY,
         default_visibility="public",
         operations=_GENERIC_OPERATIONS,
         default_operation="publish",
@@ -78,7 +80,7 @@ PLATFORM_CAPABILITIES: dict[str, PlatformCapability] = {
                 extensions=frozenset({".mp3", ".m4a", ".wav", ".amr", ".wma"}),
             ),
         },
-        visibilities=_GENERIC_VISIBILITY,
+        visibilities=_PUBLIC_ONLY,
         default_visibility="public",
         operations=frozenset({"draft"}),
         default_operation="draft",
@@ -141,6 +143,10 @@ def normalize_visibility(platform: str, visibility: str, *, explicitly_set: bool
     if explicitly_set and value in capability.visibilities:
         return value
     return capability.default_visibility
+
+
+def operation_allowed(platform: str, operation: str) -> bool:
+    return str(operation or "").strip().lower() in capability_for(platform).operations
 
 
 def normalize_operation(platform: str, operation: str) -> str:

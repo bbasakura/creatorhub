@@ -4,6 +4,7 @@ from app.services.platform_capabilities import (
     media_capability,
     media_types_for,
     normalize_operation,
+    operation_allowed,
     normalize_visibility,
     supports_schedule,
     title_limit,
@@ -36,13 +37,20 @@ class PlatformCapabilitiesTests(unittest.TestCase):
         self.assertFalse(supports_schedule("youtube"))
         self.assertEqual(normalize_operation("youtube", "publish"), "upload")
 
-    def test_generic_social_visibility_is_stable(self):
+    def test_social_capabilities_match_actual_adapters(self):
         for platform in ("xhs", "douyin", "kuaishou", "shipinhao"):
             self.assertEqual(media_types_for(platform), ("images", "video"))
             self.assertEqual(title_limit(platform, "video"), 20)
-            self.assertTrue(visibility_allowed(platform, "private"))
             self.assertFalse(visibility_allowed(platform, "unlisted"))
-            self.assertEqual(normalize_operation(platform, "garbage"), "publish")
+        self.assertTrue(visibility_allowed("douyin", "private"))
+        for platform in ("xhs", "kuaishou", "shipinhao"):
+            self.assertFalse(visibility_allowed(platform, "private"))
+        for platform in ("xhs", "douyin", "kuaishou"):
+            self.assertFalse(operation_allowed(platform, "draft"))
+            self.assertTrue(operation_allowed(platform, "publish"))
+        self.assertTrue(operation_allowed("shipinhao", "draft"))
+        self.assertTrue(operation_allowed("shipinhao", "publish"))
+        self.assertEqual(normalize_operation("xhs", "garbage"), "publish")
 
 
 if __name__ == "__main__":
