@@ -519,12 +519,24 @@ async def fetch_x_relationships(
         await page.wait_for_timeout(700)
         users: list[dict] = []
         seen: set[str] = set()
+        stagnant_rounds = 0
         for _ in range(16):
-            cells = page.locator('[data-testid="UserCell"]')
-            for index in range(await cells.count()):
-                cell = cells.nth(index)
+            rows = await page.locator('[data-testid="UserCell"]').evaluate_all("""cells => cells.map(cell => {
+                const raw = (cell.innerText || '').trim();
+                const desc = cell.querySelector('[data-testid="UserDescription"]');
+                const img = cell.querySelector('img[src*="profile_images"]');
+                const unfollow = cell.querySelector('button[data-testid$="-unfollow"]');
+                return {
+                    raw,
+                    signature: desc ? (desc.innerText || '').trim() : '',
+                    avatar: img ? (img.getAttribute('src') || '') : '',
+                    following: !!unfollow,
+                };
+            })""")
+            before = len(seen)
+            for row in rows:
                 try:
-                    raw = str(await cell.inner_text() or "")
+                    raw = str(row.get("raw") or "")
                     hm = re.search(r"@([A-Za-z0-9_]{1,15})", raw)
                     if not hm:
                         continue
@@ -535,18 +547,13 @@ async def fetch_x_relationships(
                     seen.add(key)
                     lines = [line.strip() for line in raw.splitlines() if line.strip()]
                     nickname = next((line for line in lines if not line.startswith("@") and line not in {"Follow", "Following", "关注", "正在关注", "Follows you", "关注了你"}), other)
-                    desc_node = cell.locator('[data-testid="UserDescription"]').first
-                    signature = str(await desc_node.inner_text() or "") if await desc_node.count() else ""
-                    img = cell.locator('img[src*="profile_images"]').first
-                    avatar = str(await img.get_attribute("src") or "") if await img.count() else ""
-                    unfollow = cell.locator('button[data-testid$="-unfollow"]').first
-                    is_following = direction == "following" or bool(await unfollow.count())
+                    is_following = direction == "following" or bool(row.get("following"))
                     users.append({
                         "uid": other,
                         "sec_uid": other,
                         "nickname": nickname,
-                        "avatar": avatar,
-                        "signature": signature,
+                        "avatar": str(row.get("avatar") or ""),
+                        "signature": str(row.get("signature") or ""),
                         "is_mutual": bool(direction == "fan" and is_following),
                         "is_following": bool(is_following),
                         "raw_json": json.dumps({"handle": other}, ensure_ascii=False),
@@ -555,8 +562,11 @@ async def fetch_x_relationships(
                         return users, profile
                 except Exception:
                     continue
-            await page.mouse.wheel(0, 1500)
-            await page.wait_for_timeout(650)
+            stagnant_rounds = stagnant_rounds + 1 if len(seen) == before else 0
+            if stagnant_rounds >= 3:
+                break
+            await page.mouse.wheel(0, 1800)
+            await page.wait_for_timeout(550)
         return users, profile
 
 

@@ -40,5 +40,7 @@ def test_x_account_hub_backend_is_wired():
     assert 'OperationKind.READ_LIGHT' in main
     assert 'async def fetch_x_my_works' in client
     assert 'async def fetch_x_relationships' in client
+    assert 'evaluate_all' in client
+    assert 'stagnant_rounds' in client
     assert 'async def fetch_x_dm_conversations' in client
     assert 'async def fetch_x_dm_history' in client
