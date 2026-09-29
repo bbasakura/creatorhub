@@ -1,11 +1,13 @@
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from app.platforms.wechat_mp.draft_safety import (
     saved_draft_id, matches_draft, matches_draft_type,
 )
+from app.platforms.wechat_mp import publish as mp_publish
 from app.platforms.wechat_mp.publish import (
     MP_DRAFT_TYPES, _is_podcast_editor, _markdown_to_wechat_html,
     _normalize_mp_type, publish_mp,
@@ -61,6 +63,19 @@ class DraftEvidenceTests(unittest.IsolatedAsyncioTestCase):
 
     def test_html_is_escaped(self):
         self.assertNotIn('<script>', _markdown_to_wechat_html('<script>alert(1)</script>'))
+
+    async def test_publish_timeout_fails_uncertain_instead_of_retryable_failure(self):
+        async def _hang(*args, **kwargs):
+            await asyncio.sleep(1)
+            return True, "", ""
+
+        with patch.object(mp_publish, "_publish_mp_once", side_effect=_hang):
+            ok, url, error = await publish_mp(
+                Mock(), Mock(), "", "title", "body", timeout_seconds=0.01)
+        self.assertFalse(ok)
+        self.assertEqual(url, "")
+        self.assertTrue(error.startswith("write_uncertain:"))
+        self.assertIn("禁止自动重试", error)
 
 
 class YoutubeCredentialTests(unittest.TestCase):

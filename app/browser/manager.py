@@ -277,6 +277,7 @@ class BrowserManager:
         self._fingerprint_backend = self._default_fingerprint_backend()
         self._pw = None
         self._contexts: Dict[Any, BrowserContext] = {}   # key -> 持久化 context
+        self._headed_context_keys: set[Any] = set()       # 由常驻有头任务创建的 context
         self._cdp_sessions: Dict[Any, Any] = {}
         self._backend_by_key: Dict[Any, str] = {}
         self._runtime_by_key: Dict[Any, str] = {}
@@ -1123,6 +1124,7 @@ class BrowserManager:
 
     async def _close_key_unlocked(self, key: Any) -> None:
         ctx = self._contexts.pop(key, None)
+        self._headed_context_keys.discard(key)
         session = self._cdp_sessions.pop(key, None)
         self._task_pages.pop(key, None)
         self._last_used.pop(key, None)
@@ -1157,6 +1159,7 @@ class BrowserManager:
                 return False
             if new_key in self._contexts:
                 await self._close_key_unlocked(new_key)
+            was_headed = old_key in self._headed_context_keys
             maps = (
                 self._contexts,
                 self._cdp_sessions,
@@ -1171,6 +1174,9 @@ class BrowserManager:
             for mapping in maps:
                 if old_key in mapping:
                     mapping[new_key] = mapping.pop(old_key)
+            self._headed_context_keys.discard(old_key)
+            if was_headed:
+                self._headed_context_keys.add(new_key)
             page_lock = self._xhs_page_locks.pop(old_key, None)
             if page_lock is not None:
                 self._xhs_page_locks[new_key] = page_lock
@@ -1536,11 +1542,58 @@ class BrowserManager:
         """Backward-compatible alias for the former CDP-only collector."""
         return await self.collect_idle_sessions(now=now)
 
-    async def open_headed(self, identity: Identity) -> BrowserContext:
-        """Return the shared headed XHS context or a temporary legacy one."""
+    async def resident_headed_context(self, identity: Identity) -> BrowserContext:
+        """Return one reusable visible context owned by BrowserManager.
+
+        This is intended for high-throughput creator flows such as WeChat MP
+        drafts: the account keeps one Chrome/Profile warm between tasks, while
+        normal ``context_for`` callers can safely reuse the same context later.
+        """
+        key = identity.key
+        async with self._cv_lock:
+            effective_backend = self.effective_browser_backend(identity)
+            runtime_id = (
+                self.effective_fingerprint_runtime_id(identity)
+                if effective_backend == FINGERPRINT_CHROMIUM_BACKEND else "")
+            plan = try_proxy_plan(identity.proxy)
+            proxy_signature = plan.signature if plan else "direct"
+            signature = self._context_signature(
+                identity, effective_backend, runtime_id, proxy_signature)
+            ctx = self._contexts.get(key)
+            if ctx is not None and (
+                    self._proxy_signature_by_key.get(key) != signature
+                    or key not in self._headed_context_keys):
+                await self._close_key_unlocked(key)
+                ctx = None
+            if ctx is None:
+                await self._evict_if_needed()
+                ctx = await self._launch_persistent(identity, headless=False)
+                self._contexts[key] = ctx
+                self._headed_context_keys.add(key)
+                self._backend_by_key[key] = (
+                    FINGERPRINT_CHROMIUM_BACKEND
+                    if effective_backend == FINGERPRINT_CHROMIUM_BACKEND
+                    else "patchright"
+                )
+                if effective_backend == FINGERPRINT_CHROMIUM_BACKEND:
+                    self._runtime_by_key[key] = runtime_id
+                self._proxy_signature_by_key[key] = self._context_signature(
+                    identity, effective_backend, runtime_id, proxy_signature)
+            self._last_used[key] = time.time()
+            await self._bridge_identity_cookies(ctx, identity)
+            return ctx
+
+    async def open_headed(self, identity: Identity, *, reuse: bool = False) -> BrowserContext:
+        """Return a visible context; optionally retain it for later tasks."""
         if identity.platform == "xhs":
             snapshot = capture_window_snapshot(CHROMIUM_WINDOW_CLASSES)
             ctx = await self.context_for(identity)
+            await asyncio.to_thread(bring_window_to_front, snapshot,
+                                    CHROMIUM_WINDOW_CLASSES, "", 1.5)
+            return ctx
+        if reuse:
+            snapshot = capture_window_snapshot(CHROMIUM_WINDOW_CLASSES)
+            ctx = await self.resident_headed_context(identity)
             await asyncio.to_thread(bring_window_to_front, snapshot,
                                     CHROMIUM_WINDOW_CLASSES, "", 1.5)
             return ctx

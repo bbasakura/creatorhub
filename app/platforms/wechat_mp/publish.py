@@ -15,6 +15,10 @@ import mimetypes
 from html import escape
 
 from .draft_safety import saved_draft_id, verify_saved_draft
+from .tietu_runtime import (
+    BODY_SELECTOR, TITLE_SELECTOR, append_topics_via_cdp,
+    apply_tietu_extras, replace_text_via_cdp,
+)
 import re
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -262,13 +266,14 @@ async def _open_creation_editor(ctx, page, label: str):
     return None
 
 
-async def publish_mp(mgr: BrowserManager, identity: Identity,
-                     storage_state_json: str, title: str, desc: str,
-                     media_type: str = "article", media_paths: List[str] = None,
-                     topics: str = "", location: str = "",
-                     cover_path: str = "", publish_mode: str = "draft",
-                     timeout_seconds: int = 180
-                     ) -> Tuple[bool, str, str]:
+async def _publish_mp_once(mgr: BrowserManager, identity: Identity,
+                           storage_state_json: str, title: str, desc: str,
+                           media_type: str = "article", media_paths: List[str] = None,
+                           topics: str = "", location: str = "",
+                           collection_name: str = "", cover_path: str = "",
+                           publish_mode: str = "draft", claim_text: str = "个人观点",
+                           enable_reward: bool = True, timeout_seconds: int = 180
+                           ) -> Tuple[bool, str, str]:
     """发布/保存微信公众号作品。返回 (ok, result_url, error)。
     
     media_type:
@@ -308,7 +313,7 @@ async def publish_mp(mgr: BrowserManager, identity: Identity,
     if any(not Path(p).is_file() for p in files) or (cover_path and not Path(cover_path).is_file()):
         return False, "", "missing_media: 公众号上传文件不存在"
 
-    ctx = await mgr.open_headed(identity)
+    ctx = await mgr.open_headed(identity, reuse=True)
     page = await ctx.new_page()
     home_page = page
     submitted = False
@@ -317,6 +322,10 @@ async def publish_mp(mgr: BrowserManager, identity: Identity,
         await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=40000)
         token, err = await _get_mp_token(page)
         if not token:
+            try:
+                await mgr.close_context(identity.key)
+            except Exception:
+                pass
             return False, "", "logged_out: 请重新登录公众号后台"
 
         cover_file = cover_path or (files[0] if files else "")
@@ -388,15 +397,19 @@ async def publish_mp(mgr: BrowserManager, identity: Identity,
             else:
                 return False, "", "missing_image_input: 贴图上传控件未就绪"
 
-            # 2. 填写标题 (<= 20 字)
+            # 2. 标题/正文使用 CDP 原生文本插入，复用批量贴图脚本中已验证的输入路径。
             short_t = title.strip()[:20]
-            await page.locator('#js_title_main .ProseMirror:visible, .title-editor__input .ProseMirror:visible, textarea#title:visible').first.fill(short_t)
-            await page.wait_for_timeout(400)
+            await replace_text_via_cdp(page, TITLE_SELECTOR, short_t)
+            await replace_text_via_cdp(page, BODY_SELECTOR, desc.strip())
 
-            # 3. 填写正文
-            body_text = (desc + (chr(10) * 2 + tags if tags else "")).strip()
-            await page.locator('.share-text__input .ProseMirror').fill(body_text)
-            await page.wait_for_timeout(400)
+            # 3. 话题逐个输入并敲空格，让公众号编辑器识别为真正的话题链接。
+            topic_links = await append_topics_via_cdp(page, topics)
+
+            # 4. 合集/创作来源/赞赏保持 best-effort；它们失败不覆盖草稿本体保存。
+            extras = await apply_tietu_extras(
+                page, album_name=collection_name,
+                claim_text=claim_text, enable_reward=enable_reward)
+            log.info("公众号贴图附加项: topics=%s extras=%s", topic_links, extras)
         elif is_video:
             # ── 视频草稿模式 ──
             video_input = page.locator(
@@ -515,6 +528,41 @@ async def publish_mp(mgr: BrowserManager, identity: Identity,
         await page.close()
         if home_page is not page:
             await home_page.close()
+
+
+async def publish_mp(mgr: BrowserManager, identity: Identity,
+                     storage_state_json: str, title: str, desc: str,
+                     media_type: str = "article", media_paths: List[str] = None,
+                     topics: str = "", location: str = "",
+                     collection_name: str = "", cover_path: str = "",
+                     publish_mode: str = "draft", claim_text: str = "个人观点",
+                     enable_reward: bool = True, timeout_seconds: int = 180
+                     ) -> Tuple[bool, str, str]:
+    """保存公众号草稿，并对整次浏览器执行施加硬超时。
+
+    超时一律按 ``write_uncertain`` 处理：浏览器可能已经跨过保存点击边界，
+    因此宁可要求人工核验，也不能把任务自动重放造成重复草稿。
+    """
+    try:
+        return await asyncio.wait_for(
+            _publish_mp_once(
+                mgr, identity, storage_state_json, title, desc,
+                media_type=media_type, media_paths=media_paths,
+                topics=topics, location=location,
+                collection_name=collection_name, cover_path=cover_path,
+                publish_mode=publish_mode, claim_text=claim_text,
+                enable_reward=enable_reward, timeout_seconds=timeout_seconds),
+            timeout=max(0.1, float(timeout_seconds)),
+        )
+    except asyncio.TimeoutError:
+        try:
+            await mgr.close_context(identity.key)
+        except Exception:
+            pass
+        return False, "", (
+            f"write_uncertain: 公众号草稿执行超过 {timeout_seconds} 秒；"
+            "浏览器任务已取消，请到草稿箱核对，禁止自动重试"
+        )
 
 
 def send_mp_heartbeat(storage_state_json: str, token: str = "") -> bool:
