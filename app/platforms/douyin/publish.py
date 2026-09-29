@@ -556,8 +556,8 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
         if ok:
             _log(f"发布成功 url={result_url}")
         elif verify_notified:
-            error = ("发布被抖音风控拦下,需人工验证(短信验证码/扫码),但在等待时间内未完成。"
-                     "请在弹窗里完成验证后重试;若窗口已关,重新点「立即发布」再操作。")
+            error = ("write_uncertain: 已进入抖音提交边界后触发人工验证，等待期内未取得成功回执。"
+                     "请先到作品管理核对或完成平台验证；禁止自动重试。")
         else:
             png = await _dump(page, "unconfirmed")
             error = ("write_uncertain: 已点发布但未在页面确认到成功信号。请到抖音创作平台「作品管理」核对；"
