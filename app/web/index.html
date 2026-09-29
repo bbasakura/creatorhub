@@ -2600,11 +2600,8 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
       <div class="stack">
         <div class="form-grid">
           <div class="form-field"><label for="pub-acc">发布账号</label><select id="pub-acc"></select></div>
-          <div class="form-field"><label for="pub-type">作品类型</label><select id="pub-type" onchange="onPubType()">
-              <option value="text" class="x-only hidden">纯文本</option>
+          <div class="form-field"><label for="pub-type" id="pub-type-label">作品类型</label><select id="pub-type" onchange="onPubType()">
               <option value="images">图文（图集）</option><option value="video">视频</option>
-              <option value="article" class="mp-only hidden">公众号文章</option>
-              <option value="podcast" class="mp-only hidden">公众号播客</option>
           </select></div>
         </div>
         <div>
@@ -2615,7 +2612,7 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
             <div class="filepick-list" id="pub-filelist"></div>
           </div>
         </div>
-        <div>
+        <div id="pub-title-wrap">
           <div class="yt-only hidden" style="margin-bottom:12px;background:var(--surface-2,#1e2230);border:1px solid var(--line,#2b3245);border-radius:8px;padding:12px 14px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
               <div style="font-weight:600;font-size:13px"><svg style="vertical-align:-2px;margin-right:4px;width:14px;height:14px"><use href="#i-bolt"/></svg>D2Y 搬运切片矩阵批量排期 (1.8万部源库)</div>
@@ -2630,11 +2627,11 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
               <button type="button" class="ghost sm" onclick="disconnectYoutube()" style="margin-left:auto">解除频道绑定</button>
             </div>
           </div>
-          <label class="field" for="pub-title">标题(≤20 字)</label>
+          <label class="field" for="pub-title" id="pub-title-label">标题(≤20 字)</label>
           <input id="pub-title" maxlength="20" placeholder="给作品起个标题">
         </div>
         <div>
-          <label class="field" for="pub-desc">正文</label>
+          <label class="field" for="pub-desc" id="pub-desc-label">正文</label>
           <textarea id="pub-desc" rows="3" placeholder="正文内容…"></textarea>
         </div>
         <div class="form-grid">
@@ -2698,7 +2695,7 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
         <h2>发布记录 / 队列</h2>
       </div>
       <div class="table-wrap"><table aria-label="发布任务列表"><thead><tr>
-        <th>标题</th><th>类型</th><th>媒体</th><th>来源</th><th>计划时间</th><th>状态</th><th>操作</th>
+        <th id="pub-queue-content-head">标题</th><th>类型</th><th>媒体</th><th>来源</th><th>计划时间</th><th>状态</th><th>操作</th>
       </tr></thead><tbody id="pub-table"></tbody></table></div>
     </div>
 
