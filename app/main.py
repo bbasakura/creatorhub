@@ -82,6 +82,7 @@ from .platforms.x.client import (
     fetch_x_dm_conversations, fetch_x_dm_history,
 )
 from .engine import Downloader, MonitorEngine
+from .services.executor_instance import ExecutorInstanceLock
 from .engine.share_downloader import (
     ShareDownloadError,
     ShareDownloader,
@@ -144,6 +145,7 @@ import json
 cfg = load_config()
 browser: BrowserManager | None = None
 engine: MonitorEngine | None = None
+executor_instance_lock: ExecutorInstanceLock | None = None
 im_receiver = None      # ImReceiverManager(私信实时接收)
 login_tasks: Dict[str, dict] = {}
 # 用户手动打开的账号浏览器窗口(account_id -> BrowserContext),留引用防 GC、便于复用/清理
@@ -466,8 +468,11 @@ def _seed_browser_runtimes() -> list[dict]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global browser, engine, im_receiver
+    global browser, engine, executor_instance_lock, im_receiver
     init_db(cfg.db_path)
+    executor_instance_lock = ExecutorInstanceLock(cfg.engine.runtime_dir)
+    executor_instance_lock.acquire()
+    print(f"[startup] 已获取单执行器实例锁: {executor_instance_lock.path}")
     if load_persisted_risk_settings(cfg):
         print("[startup] 已加载风控中心保存的运行时规则")
     try:
@@ -544,6 +549,9 @@ async def lifespan(app: FastAPI):
         await engine.stop()
     if browser:
         await browser.stop()
+    if executor_instance_lock:
+        executor_instance_lock.release()
+        executor_instance_lock = None
 
 
 app = FastAPI(title="CreatorHub", lifespan=lifespan)
