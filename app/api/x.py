@@ -17,12 +17,14 @@ from ..platforms.x.client import (
     fetch_x_following_timeline,
     fetch_x_search,
     normalize_tweet_ref,
-    reply_x,
 )
-from ..platforms.x.relationship import normalize_x_handle, set_x_following
+from ..platforms.x.relationship import normalize_x_handle
 from ..risk import OperationKind
 from ..services.runtime_context import get_runtime
-from ..services.x_workflow import create_x_post_draft, create_x_reply_draft
+from ..services.task_queue_actions import QueueActionError, perform_queue_action
+from ..services.x_workflow import (
+    create_x_post_draft, create_x_reply_draft, create_x_relationship_task,
+)
 from ..services.x_interaction_memory import load_x_interaction_memory
 from ..platforms.x.providers import x_provider_status
 from ..platforms.x.twikit_client import (
@@ -263,33 +265,24 @@ async def reply_draft(body: XReplyDraftIn):
 
 @router.post("/reply")
 async def send_reply(body: XReplyIn):
-    browser, engine = _runtime()
-    account = _x_account(body.account_id)
+    _browser, engine = _runtime()
+    _x_account(body.account_id)
     try:
-        tweet_id, canonical_url = normalize_tweet_ref(body.tweet_ref)
+        draft = create_x_reply_draft(
+            body.account_id, body.tweet_ref, body.text,
+            author_handle=body.author_handle)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    decision = engine.risk.preflight(body.account_id, OperationKind.COMMENT)
-    if not decision.allowed:
-        raise HTTPException(429, decision.reason)
-    identity = browser.identity_for(account)
+    if draft["status"] == "done":
+        return {"ok": True, "idempotent_replay": True, **draft}
+    if draft["status"] == "uncertain":
+        return {"ok": False, "uncertain": True, **draft}
     try:
-        async with engine.operation_guard(
-                body.account_id, OperationKind.COMMENT,
-                fallback_key=f"x-reply:{body.account_id}:{tweet_id}"):
-            ok, url, error = await reply_x(
-                browser, identity, canonical_url, body.text)
-    except Exception as exc:
-        engine.risk.record_failure(body.account_id, OperationKind.COMMENT, exc)
-        raise HTTPException(400, f"X 回复失败: {exc}") from exc
-    if ok:
-        engine.risk.record_success(body.account_id, OperationKind.COMMENT)
-        return {"ok": True, "tweet_id": tweet_id, "url": url or canonical_url}
-    if str(error or "").startswith("write_uncertain:"):
-        return {"ok": False, "uncertain": True, "tweet_id": tweet_id,
-                "url": canonical_url, "error": error}
-    engine.risk.record_failure(body.account_id, OperationKind.COMMENT, error)
-    raise HTTPException(400, error or "X 回复失败")
+        result = await perform_queue_action(
+            "comments", draft["task_id"], "run-now", engine=engine)
+    except QueueActionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    return {"ok": True, "queued_via": "comments", **draft, "execution": result}
 
 
 class XReplyPreviewIn(BaseModel):
@@ -335,52 +328,18 @@ class XRelationshipIn(BaseModel):
 
 @router.post("/relationship")
 async def relationship(body: XRelationshipIn):
-    browser, engine = _runtime()
-    account = _x_account(body.account_id)
+    _browser, engine = _runtime()
+    _x_account(body.account_id)
     try:
-        handle, profile_url = normalize_x_handle(body.handle)
+        task = create_x_relationship_task(
+            body.account_id, body.handle, body.action)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-
-    decision = engine.risk.preflight(body.account_id, OperationKind.SOCIAL)
-    if not decision.allowed:
-        raise HTTPException(429, decision.reason)
-
-    identity = browser.identity_for(account)
+    if task["status"] == "uncertain":
+        return {"ok": False, "uncertain": True, **task}
     try:
-        async with engine.operation_guard(
-                body.account_id, OperationKind.SOCIAL,
-                fallback_key=f"x-relationship:{body.account_id}:{body.action}:{handle.casefold()}"):
-            outcome = await set_x_following(
-                browser, identity, handle, body.action == "follow")
-    except Exception as exc:
-        engine.risk.record_failure(body.account_id, OperationKind.SOCIAL, exc)
-        raise HTTPException(400, f"X 关注关系操作失败: {exc}") from exc
-
-    if outcome.ok:
-        if outcome.changed:
-            engine.risk.record_success(body.account_id, OperationKind.SOCIAL)
-        return {
-            "ok": True,
-            "action": body.action,
-            "handle": handle,
-            "url": profile_url,
-            "changed": outcome.changed,
-            "state": outcome.state,
-        }
-
-    if outcome.status == "uncertain":
-        return {
-            "ok": False,
-            "uncertain": True,
-            "action": body.action,
-            "handle": handle,
-            "url": profile_url,
-            "changed": outcome.changed,
-            "state": outcome.state,
-            "error": outcome.error,
-        }
-
-    engine.risk.record_failure(
-        body.account_id, OperationKind.SOCIAL, outcome.error or "X 关注关系操作失败")
-    raise HTTPException(400, outcome.error or "X 关注关系操作失败")
+        result = await perform_queue_action(
+            "actions", task["task_id"], "run-now", engine=engine)
+    except QueueActionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    return {"ok": True, "queued_via": "actions", **task, "execution": result}

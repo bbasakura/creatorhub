@@ -15,8 +15,9 @@ from typing import Sequence
 from sqlmodel import select
 
 from ..db import get_session
-from ..models import CommentTask, PublishTask
+from ..models import AccountActionTask, CommentTask, PublishTask
 from ..platforms.x.client import compose_x_text, normalize_tweet_ref
+from ..platforms.x.relationship import normalize_x_handle
 from .task_events import add_task_event
 
 
@@ -128,4 +129,46 @@ def create_x_reply_draft(account_id: int, tweet_ref: str, text: str, *,
             "ok": True, "draft": True, "idempotent_replay": False,
             "queue_type": "comments", "task_id": task.id,
             "status": task.status, "tweet_id": tweet_id, "url": canonical_url,
+        }
+
+
+def create_x_relationship_task(account_id: int, target: str, action: str) -> dict:
+    value = str(action or "").strip().lower()
+    if value not in {"follow", "unfollow"}:
+        raise ValueError("X 关注关系 action 仅支持 follow/unfollow")
+    handle, profile_url = normalize_x_handle(target)
+    with get_session() as session:
+        rows = session.exec(select(AccountActionTask).where(
+            AccountActionTask.platform == "x",
+            AccountActionTask.account_id == account_id,
+            AccountActionTask.action == value,
+            AccountActionTask.target_uid == handle,
+        )).all()
+        existing = next((row for row in rows
+                         if row.status in {"draft", "pending", "doing", "uncertain"}), None)
+        if existing is not None:
+            return {
+                "ok": True, "idempotent_replay": True,
+                "queue_type": "actions", "task_id": existing.id,
+                "status": existing.status, "action": value,
+                "handle": handle, "url": profile_url,
+            }
+        task = AccountActionTask(
+            platform="x", account_id=account_id, action=value,
+            target_uid=handle, target_nick=f"@{handle}", status="draft",
+        )
+        session.add(task)
+        session.flush()
+        add_task_event(
+            session, queue_type="actions", row_id=task.id,
+            event_type="draft:created", from_status="", to_status="draft",
+            actor="x_workflow",
+            detail=f"X {value} 任务已创建，目标 @{handle}，等待统一 worker 执行")
+        session.commit()
+        session.refresh(task)
+        return {
+            "ok": True, "idempotent_replay": False,
+            "queue_type": "actions", "task_id": task.id,
+            "status": task.status, "action": value,
+            "handle": handle, "url": profile_url,
         }

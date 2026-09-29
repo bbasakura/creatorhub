@@ -52,7 +52,8 @@ from ..platforms.channels import (parse_channels_feed, parse_channels_comment,
 from ..platforms.wechat_mp import (parse_mp_feed, parse_mp_comment,
                    flatten_mp_comments, parse_self_user as parse_mp_self_user,
                    publish_mp, send_mp_heartbeat)
-from ..platforms.x.client import publish_x
+from ..platforms.x.client import publish_x, reply_x
+from ..platforms.x.relationship import set_x_following
 from ..models import (ContentRecord, CommentRecord, CommentRule, CommentTask,
                       CommentWatch, DanmakuWatch, DanmakuRecord,
                        DouyinAccount, MonitorTarget, AccountRiskState,
@@ -3957,7 +3958,17 @@ class MonitorEngine:
             s.add(t); s.commit()
 
         try:
-            if action == "follow":
+            if platform == "x" and action in {"follow", "unfollow"}:
+                outcome = await set_x_following(
+                    self.browser, identity, target_uid or target_sec_uid,
+                    action == "follow",
+                    on_submit=lambda: self._mark_browser_submit(
+                        AccountActionTask, task_id))
+                ok = outcome.ok
+                err = "" if ok else (
+                    ("write_uncertain:" if outcome.status == "uncertain" else "")
+                    + (outcome.error or f"X {action} 失败"))
+            elif action == "follow":
                 ok, err = await do_follow(self.browser, identity, platform,
                                           target_uid, target_sec_uid)
             elif action == "unfollow":
@@ -3992,10 +4003,11 @@ class MonitorEngine:
 
         kind = OperationKind.DM if action == "send_dm" else OperationKind.SOCIAL
         uncertain = (
-            not ok
-            and platform == "xhs"
-            and action == "send_dm"
-            and str(err or "").startswith("write_uncertain:")
+            not ok and str(err or "").startswith("write_uncertain:")
+            and (
+                (platform == "xhs" and action == "send_dm")
+                or (platform == "x" and action in {"follow", "unfollow"})
+            )
         )
         failure = None if ok or uncertain else self.risk.record_failure(
             account_id, kind, err)
@@ -4209,6 +4221,13 @@ class MonitorEngine:
                     headed=(True if native_mode
                             else self.cfg.engine.comment_browser_headed))
                 result = "ok" if ok else ""
+            elif platform == "x":
+                method = "browser"
+                ok, result, err = await reply_x(
+                    self.browser, identity, aweme_id, content,
+                    on_submit=lambda: self._mark_browser_submit(
+                        CommentTask, task_id))
+                uncertain = str(err or "").startswith("write_uncertain:")
             else:
                 method = "browser"
                 ok, err = await post_comment_browser(

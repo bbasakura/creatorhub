@@ -118,6 +118,7 @@ async def set_x_following(
         identity: Identity,
         target: str,
         should_follow: bool,
+        *, on_submit=None,
 ) -> XRelationshipOutcome:
     """Follow/unfollow one X account and verify the resulting UI state."""
     action: Literal["follow", "unfollow"] = "follow" if should_follow else "unfollow"
@@ -127,6 +128,7 @@ async def set_x_following(
         return XRelationshipOutcome("failed", action, "", error=str(exc))
 
     clicked = False
+    submitted = False
     try:
         async with mgr.visible_page(identity, url=profile_url) as page:
             if await _page_logged_out(page):
@@ -155,6 +157,9 @@ async def set_x_following(
                     error="未找到该 X 用户的关注状态按钮；可能是自己的账号、页面异常或 X 已改版",
                 )
 
+            if callable(on_submit):
+                on_submit()
+            submitted = True
             await button.click(timeout=8000)
             clicked = True
 
@@ -192,7 +197,8 @@ async def set_x_following(
                 error="已执行取关，但未能确认最终状态，请先到 X 核对",
             )
     except Exception as exc:
-        status: Literal["failed", "uncertain"] = "uncertain" if clicked else "failed"
+        status: Literal["failed", "uncertain"] = (
+            "uncertain" if submitted or clicked else "failed")
         return XRelationshipOutcome(
             status, action, handle, changed=clicked,
             error=f"X {action} 异常: {exc!r}",
