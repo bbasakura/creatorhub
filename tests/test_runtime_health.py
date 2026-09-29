@@ -22,6 +22,7 @@ class FakeEngine:
             "task_alive": self.task_alive,
             "scheduler_heartbeat_age_seconds": self.age,
             "scheduler_stage": "publish_queue",
+            "scheduler_groups": {},
         }
 
 
@@ -47,6 +48,49 @@ def test_readiness_rejects_stale_scheduler_heartbeat():
             engine=FakeEngine(age=601), browser=object(), executor_lock=FakeLock())
     assert payload["ready"] is False
     assert payload["checks"]["scheduler_heartbeat_fresh"] is False
+
+
+def test_readiness_checks_each_scheduler_group_when_present():
+    engine = FakeEngine(age=9999)
+    def status(*, now=None):
+        return {
+            "running": True,
+            "task_alive": True,
+            "scheduler_heartbeat_age_seconds": 9999,
+            "scheduler_groups": {
+                "scan": {"alive": True, "heartbeat_age_seconds": 2},
+                "writes": {"alive": True, "heartbeat_age_seconds": 3},
+                "maintenance": {"alive": True, "heartbeat_age_seconds": 4},
+            },
+        }
+    engine.runtime_status = status
+    with patch("app.services.runtime_health._database_ok", return_value=(True, "")), \
+         patch("app.services.runtime_health._queue_metrics", return_value={}):
+        payload = build_runtime_readiness(
+            engine=engine, browser=object(), executor_lock=FakeLock())
+    assert payload["ready"] is True
+    assert payload["checks"]["scheduler_groups_alive"] is True
+
+
+def test_readiness_rejects_dead_scheduler_group():
+    engine = FakeEngine()
+    def status(*, now=None):
+        return {
+            "running": True,
+            "task_alive": True,
+            "scheduler_heartbeat_age_seconds": 1,
+            "scheduler_groups": {
+                "scan": {"alive": False, "heartbeat_age_seconds": 2},
+                "writes": {"alive": True, "heartbeat_age_seconds": 3},
+            },
+        }
+    engine.runtime_status = status
+    with patch("app.services.runtime_health._database_ok", return_value=(True, "")), \
+         patch("app.services.runtime_health._queue_metrics", return_value={}):
+        payload = build_runtime_readiness(
+            engine=engine, browser=object(), executor_lock=FakeLock())
+    assert payload["ready"] is False
+    assert payload["checks"]["scheduler_groups_alive"] is False
 
 
 def test_readiness_rejects_missing_executor_lock():

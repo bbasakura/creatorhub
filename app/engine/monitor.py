@@ -69,6 +69,7 @@ from ..risk import (
 )
 from ..settings import get_setting
 from ..services.task_events import add_task_event
+from ..services.scheduler_runtime import PeriodicScheduler, SchedulerGroup, SchedulerStage
 from .downloader import Downloader
 from .collection import KeywordCollector
 
@@ -277,6 +278,7 @@ class MonitorEngine:
         self._scheduler_stage = "stopped"
         self._last_loop_error = ""
         self._loop_iterations = 0
+        self._scheduler: PeriodicScheduler | None = None
 
     async def _xhs_gap(self, seconds: float | None = None) -> None:
         base = max(0.0, float(
@@ -334,6 +336,8 @@ class MonitorEngine:
             heartbeat_age = max(
                 0.0, (current - self._last_scheduler_heartbeat_at).total_seconds())
         task_alive = bool(self._task is not None and not self._task.done())
+        scheduler_groups = (
+            self._scheduler.status(now=current) if self._scheduler is not None else {})
 
         def _iso(value: datetime | None):
             return value.isoformat() + "Z" if value else None
@@ -349,6 +353,7 @@ class MonitorEngine:
             "scheduler_stage": self._scheduler_stage,
             "last_loop_error": self._last_loop_error,
             "loop_iterations": self._loop_iterations,
+            "scheduler_groups": scheduler_groups,
             "active": {
                 "publishing": len(self._publishing),
                 "commenting": len(self._commenting),
@@ -720,41 +725,53 @@ class MonitorEngine:
             return 0
 
     async def _loop(self):
-        stages = (
-            ("risk_prune", lambda sampled_at, sampled_epoch: self._prune_risk_events_if_due(sampled_at)),
-            ("browser_gc", lambda sampled_at, sampled_epoch: self._collect_idle_browser_sessions(sampled_epoch)),
-            ("scan_targets", lambda sampled_at, sampled_epoch: self._scan_once()),
-            ("scan_comment_watches", lambda sampled_at, sampled_epoch: self._scan_comment_watches()),
-            ("scan_danmaku", lambda sampled_at, sampled_epoch: self._scan_danmaku_watches()),
-            ("retry_failed", lambda sampled_at, sampled_epoch: self._retry_failed()),
-            ("risk_recovery", lambda sampled_at, sampled_epoch: self._process_risk_recovery()),
-            ("account_check", lambda sampled_at, sampled_epoch: self._check_accounts()),
-            ("work_health", lambda sampled_at, sampled_epoch: self._check_work_health()),
-            ("publish_queue", lambda sampled_at, sampled_epoch: self._process_publish()),
-            ("comment_rules", lambda sampled_at, sampled_epoch: self._process_comment_rules()),
-            ("comment_queue", lambda sampled_at, sampled_epoch: self._process_comment_tasks()),
-            ("action_queue", lambda sampled_at, sampled_epoch: self._process_action_tasks()),
-            ("collection_queue", lambda sampled_at, sampled_epoch: self._process_collection_jobs()),
+        read_timeout = max(
+            600.0,
+            float(self.cfg.engine.request_timeout_seconds or 20) * 20,
+            float(self.cfg.engine.douyin_captcha_wait_seconds or 300) + 120,
         )
-        while self._running:
-            self._last_loop_started_at = datetime.utcnow()
-            self._last_loop_error = ""
-            try:
-                sampled_at = self._last_loop_started_at
-                sampled_epoch = time.time()
-                for stage, operation in stages:
-                    self._mark_scheduler_progress(stage)
-                    result = operation(sampled_at, sampled_epoch)
-                    if asyncio.iscoroutine(result):
-                        await result
-            except Exception as e:
-                self._last_loop_error = repr(e)[:1000]
-                log.exception("scan loop error: %s", e)
-            finally:
-                self._last_loop_finished_at = datetime.utcnow()
-                self._loop_iterations += 1
-                self._mark_scheduler_progress("sleep")
-            await asyncio.sleep(15)
+        groups = (
+            SchedulerGroup("scan", 15.0, (
+                SchedulerStage("risk_prune", lambda: self._prune_risk_events_if_due(datetime.utcnow())),
+                SchedulerStage("browser_gc", lambda: self._collect_idle_browser_sessions(time.time()), 120.0),
+                SchedulerStage("scan_targets", self._scan_once, read_timeout),
+                SchedulerStage("scan_comment_watches", self._scan_comment_watches, read_timeout),
+                SchedulerStage("scan_danmaku", self._scan_danmaku_watches, read_timeout),
+                SchedulerStage("retry_failed", self._retry_failed, 120.0),
+            )),
+            SchedulerGroup("writes", 15.0, (
+                # Browser writers own their own submit-boundary/timeout semantics;
+                # do not wrap them in an outer cancellation timeout.
+                SchedulerStage("publish_queue", self._process_publish),
+                SchedulerStage("comment_rules", self._process_comment_rules),
+                SchedulerStage("comment_queue", self._process_comment_tasks),
+                SchedulerStage("action_queue", self._process_action_tasks),
+                SchedulerStage("collection_queue", self._process_collection_jobs),
+            )),
+            SchedulerGroup("maintenance", 30.0, (
+                SchedulerStage("risk_recovery", self._process_risk_recovery, 180.0),
+                SchedulerStage("account_check", self._check_accounts, read_timeout),
+                SchedulerStage("work_health", self._check_work_health, read_timeout),
+            )),
+        )
+        self._last_loop_started_at = datetime.utcnow()
+        self._scheduler = PeriodicScheduler(groups, logger=log)
+        self._scheduler.start()
+        self._mark_scheduler_progress("groups_running")
+        try:
+            await self._scheduler.wait()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._last_loop_error = repr(exc)[:1000]
+            log.exception("scheduler supervisor error: %s", exc)
+            raise
+        finally:
+            if self._scheduler is not None:
+                await self._scheduler.stop()
+            self._last_loop_finished_at = datetime.utcnow()
+            self._loop_iterations += 1
+            self._mark_scheduler_progress("stopped")
 
     def enqueue_collection_job(self, job_id: int) -> bool:
         """立即把关键词任务交给后台执行；同一时刻仅跑一个批量任务。"""

@@ -95,15 +95,28 @@ def build_runtime_readiness(*, engine: Any, browser: Any,
     )
     stale_after = _heartbeat_stale_after_seconds(engine) if engine is not None else 600
     heartbeat_age = engine_status.get("scheduler_heartbeat_age_seconds")
-    heartbeat_fresh = (
-        heartbeat_age is not None and float(heartbeat_age) <= stale_after
-    )
+    scheduler_groups = engine_status.get("scheduler_groups") or {}
+    if scheduler_groups:
+        groups_alive = all(bool(group.get("alive")) for group in scheduler_groups.values())
+        groups_fresh = all(
+            group.get("heartbeat_age_seconds") is not None
+            and float(group.get("heartbeat_age_seconds")) <= stale_after
+            for group in scheduler_groups.values()
+        )
+        heartbeat_fresh = groups_alive and groups_fresh
+    else:
+        groups_alive = True
+        groups_fresh = True
+        heartbeat_fresh = (
+            heartbeat_age is not None and float(heartbeat_age) <= stale_after
+        )
     checks = {
         "database": db_ok,
         "browser": browser is not None,
         "executor_lock": bool(executor_lock is not None and getattr(executor_lock, "acquired", False)),
         "engine_running": bool(engine_status.get("running")),
         "engine_task_alive": bool(engine_status.get("task_alive")),
+        "scheduler_groups_alive": groups_alive,
         "scheduler_heartbeat_fresh": heartbeat_fresh,
     }
     ready = all(checks.values())

@@ -634,6 +634,7 @@ risk_control:
         previous_browser = main.browser
         previous_engine = main.engine
         previous_receiver = main.im_receiver
+        previous_executor_lock = main.executor_instance_lock
 
         class BrowserStub:
             def __init__(self):
@@ -652,6 +653,16 @@ risk_control:
             async def stop_all(self):
                 return None
 
+        class LockStub:
+            acquired = True
+            path = "test-executor.lock"
+
+            def acquire(self):
+                return self
+
+            def release(self):
+                self.acquired = False
+
         try:
             with patch("app.main.init_db"), \
                     patch("app.main._backfill_danmaku_records", return_value=0), \
@@ -659,6 +670,7 @@ risk_control:
                     patch("app.main.seed_proxy_pool", return_value=0), \
                     patch("app.main.migrate_identities", return_value=0), \
                     patch("app.main.BrowserManager", return_value=BrowserStub()), \
+                    patch("app.main.ExecutorInstanceLock", return_value=LockStub()), \
                     patch.object(MonitorEngine, "start", autospec=True), \
                     patch.object(RiskController, "prune_events", autospec=True,
                                  return_value=0) as prune_events, \
@@ -677,6 +689,7 @@ risk_control:
             main.browser = previous_browser
             main.engine = previous_engine
             main.im_receiver = previous_receiver
+            main.executor_instance_lock = previous_executor_lock
 
     def test_three_spaced_light_reads_reduce_one_risk_level(self):
         account_id = self._account()
