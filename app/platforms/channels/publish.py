@@ -383,8 +383,12 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
                     if await page.locator('text="已保存"').count():
                         saved = True
                         break
-                ok = True
-                result_url = "https://channels.weixin.qq.com/platform/post/draftListManager"
+                if saved:
+                    ok = True
+                    result_url = "https://channels.weixin.qq.com/platform/post/draftListManager"
+                else:
+                    return False, "", ("write_uncertain: 已点击视频号保存草稿，但未观察到明确保存回执；"
+                                       "请先核对草稿箱，禁止自动重试")
             except Exception as e:
                 if submitted:
                     return False, "", ("write_uncertain: 已进入视频号草稿提交边界但结果不确定，"
@@ -408,10 +412,10 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
                                        f"请先核对作品列表，禁止自动重试: {e!r}")
                 return False, "", f"发布提交边界持久化失败，未执行点击: {e!r}"
 
-            # 等成功:
-            # 1. 跳管理列表页 (URL含 postlist 或 /post/list) 或离开 /post/create
-            # 2. 出现「发表成功」toast
-            # 3. 原发表按钮已消失或页面跳转
+            # 等成功：只接受可核验的平台证据。
+            # 1. 跳管理列表页 (URL含 postlist 或 /post/list) 或明确离开创建页
+            # 2. 出现「发表成功」等成功文案
+            # 按钮消失本身不是成功证据，可能只是页面重绘/风控弹层。
             for _ in range(int(timeout_seconds / 2)):
                 url_l = page.url.lower()
                 if "postlist" in url_l or "/post/list" in url_l or ("/post/create" not in url_l and "channels.weixin.qq.com" in url_l):
@@ -426,12 +430,6 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
                         pass
                 if ok:
                     break
-                try:
-                    if not await pub.count() or not await pub.is_visible():
-                        ok = True
-                        break
-                except Exception:
-                    pass
                 await page.wait_for_timeout(2000)
             result_url = page.url if ok else ""
             if not ok:
