@@ -20,7 +20,7 @@
     /* text */
     --fg:#e7eaf0; --fg-strong:#f6f8fb; --mut:#8b94a3; --mut-2:#778094;
     /* brand + semantic */
-    --acc:#fe2c55; --acc-hover:#ff4b6e; --acc-soft:rgba(254,44,85,.14); --acc-ring:rgba(254,44,85,.35);
+    --acc:#fe2c55; --acc-hover:#ff4b6e; --acc-soft:rgba(254,44,85,.14); --acc-ring:rgba(254,44,85,.35); --primary-fg:#fff;
     --xhs:#ff2442; --xhs-hover:#ff4359; --xhs-soft:rgba(255,36,66,.14); --xhs-ring:rgba(255,36,66,.35);
     --info:#38bdf8; --info-soft:rgba(56,189,248,.14);
     --success:#34d399; --success-soft:rgba(52,211,153,.14);
@@ -118,7 +118,7 @@
 
   body.pf-x {
     --acc:#eff3f4; --acc-hover:#ffffff; --acc-active:#d7dbdc;
-    --acc-soft:rgba(239,243,244,.12); --acc-ring:rgba(239,243,244,.32);
+    --acc-soft:rgba(239,243,244,.12); --acc-ring:rgba(239,243,244,.32); --primary-fg:#0f1419;
   }
   body.pf-x .brand-mark { background:linear-gradient(135deg,#ffffff,#8b98a5); box-shadow:0 4px 14px -4px rgba(255,255,255,.32); }
   body.pf-x .badge-lite { color:var(--acc); background:var(--acc-soft); }
@@ -569,7 +569,7 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
   /* ── buttons ── */
   button {
     display:inline-flex; align-items:center; justify-content:center; gap:6px;
-    background:linear-gradient(180deg,var(--acc-hover),var(--acc)); color:#fff; border:1px solid transparent; border-radius:var(--r-sm);
+    background:linear-gradient(180deg,var(--acc-hover),var(--acc)); color:var(--primary-fg); border:1px solid transparent; border-radius:var(--r-sm);
     min-height:36px; padding:7px 14px; cursor:pointer; font-size:13px; font-weight:600; line-height:1;
     touch-action:manipulation;
     box-shadow:0 7px 18px -13px var(--acc-ring), inset 0 1px 0 rgba(255,255,255,.18);
