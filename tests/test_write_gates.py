@@ -467,6 +467,9 @@ class WriteGateTests(unittest.TestCase):
             submitted_wechat = PublishTask(
                 platform="wechat_mp", account_id=account_id, media_json="[]",
                 status="publishing")
+            submitted_x = PublishTask(
+                platform="x", account_id=account_id, media_json="[]",
+                status="publishing")
             submitted_action = AccountActionTask(
                 platform="xhs", account_id=account_id, action="send_dm",
                 target_uid="fixture-user", content="唯一消息", status="doing",
@@ -477,18 +480,20 @@ class WriteGateTests(unittest.TestCase):
             session.add(submitted_comment)
             session.add(submitted_publish)
             session.add(submitted_wechat)
+            session.add(submitted_x)
             session.add(submitted_action)
             session.commit()
             comment_id, action_id, publish_id = comment.id, action.id, publish.id
             submitted_comment_id = submitted_comment.id
             submitted_publish_id = submitted_publish.id
             submitted_wechat_id = submitted_wechat.id
+            submitted_x_id = submitted_x.id
             submitted_action_id = submitted_action.id
 
         engine = MonitorEngine(self.cfg, _BrowserStub())
         recovered = engine.recover_interrupted_tasks(now=now)
 
-        self.assertEqual(recovered, 7)
+        self.assertEqual(recovered, 8)
         with db.get_session() as session:
             rows = [
                 session.get(CommentTask, comment_id),
@@ -502,6 +507,7 @@ class WriteGateTests(unittest.TestCase):
                 session.get(CommentTask, submitted_comment_id),
                 session.get(PublishTask, submitted_publish_id),
                 session.get(PublishTask, submitted_wechat_id),
+                session.get(PublishTask, submitted_x_id),
                 session.get(AccountActionTask, submitted_action_id),
             ]
             for row in submitted_rows:

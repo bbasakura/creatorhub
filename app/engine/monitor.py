@@ -324,7 +324,7 @@ class MonitorEngine:
                         and str(getattr(row, "error", "") or "")
                         .startswith(_BROWSER_SUBMIT_MARKER)
                     )
-                    if submitted or (model is PublishTask and row.platform in ("wechat_mp", "youtube")):
+                    if submitted or (model is PublishTask and row.platform in ("wechat_mp", "youtube", "x")):
                         row.status = "uncertain"
                         row.scheduled_at = None
                         if hasattr(row, "done_at"):
