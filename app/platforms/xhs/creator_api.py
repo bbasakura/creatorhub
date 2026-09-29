@@ -140,7 +140,8 @@ class XhsCreatorApi:
                   video_file: Optional[bytes] = None,
                   topics: Optional[List[str]] = None,
                   post_time_ms: Optional[int] = None,
-                  privacy_type: int = 0) -> Tuple[bool, str, dict]:
+                  privacy_type: int = 0,
+                  on_submit=None) -> Tuple[bool, str, dict]:
         post_api = "/web_api/sns/v2/note"
         post_loc: dict = {}
         if media_type == "video":
@@ -188,6 +189,8 @@ class XhsCreatorApi:
             "x-b3-traceid": sign.gen_b3_traceid(), "x-xray-traceid": sign.gen_xray_traceid(),
             "x-rap-param": sign.generate_x_rap_param(post_api, body),
         }
+        if callable(on_submit):
+            on_submit()
         r = self.cli.post(EDITH_URL + post_api, headers=h, data=body.encode("utf-8"),
                          cookies=self.cookies)
         j = r.json()

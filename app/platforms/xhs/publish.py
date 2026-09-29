@@ -53,21 +53,31 @@ def _creator_response_error(response):
 
 
 def _publish_api_sync(cookie_str: str, media_type: str, title: str, desc: str,
-                      files: List[str], topics: List[str], proxy: str = ""
-                      ) -> Tuple[bool, str, str]:
+                      files: List[str], topics: List[str], proxy: str = "",
+                      on_submit=None) -> Tuple[bool, str, str]:
     """同步执行 API 直发(在线程里跑)。返回 (ok, result_url, error)。"""
     from .creator_api import XhsCreatorApi, XhsPublishError
     api = None
+    submitted = False
+
+    def _mark_submit():
+        nonlocal submitted
+        if callable(on_submit):
+            on_submit()
+        submitted = True
+
     try:
         api = XhsCreatorApi(cookie_str, proxy=proxy)
         if media_type == "video":
             data = Path(files[0]).read_bytes()
             ok, msg, j = api.post_note(media_type="video", title=title, desc=desc,
-                                       video_file=data, topics=topics)
+                                       video_file=data, topics=topics,
+                                       on_submit=_mark_submit)
         else:
             imgs = [Path(p).read_bytes() for p in files[:18]]
             ok, msg, j = api.post_note(media_type="image", title=title, desc=desc,
-                                       image_files=imgs, topics=topics)
+                                       image_files=imgs, topics=topics,
+                                       on_submit=_mark_submit)
         err = "" if ok else (msg or "发布失败")
         if err and any(k in err for k in ("登录", "过期", "expired")):
             err += " —— 请在「账号」里对该小红书账号点「重新登录」(会顺带授权创作平台)"
@@ -75,6 +85,9 @@ def _publish_api_sync(cookie_str: str, media_type: str, title: str, desc: str,
     except XhsPublishError as e:
         return False, "", str(e)
     except Exception as e:
+        if submitted:
+            return False, "", ("write_uncertain: 小红书 API 已进入最终发布提交边界后结果不明，"
+                               f"请先核对作品列表，禁止自动重试: {e!r}")
         return False, "", f"API 发布异常: {e!r}"
     finally:
         if api:
@@ -135,7 +148,8 @@ async def publish_xhs(mgr: BrowserManager, identity: Identity, storage_state_jso
     if not api_ok:
         return False, "", "API 兼容模式所需签名环境不可用"
     return await asyncio.to_thread(
-        _publish_api_sync, cookie_str, media_type, title, desc, files, tags, proxy)
+        _publish_api_sync, cookie_str, media_type, title, desc, files, tags, proxy,
+        on_submit)
 
 
 async def creator_check(storage_state_json: str, proxy: str = "", *,

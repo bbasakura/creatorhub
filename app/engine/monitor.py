@@ -3080,10 +3080,8 @@ class MonitorEngine:
                                              title, desc, files, topics=topics,
                                              headed=True,
                                              mode=xhs_mode,
-                                             on_submit=(
-                                                 lambda: self._mark_browser_submit(
-                                                     PublishTask, task_id)
-                                                 if xhs_mode == "browser" else None),
+                                             on_submit=lambda: self._mark_browser_submit(
+                                                 PublishTask, task_id),
                                              thumbnail_path=thumbnail_path)
         except Exception as e:
             ok, url, err = False, "", f"发布异常: {e!r}"
