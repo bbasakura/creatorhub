@@ -76,7 +76,7 @@ def test_timeline_falls_back_to_browser_on_twikit_failure():
             pass
 
         async def timeline(self, *, count):
-            raise RuntimeError("twikit unavailable")
+            raise x_api.TwikitUnavailable("twikit unavailable")
 
     browser = _Browser()
     engine = _Engine()
@@ -87,6 +87,28 @@ def test_timeline_falls_back_to_browser_on_twikit_failure():
          patch.object(x_api, "fetch_x_following_timeline", fallback):
         result = asyncio.run(x_api.timeline(8, 5))
     assert result["provider"] == "browser"
-    assert result["fallback_reason"] == "RuntimeError"
+    assert result["fallback_reason"] == "TwikitUnavailable"
     assert result["items"] == [{"id": "browser-1"}]
     fallback.assert_awaited_once()
+
+
+def test_timeline_does_not_switch_provider_after_remote_rejection():
+    class TooManyRequests(Exception):
+        pass
+    class Adapter:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def timeline(self, **kwargs):
+            raise TooManyRequests("rate limit exceeded")
+    engine = _Engine()
+    engine.risk.record_failure = __import__("unittest.mock", fromlist=["Mock"]).Mock()
+    fallback = AsyncMock()
+    with patch.object(x_api, "_runtime", return_value=(_Browser(), engine)), \
+         patch.object(x_api, "_x_account", return_value=_account()), \
+         patch.object(x_api, "TwikitReadAdapter", Adapter), \
+         patch.object(x_api, "fetch_x_following_timeline", fallback):
+        import pytest
+        with pytest.raises(x_api.HTTPException):
+            asyncio.run(x_api.timeline(8, 3))
+    fallback.assert_not_awaited()
+    engine.risk.record_failure.assert_called_once()

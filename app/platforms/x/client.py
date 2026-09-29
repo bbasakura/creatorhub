@@ -701,6 +701,11 @@ async def fetch_x_dm_conversations(
                     break
             except Exception:
                 continue
+        if not convs:
+            # An absent selector is not evidence of an empty inbox. Avoid
+            # reporting a successful sync when X changes its messages UI.
+            raise RuntimeError(
+                "X 私信列表未取得可核验结果；尚未确认空收件箱，请检查页面加载或结构变化")
         return convs
 
 

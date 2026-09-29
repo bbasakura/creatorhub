@@ -15,6 +15,9 @@ class _Soup:
 class _Asset:
     text = 'x[7], 16; y[12], 16; z[3], 16'
 
+    def raise_for_status(self):
+        pass
+
 
 class _Session:
     async def request(self, **_kwargs):

@@ -17,6 +17,10 @@ _ON_DEMAND_HASH_PATTERN = r'''[,{{]{chunk_id}:["']([0-9a-f]+)["']'''
 _INDICES_REGEX = re.compile(r'''\[(\d+)\],\s*16''', re.MULTILINE)
 
 
+class TwikitCompatibilityError(RuntimeError):
+    """Upstream client cannot parse the current public asset layout."""
+
+
 def patch_twikit_transaction(module) -> bool:
     """Patch twikit's ClientTransaction index discovery in process.
 
@@ -43,21 +47,22 @@ def patch_twikit_transaction(module) -> bool:
         response_text = str(response)
         match = _ON_DEMAND_FILE_REGEX.search(response_text)
         if not match:
-            raise Exception("Couldn't get ondemand.s chunk id")
+            raise TwikitCompatibilityError("Couldn't get ondemand.s chunk id")
         chunk_id = match.group(1)
         hash_match = re.search(
             _ON_DEMAND_HASH_PATTERN.format(chunk_id=chunk_id), response_text)
         if not hash_match:
-            raise Exception(f"Couldn't find ondemand.s hash for chunk id {chunk_id!r}")
+            raise TwikitCompatibilityError("Couldn't find ondemand.s hash")
         file_hash = hash_match.group(1)
         url = (
             "https://abs.twimg.com/responsive-web/client-web/"
             f"ondemand.s.{file_hash}a.js"
         )
         asset = await session.request(method="GET", url=url, headers=headers)
+        asset.raise_for_status()
         indices = [int(item.group(1)) for item in _INDICES_REGEX.finditer(asset.text)]
         if not indices:
-            raise Exception("Couldn't get KEY_BYTE indices")
+            raise TwikitCompatibilityError("Couldn't get KEY_BYTE indices")
         return indices[0], indices[1:]
 
     cls.get_indices = get_indices

@@ -95,3 +95,20 @@ def test_get_tweet_rejects_non_numeric_id_without_network(value):
     with pytest.raises(ValueError):
         import asyncio
         asyncio.run(adapter.get_tweet(value))
+
+
+def test_mentions_extracts_target_tweets_and_deduplicates_notifications():
+    class FakeClient:
+        async def get_notifications(self, kind, count):
+            assert kind == "Mentions"
+            tweet = SimpleNamespace(id="123", full_text="actual mention", user=None)
+            return [SimpleNamespace(id="notification-1", tweet=tweet),
+                    SimpleNamespace(id="notification-2", tweet=tweet),
+                    SimpleNamespace(id="notification-3", tweet=None)]
+    adapter = object.__new__(TwikitReadAdapter)
+    adapter._client = FakeClient()
+    import asyncio
+    rows = asyncio.run(adapter.mentions(count=3))
+    assert len(rows) == 1
+    assert rows[0]["id"] == "123"
+    assert rows[0]["text"] == "actual mention"

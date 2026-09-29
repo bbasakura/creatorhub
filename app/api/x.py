@@ -30,6 +30,15 @@ from ..platforms.x.twikit_client import (
 )
 from ..platforms.x.reply_decision import decide_reply
 from ..settings import get_setting
+from ..platforms.x.twikit_compat import TwikitCompatibilityError
+
+
+def _can_fallback_read(exc: Exception) -> bool:
+    # Only local dependency/schema failures permit changing providers.
+    # Authentication, rate limits, transport failures and unknown exceptions
+    # must reach the existing risk controller without a second platform read.
+    return isinstance(exc, (TwikitUnavailable, TwikitAuthUnavailable,
+                            TwikitCompatibilityError, KeyError, IndexError))
 
 router = APIRouter(prefix="/api/x", tags=["x"])
 
@@ -86,6 +95,8 @@ async def read_search(body: XReadQueryIn):
                 items = await _twikit_adapter(body.account_id).search(
                     body.query, product=body.product, count=body.count)
             except Exception as provider_exc:
+                if not _can_fallback_read(provider_exc):
+                    raise
                 fallback_reason = type(provider_exc).__name__
                 identity = browser.identity_for(account)
                 items = await fetch_x_search(
@@ -167,6 +178,8 @@ async def timeline(account_id: int, limit: int = 20):
                     user_agent=getattr(account, "ua", "")).timeline(count=limit)
                 provider = "twikit"
             except Exception as provider_exc:
+                if not _can_fallback_read(provider_exc):
+                    raise
                 fallback_reason = type(provider_exc).__name__
                 items = await fetch_x_following_timeline(browser, identity, limit=limit)
         engine.risk.record_success(account_id, OperationKind.READ_LIGHT)

@@ -167,7 +167,16 @@ class TwikitReadAdapter:
 
     async def mentions(self, *, count: int = 20) -> list[dict]:
         result = await self._client.get_notifications("Mentions", max(1, min(100, int(count))))
-        return [_normalize_tweet(item) for item in list(result or [])]
+        # Twikit returns Notification objects, not Tweet objects. Notifications
+        # without a target tweet must not become empty/fabricated post records.
+        tweets = {}
+        for notification in result or []:
+            tweet = getattr(notification, "tweet", None)
+            if tweet is not None:
+                row = _normalize_tweet(tweet)
+                if row["id"]:
+                    tweets[row["id"]] = row
+        return list(tweets.values())
 
     async def get_tweet(self, tweet_id: str) -> dict:
         value = str(tweet_id or "").strip()
