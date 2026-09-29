@@ -14,10 +14,11 @@ from app.platforms.x import (
 from app.services.platform_capabilities import capability_for, media_types_for
 
 
-def test_x_capabilities_cover_text_images_and_video():
+def test_x_capabilities_cover_unified_mixed_media_composer():
     cap = capability_for("x")
-    assert set(media_types_for("x")) == {"text", "images", "video"}
+    assert set(media_types_for("x")) == {"text", "media", "images", "video"}
     assert cap.default_visibility == "public"
+    assert cap.media["media"].max_media == 4
     assert cap.media["images"].max_media == 4
     assert cap.media["video"].max_media == 1
 
@@ -36,6 +37,7 @@ def test_compose_x_text_appends_unique_topics():
 def test_compose_x_text_rejects_empty_and_overflow():
     with pytest.raises(ValueError, match="不能为空"):
         compose_x_text()
+    assert compose_x_text(allow_empty=True) == ""
     with pytest.raises(ValueError, match="280"):
         compose_x_text(desc="x" * 281)
 
@@ -82,4 +84,4 @@ def test_x_frontend_contract_is_wired():
     main = Path("app/main.py").read_text(encoding="utf-8")
     assert '"x": "x.com"' in main
     assert "https://x.com/home" in main
-    assert 'classList.toggle("hidden", textOnly)' in js
+    assert 'function syncXPublishMediaType()' in js

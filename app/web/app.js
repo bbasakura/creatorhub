@@ -938,7 +938,7 @@ function applyPlatformUI() {
     const options = PLATFORM === "wechat_mp"
       ? [["article", "文章"], ["images", "贴图"], ["video", "视频"], ["podcast", "播客"]]
       : PLATFORM === "x"
-      ? [["text", "纯文本"], ["images", "图片（1-4 张）"], ["video", "视频"]]
+      ? [["text", "无附件"], ["media", "媒体附件"]]
       : PLATFORM === "youtube"
       ? [["video", "视频"]]
       : [["images", "图集（多图）"], ["video", "视频"]];
@@ -966,9 +966,10 @@ function applyPlatformUI() {
   const pubSub = $("pub-head-sub");
   if (pubSub) pubSub.textContent = dy ? "上传图集 / 视频到抖音创作平台(实验性)"
     : ks ? "上传图集 / 视频到快手创作平台(实验性)"
-    : sph ? "上传视频到视频号助手(实验性)" : mp ? "推送文章 / 贴图 / 视频 / 播客到公众号草稿箱" : isX ? "发布纯文本 / 图片 / 视频到 X" : "上传图集 / 视频到小红书(实验性)";
+    : sph ? "上传视频到视频号助手(实验性)" : mp ? "推送文章 / 贴图 / 视频 / 播客到公众号草稿箱" : isX ? "文字 + 图片 / GIF / 视频统一发布到 X" : "上传图集 / 视频到小红书(实验性)";
   if ($("pub-head-lead")) $("pub-head-lead").textContent = isX ? "发布 X 帖子" : (ks || dy || sph) ? "发布作品" : mp ? "发布" : "发布笔记";
-  if ($("pub-type-label")) $("pub-type-label").textContent = isX ? "帖子类型" : "作品类型";
+  if ($("pub-type-label")) $("pub-type-label").textContent = "作品类型";
+  if ($("pub-type-wrap")) $("pub-type-wrap").classList.toggle("hidden", isX);
   if ($("pub-title-wrap")) $("pub-title-wrap").classList.toggle("hidden", isX);
   if ($("pub-title")) $("pub-title").placeholder = (ks || dy || sph) ? "给作品起个标题" : "给笔记起个标题";
   if ($("pub-desc-label")) $("pub-desc-label").textContent = isX ? "帖子内容（与话题合计 ≤ 280 字符）" : "正文";
@@ -5993,12 +5994,15 @@ function onPubType() {
   const v = $("pub-type").value, inp = $("pub-files"), lbl = $("pub-files-label");
   if (!inp) return;
   const isMp = PLATFORM === "wechat_mp";
-  const textOnly = v === "text" && PLATFORM === "x";
-  if ($("pub-drop")) $("pub-drop").classList.toggle("hidden", textOnly);
-  if (v === "text" && PLATFORM === "x") {
-    inp.accept = ""; inp.multiple = false;
-    lbl.textContent = "纯文本帖无需选择媒体文件";
-  } else if (v === "article") {
+  if (PLATFORM === "x") {
+    if ($("pub-drop")) $("pub-drop").classList.remove("hidden");
+    inp.accept = "image/*,video/*";
+    inp.multiple = true;
+    lbl.textContent = "添加图片 / GIF / 视频（可选，合计最多 4 个）";
+    return;
+  }
+  if ($("pub-drop")) $("pub-drop").classList.remove("hidden");
+  if (v === "article") {
     inp.accept = "image/*"; inp.multiple = true;
     lbl.textContent = "选择文章封面/插图（第一张为封面）";
     $("pub-title").maxLength = 64;
@@ -6021,14 +6025,33 @@ function onPubType() {
   }
   pubFilesClear();
 }
-function pubFilesClear() { pubFilesDT = new DataTransfer(); _pubSync(); }
+function syncXPublishMediaType() {
+  if (PLATFORM !== "x" || !$("pub-type")) return;
+  const files = [...pubFilesDT.files];
+  $("pub-type").value = !files.length ? "text" : "media";
+  if ($("pub-type")._csSync) $("pub-type")._csSync();
+}
+function pubFilesClear() { pubFilesDT = new DataTransfer(); syncXPublishMediaType(); _pubSync(); }
 function _pubSync() { const inp = $("pub-files"); if (inp) inp.files = pubFilesDT.files; renderPubFiles(); }
 function pubAddFiles(files) {
+  if (PLATFORM === "x") {
+    const incoming = [...files].filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
+    let omitted = 0;
+    for (const f of incoming) {
+      if ([...pubFilesDT.files].some(x => x.name === f.name && x.size === f.size)) continue;
+      if (pubFilesDT.files.length >= 4) { omitted += 1; continue; }
+      pubFilesDT.items.add(f);
+    }
+    if (omitted || incoming.length < [...files].length) toast("X 单条帖子最多 4 个图片/GIF/视频附件，其他文件已忽略", "info");
+    syncXPublishMediaType();
+    _pubSync();
+    return;
+  }
   const isVideo = ["video", "podcast"].includes($("pub-type").value);
   for (const f of files) {
     if (isVideo) { pubFilesDT = new DataTransfer(); pubFilesDT.items.add(f); break; }
     if ([...pubFilesDT.files].some(x => x.name === f.name && x.size === f.size)) continue;
-    if (pubFilesDT.files.length >= (PLATFORM === "x" ? 4 : 18)) break;
+    if (pubFilesDT.files.length >= 18) break;
     pubFilesDT.items.add(f);
   }
   _pubSync();
@@ -6036,7 +6059,7 @@ function pubAddFiles(files) {
 function pubRemoveFile(i) {
   const dt = new DataTransfer();
   [...pubFilesDT.files].forEach((f, idx) => { if (idx !== i) dt.items.add(f); });
-  pubFilesDT = dt; _pubSync();
+  pubFilesDT = dt; syncXPublishMediaType(); _pubSync();
 }
 function renderPubFiles() {
   const box = $("pub-filelist"); if (!box) return;
@@ -6059,9 +6082,10 @@ async function addPublish() {
   const acc = $("pub-acc").value;
   if (!acc) { toast("请选择" + (PF_NAME[PLATFORM] || "发布") + "账号", "err"); return; }
   if (PLATFORM === "x") {
+    syncXPublishMediaType();
     const body = $("pub-desc").value.trim();
     const topics = $("pub-topics").value.trim();
-    if (!body && !topics) { toast("请输入 X 帖子内容", "err"); return; }
+    if (!body && !topics && !pubFilesDT.files.length) { toast("请输入帖子内容或添加媒体", "err"); return; }
   }
   const files = $("pub-files").files;
   if (!files.length && !(PLATFORM === "x" && $("pub-type").value === "text")) { toast(PLATFORM === "wechat_mp" ? "请先选择该草稿类型需要的封面/图片/视频/音频文件" : "请先选择要发布的文件", "err"); return; }
@@ -6111,7 +6135,6 @@ let X_TIMELINE = [];
 async function suggestXPost() {
   try {
     const r = await api("/api/x/post/suggest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-    $("pub-type").value = "text"; onPubType();
     $("pub-title").value = ""; $("pub-desc").value = r.text || "";
     toast("已生成 X 文案，确认后再加入发布队列", "ok");
   } catch (e) { toast("生成失败:" + e.message, "err"); }
@@ -6254,7 +6277,7 @@ async function refreshPublish() {
   if ($("tb-pub")) $("tb-pub").textContent = rows.length;
   $("pub-table").innerHTML = rows.map(t => `<tr>
     <td class="wrap" style="max-width:220px">${esc(t.platform === "x" ? (t.desc || t.title || "(无内容)") : (t.title || "(无标题)"))}</td>
-    <td>${t.platform === "wechat_mp" ? ({article: "文章", images: "贴图", video: "视频", podcast: "播客"}[t.media_type] || esc(t.media_type)) : t.platform === "x" ? ({text: "纯文本", images: "图片", video: "视频"}[t.media_type] || esc(t.media_type)) : t.media_type === "video" ? "视频" : "图文"}</td>
+    <td>${t.platform === "wechat_mp" ? ({article: "文章", images: "贴图", video: "视频", podcast: "播客"}[t.media_type] || esc(t.media_type)) : t.platform === "x" ? ({text: "无附件", media: "混合媒体", images: "图片", video: "视频"}[t.media_type] || esc(t.media_type)) : t.media_type === "video" ? "视频" : "图文"}</td>
     <td class="num">${t.media_count}</td>
     <td>${t.source_platform ? esc(t.source_platform) + " 转发" : "手动"}</td>
     <td class="mut num">${t.scheduled_at ? new Date(t.scheduled_at).toLocaleString() : "尽快"}</td>
@@ -6268,7 +6291,7 @@ async function refreshPublish() {
       PLATFORM === "kuaishou" ? "上传图集/视频加入队列(发布到快手创作平台)"
       : PLATFORM === "douyin" ? "上传图集/视频加入队列(发布到抖音创作平台)"
       : PLATFORM === "wechat_mp" ? "选择文章、贴图、视频或播客，存入公众号草稿箱"
-      : PLATFORM === "x" ? "发布纯文本、1-4 张图片或单个视频到 X"
+      : PLATFORM === "x" ? "写帖子内容，并可混合附加图片 / GIF / 视频，媒体合计最多 4 个"
       : "上传图集/视频加入队列,或在抖音作品上点「发小红书」转发过来");
 }
 // 视频号作品无公开链接:用该账号已登录浏览器打开图文/视频管理页查看

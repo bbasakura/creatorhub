@@ -8525,15 +8525,15 @@ async def add_publish(body: PublishIn):
 
         if platform == "x":
             if body.media_type not in _media_types_for("x"):
-                raise HTTPException(400, "X 作品类型须为 text / images / video")
+                raise HTTPException(400, "X 内部媒体类型无效")
             try:
-                compose_x_text(body.title, body.desc, body.topics)
+                compose_x_text(body.title, body.desc, body.topics, allow_empty=bool(body.media_paths))
             except ValueError as exc:
                 raise HTTPException(400, str(exc)) from exc
-            if body.media_type == "images" and not (1 <= len(body.media_paths) <= 4):
-                raise HTTPException(400, "X 图片帖需要 1 至 4 张图片")
+            if body.media_type in {"media", "images"} and not (1 <= len(body.media_paths) <= 4):
+                raise HTTPException(400, "X 单条帖子最多附加 4 个媒体文件")
             if body.media_type == "video" and len(body.media_paths) != 1:
-                raise HTTPException(400, "X 视频帖需要且只能上传 1 个视频")
+                raise HTTPException(400, "旧版 X 视频任务需要且只能上传 1 个视频")
             if body.media_type != "text" and any(not Path(p).is_file() for p in body.media_paths):
                 raise HTTPException(400, "X 上传文件不存在")
             if not account.storage_state or account.status != "active":

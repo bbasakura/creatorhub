@@ -80,7 +80,7 @@ def _topic_tags(topics: str | Sequence[str]) -> list[str]:
     return out
 
 
-def compose_x_text(title: str = "", desc: str = "", topics: str | Sequence[str] = "") -> str:
+def compose_x_text(title: str = "", desc: str = "", topics: str | Sequence[str] = "", *, allow_empty: bool = False) -> str:
     title = str(title or "").strip()
     desc = str(desc or "").strip()
     if title and desc and title != desc:
@@ -92,7 +92,7 @@ def compose_x_text(title: str = "", desc: str = "", topics: str | Sequence[str] 
         suffix = " ".join(f"#{tag}" for tag in tags)
         text = f"{text}\n\n{suffix}" if text else suffix
     text = text.strip()
-    if not text:
+    if not text and not allow_empty:
         raise ValueError("X 帖子正文不能为空")
     if len(text) > 280:
         raise ValueError(f"X 帖子当前为 {len(text)} 字符，超过 280 字符限制")
@@ -275,11 +275,11 @@ async def publish_x(
         *, timeout_seconds: int = 120) -> tuple[bool, str, str]:
     """Publish one X post via the account's visible persistent Chrome profile."""
     try:
-        text = compose_x_text(title, desc, topics)
+        text = compose_x_text(title, desc, topics, allow_empty=bool(media_paths))
     except ValueError as exc:
         return False, "", str(exc)
-    if media_type not in {"text", "images", "video"}:
-        return False, "", "X 仅支持 text / images / video"
+    if media_type not in {"text", "media", "images", "video"}:
+        return False, "", "X 内部媒体类型无效"
     submitted = {"clicked": False}
     evidence = {"accepted": False}
     listener = _create_tweet_listener(evidence)
@@ -287,7 +287,8 @@ async def publish_x(
         async with mgr.visible_page(identity, url=X_COMPOSE_URL) as page:
             if await _page_logged_out(page):
                 return False, "", "logged_out:X 登录态已失效，请重新登录"
-            await _fill_editor(page, text)
+            if text:
+                await _fill_editor(page, text)
             await _set_media(page, media_paths, media_type)
             page.on("response", listener)
             try:

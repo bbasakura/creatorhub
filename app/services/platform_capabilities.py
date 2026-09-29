@@ -94,6 +94,8 @@ PLATFORM_CAPABILITIES: dict[str, PlatformCapability] = {
     "x": PlatformCapability(
         media={
             "text": MediaCapability(title_max=280, require_title=False),
+            "media": MediaCapability(title_max=280, require_title=False, min_media=1, max_media=4),
+            # 兼容旧任务；新 UI 统一使用 media，可混合图片/GIF/视频。
             "images": MediaCapability(title_max=280, require_title=False, min_media=1, max_media=4),
             "video": MediaCapability(title_max=280, require_title=False, min_media=1, max_media=1),
         },
