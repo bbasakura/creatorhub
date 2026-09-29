@@ -223,7 +223,8 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
                            headed: bool = True, timeout_seconds: int = 180,
                            location: str = "",
                            thumbnail_path: str = "",
-                           operation: str = "publish"
+                           operation: str = "publish",
+                           on_submit=None
                            ) -> Tuple[bool, str, str]:
     """发布一条视频号作品或保存为草稿。返回 (ok, result_url, error)。
     location:可选,视频号位置 POI(best-effort,设不上不影响发布)。
@@ -371,6 +372,9 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
             if not await draft_btn.count():
                 return False, "", "未找到「保存草稿」按钮"
             try:
+                if callable(on_submit):
+                    on_submit()
+                submitted = True
                 await draft_btn.click(timeout=5000)
                 # 等待「已保存」提示
                 saved = False
@@ -382,6 +386,9 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
                 ok = True
                 result_url = "https://channels.weixin.qq.com/platform/post/draftListManager"
             except Exception as e:
+                if submitted:
+                    return False, "", ("write_uncertain: 已进入视频号草稿提交边界但结果不确定，"
+                                       f"请先核对草稿箱，禁止自动重试: {e!r}")
                 return False, "", f"点保存草稿失败: {e!r}"
         else:
             pub = page.locator('button.weui-desktop-btn_primary:has-text("发表"), button:has-text("发表")').first
@@ -390,14 +397,16 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
             if pub is None or not await pub.count():
                 diag = await _collect_diag(page, "no-publish-btn")
                 return False, "", (f"上传/填写已完成但未找到发表按钮。DOM诊断: {diag}")
-            submitted = True
             try:
+                if callable(on_submit):
+                    on_submit()
+                submitted = True
                 await pub.click(timeout=5000)
-            except Exception:
-                try:
-                    await pub.evaluate("el => el.click()")
-                except Exception as e:
-                    return False, "", f"write_uncertain: 点击发表时异常，请先核对视频号作品列表，禁止自动重试: {e!r}"
+            except Exception as e:
+                if submitted:
+                    return False, "", ("write_uncertain: 已进入视频号提交边界但点击结果不确定，"
+                                       f"请先核对作品列表，禁止自动重试: {e!r}")
+                return False, "", f"发布提交边界持久化失败，未执行点击: {e!r}"
 
             # 等成功:
             # 1. 跳管理列表页 (URL含 postlist 或 /post/list) 或离开 /post/create
@@ -430,7 +439,7 @@ async def publish_channels(mgr: BrowserManager, identity: Identity,
                 error = ("write_uncertain: 已点发表但未确认成功(视频号可能要求封面/实名/过脸验证,请到助手确认；禁止自动重试)。"
                          f"当前页: {page.url}; DOM诊断: {diag}")
     except Exception as e:
-        error = (f"write_uncertain: 已尝试点击发表但页面异常，请先核对视频号作品列表，禁止自动重试: {e!r}"
+        error = (f"write_uncertain: 已进入视频号提交边界后页面异常，请先核对作品/草稿列表，禁止自动重试: {e!r}"
                  if submitted else f"发布异常: {e!r}")
     finally:
         try:

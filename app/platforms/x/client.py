@@ -295,7 +295,7 @@ async def _set_media(page: Any, files: Sequence[str], media_type: str) -> list[s
     return paths
 
 
-async def _submit_once(page: Any, submitted: dict, evidence: dict) -> None:
+async def _submit_once(page: Any, submitted: dict, evidence: dict, on_submit=None) -> None:
     button = page.locator('[data-testid="tweetButtonInline"], [data-testid="tweetButton"]').first
     try:
         await button.wait_for(state="visible", timeout=10_000)
@@ -308,6 +308,8 @@ async def _submit_once(page: Any, submitted: dict, evidence: dict) -> None:
         await page.wait_for_timeout(250)
     else:
         raise RuntimeError("X 发送按钮一直不可用，请检查正文、媒体或页面提示")
+    if callable(on_submit):
+        on_submit()
     submitted["clicked"] = True
     await button.click()
     for _ in range(32):
@@ -336,7 +338,7 @@ def _create_tweet_listener(evidence: dict):
 async def publish_x(
         mgr: BrowserManager, identity: Identity, media_type: str,
         title: str, desc: str, media_paths: Sequence[str], topics: str = "",
-        *, timeout_seconds: int = 120) -> tuple[bool, str, str]:
+        *, timeout_seconds: int = 120, on_submit=None) -> tuple[bool, str, str]:
     """Publish one X post via the account's visible persistent Chrome profile."""
     try:
         text = compose_x_text(title, desc, topics, allow_empty=bool(media_paths))
@@ -357,7 +359,7 @@ async def publish_x(
             page.on("response", listener)
             try:
                 await asyncio.wait_for(
-                    _submit_once(page, submitted, evidence),
+                    _submit_once(page, submitted, evidence, on_submit=on_submit),
                     timeout=max(20, timeout_seconds))
             except asyncio.TimeoutError:
                 if submitted["clicked"]:

@@ -51,7 +51,8 @@ async def _fill_first(page, selectors, text, timeout=2500) -> bool:
 async def publish_kuaishou(mgr: BrowserManager, identity: Identity,
                            storage_state_json: str, media_type: str, title: str,
                            desc: str, media_paths: List[str], topics: str = "",
-                           headed: bool = True, timeout_seconds: int = 180
+                           headed: bool = True, timeout_seconds: int = 180,
+                           on_submit=None
                            ) -> Tuple[bool, str, str]:
     """发布一条快手作品。返回 (ok, result_url, error)。
     storage_state_json 仅用于校验(实际登录态在该账号持久 profile 里)。"""
@@ -66,6 +67,7 @@ async def publish_kuaishou(mgr: BrowserManager, identity: Identity,
     ctx = await mgr.open_headed(identity)
     page = await ctx.new_page()
     ok, result_url, error = False, "", ""
+    submitted = False
     try:
         url = VIDEO_URL if media_type == "video" else IMAGE_URL
         await page.goto(url, wait_until="domcontentloaded", timeout=40000)
@@ -81,7 +83,25 @@ async def publish_kuaishou(mgr: BrowserManager, identity: Identity,
         if body:
             await _fill_first(page, _DESC_SEL, body)
         await page.wait_for_timeout(800)
-        if not await _click_first(page, _PUBLISH_BTN, timeout=4000):
+        clicked = False
+        for selector in _PUBLISH_BTN:
+            try:
+                button = page.locator(selector).first
+                await button.wait_for(state="visible", timeout=4000)
+                if callable(on_submit):
+                    on_submit()
+                submitted = True
+                await button.click(timeout=4000)
+                clicked = True
+                break
+            except Exception:
+                if submitted:
+                    break
+                continue
+        if not clicked:
+            if submitted:
+                return False, "", ("write_uncertain: 快手已进入提交边界但点击结果不确定，"
+                                   "请先核对作品管理，禁止自动重试")
             return False, "", "未找到发布按钮(发布页可能改版)"
         try:
             await page.get_by_text("发布成功", exact=False).first.wait_for(timeout=15000)
@@ -90,9 +110,10 @@ async def publish_kuaishou(mgr: BrowserManager, identity: Identity,
             ok = False
         result_url = page.url if ok else ""
         if not ok:
-            error = "已点发布但未确认成功(请到快手创作平台确认)"
+            error = "write_uncertain: 已点发布但未确认成功，请到快手创作平台核对；禁止自动重试"
     except Exception as e:
-        error = f"发布异常: {e!r}"
+        error = (("write_uncertain: 快手已进入提交边界后页面异常，请先核对作品管理，禁止自动重试: "
+                  f"{e!r}") if submitted else f"发布异常: {e!r}")
     finally:
         try:
             await ctx.close()

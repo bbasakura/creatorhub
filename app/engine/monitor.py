@@ -319,12 +319,10 @@ class MonitorEngine:
                     (PublishTask, "publishing")):
                 rows = s.exec(select(model).where(model.status == transient)).all()
                 for row in rows:
-                    submitted = (
-                        getattr(row, "platform", "") == "xhs"
-                        and str(getattr(row, "error", "") or "")
-                        .startswith(_BROWSER_SUBMIT_MARKER)
-                    )
-                    if submitted or (model is PublishTask and row.platform in ("wechat_mp", "youtube", "x")):
+                    submitted = str(
+                        getattr(row, "error", "") or ""
+                    ).startswith(_BROWSER_SUBMIT_MARKER)
+                    if submitted or (model is PublishTask and row.platform in ("wechat_mp", "youtube")):
                         row.status = "uncertain"
                         row.scheduled_at = None
                         if hasattr(row, "done_at"):
@@ -2860,7 +2858,9 @@ class MonitorEngine:
             try:
                 ok, url, err = await publish_x(
                     self.browser, identity, media_type, title, desc, files,
-                    topics=topics)
+                    topics=topics,
+                    on_submit=lambda: self._mark_browser_submit(
+                        PublishTask, task_id))
             except Exception as e:
                 ok, url, err = False, "", f"X 发布异常: {e!r}"
             return await self._finish_publish(task_id, ok, url, err, platform="x")
@@ -2873,7 +2873,9 @@ class MonitorEngine:
             try:
                 ok, url, err = await publish_kuaishou(self.browser, identity, state,
                                                       media_type, title, desc, files,
-                                                      topics=topics, headed=True)
+                                                      topics=topics, headed=True,
+                                                      on_submit=lambda: self._mark_browser_submit(
+                                                          PublishTask, task_id))
             except Exception as e:
                 ok, url, err = False, "", f"发布异常: {e!r}"
             return await self._finish_publish(task_id, ok, url, err, platform="kuaishou")
@@ -2895,7 +2897,9 @@ class MonitorEngine:
                                                       topics=topics, headed=True,
                                                       location=location,
                                                       thumbnail_path=thumbnail_path,
-                                                      operation=operation)
+                                                      operation=operation,
+                                                      on_submit=lambda: self._mark_browser_submit(
+                                                          PublishTask, task_id))
             except Exception as e:
                 ok, url, err = False, "", f"发布异常: {e!r}"
             return await self._finish_publish(task_id, ok, url, err, platform="shipinhao")
@@ -2911,7 +2915,9 @@ class MonitorEngine:
                                                     topics=topics, visibility=visibility,
                                                     allow_save=allow_save, headed=True,
                                                     thumbnail_path=thumbnail_path,
-                                                    collection_name=collection_name)
+                                                    collection_name=collection_name,
+                                                    on_submit=lambda: self._mark_browser_submit(
+                                                        PublishTask, task_id))
             except Exception as e:
                 ok, url, err = False, "", f"发布异常: {e!r}"
             return await self._finish_publish(task_id, ok, url, err, platform="douyin")

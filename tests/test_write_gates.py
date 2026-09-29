@@ -469,7 +469,7 @@ class WriteGateTests(unittest.TestCase):
                 status="publishing")
             submitted_x = PublishTask(
                 platform="x", account_id=account_id, media_json="[]",
-                status="publishing")
+                status="publishing", error="write_submitted:browser")
             submitted_action = AccountActionTask(
                 platform="xhs", account_id=account_id, action="send_dm",
                 target_uid="fixture-user", content="唯一消息", status="doing",
@@ -511,6 +511,43 @@ class WriteGateTests(unittest.TestCase):
                 session.get(AccountActionTask, submitted_action_id),
             ]
             for row in submitted_rows:
+                self.assertEqual(row.status, "uncertain")
+                self.assertIsNone(row.scheduled_at)
+                self.assertIn("重启", row.error)
+
+    def test_browser_publish_recovery_distinguishes_submit_boundary(self):
+        account_id = self._account()
+        now = datetime(2026, 8, 7, 2, 0, 0)
+        platforms = ("x", "douyin", "kuaishou", "shipinhao")
+        pending_ids = []
+        submitted_ids = []
+        with db.get_session() as session:
+            for platform in platforms:
+                before_submit = PublishTask(
+                    platform=platform, account_id=account_id,
+                    media_json="[]", status="publishing")
+                after_submit = PublishTask(
+                    platform=platform, account_id=account_id,
+                    media_json="[]", status="publishing",
+                    error="write_submitted:browser")
+                session.add(before_submit)
+                session.add(after_submit)
+                session.flush()
+                pending_ids.append(before_submit.id)
+                submitted_ids.append(after_submit.id)
+            session.commit()
+
+        engine = MonitorEngine(self.cfg, _BrowserStub())
+        recovered = engine.recover_interrupted_tasks(now=now)
+        self.assertEqual(recovered, 8)
+
+        with db.get_session() as session:
+            for task_id in pending_ids:
+                row = session.get(PublishTask, task_id)
+                self.assertEqual(row.status, "pending")
+                self.assertEqual(row.scheduled_at, now + timedelta(minutes=5))
+            for task_id in submitted_ids:
+                row = session.get(PublishTask, task_id)
                 self.assertEqual(row.status, "uncertain")
                 self.assertIsNone(row.scheduled_at)
                 self.assertIn("重启", row.error)

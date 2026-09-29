@@ -390,7 +390,8 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
                          desc: str, media_paths: List[str], topics: str = "",
                          visibility: str = "public", allow_save: bool = True,
                          headed: bool = True, timeout_seconds: int = 180,
-                         thumbnail_path: str = "", collection_name: str = ""
+                         thumbnail_path: str = "", collection_name: str = "",
+                         on_submit=None
                          ) -> Tuple[bool, str, str]:
     """发布一条抖音作品。返回 (ok, result_url, error)。
     storage_state_json 仅用于校验(实际登录态在该账号持久 profile 里)。
@@ -425,6 +426,7 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
         pass
 
     ok, result_url, error = False, "", ""
+    submitted = False
     try:
         url = IMAGE_URL if media_type == "images" else UPLOAD_URL
         _log(f"打开发布页 {url} (media_type={media_type}, files={len(files)})")
@@ -516,13 +518,17 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
         except Exception:
             pass
         try:
+            if callable(on_submit):
+                on_submit()
+            submitted = True
             await btn.click(timeout=5000)
             _log("已点击发布按钮")
         except Exception:
-            # 兜底:用文本选择器再点一次
-            if not await _click_first(page, _PUBLISH_BTN, timeout=4000):
-                await _dump(page, "clickfail")
-                return False, "", "发布按钮点击失败(可能被弹层遮挡/需补封面)。已存诊断截图。"
+            await _dump(page, "clickfail")
+            if submitted:
+                return False, "", ("write_uncertain: 已进入抖音提交边界但点击结果不确定，"
+                                   "请先核对作品管理，禁止自动重试")
+            return False, "", "发布提交边界持久化失败，未执行点击；可安全重试"
 
         # 成功判定 + 风控验证等待:抖音点发布后常弹「短信验证码/扫码」要本人操作,
         # 这时必须把弹出的窗口留给用户手动完成,故轮询等待、给足时间(默认最多 5 分钟)。
@@ -554,15 +560,16 @@ async def publish_douyin(mgr: BrowserManager, identity: Identity,
                      "请在弹窗里完成验证后重试;若窗口已关,重新点「立即发布」再操作。")
         else:
             png = await _dump(page, "unconfirmed")
-            error = ("已点发布但未在页面确认到成功信号。请到抖音创作平台「作品管理」看是否已在列表"
-                     f"(视频常直接进审核中);若确实没发出去,把 {_DEBUG_DIR} 里最新一张 "
-                     f"dy_publish_unconfirmed_*.png {'('+png+') ' if png else ''}发我校准选择器。")
+            error = ("write_uncertain: 已点发布但未在页面确认到成功信号。请到抖音创作平台「作品管理」核对；"
+                     "禁止自动重试。"
+                     f"诊断目录: {_DEBUG_DIR}; 最新截图 {'('+png+') ' if png else ''}")
     except Exception as e:
         try:
             await _dump(page, "exception")
         except Exception:
             pass
-        error = f"发布异常: {e!r}"
+        error = (("write_uncertain: 抖音已进入提交边界后页面异常，请先核对作品管理，禁止自动重试: "
+                  f"{e!r}") if submitted else f"发布异常: {e!r}")
     finally:
         try:
             await ctx.close()
