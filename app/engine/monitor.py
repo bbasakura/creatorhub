@@ -3139,11 +3139,6 @@ class MonitorEngine:
                     detail="" if ok else str(err or "")[:1000],
                     metadata={"platform": platform, "result_url": url or ""})
                 s.add(t); s.commit()
-        try:
-            from ..services.d2y import reconcile_d2y
-            await asyncio.to_thread(reconcile_d2y)
-        except Exception as sync_exc:
-            log.warning("D2Y projection pending reconciliation: %s", sync_exc)
         if ok and account_id:
             self.risk.record_success(account_id, OperationKind.PUBLISH)
         if ok:

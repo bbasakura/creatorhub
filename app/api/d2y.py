@@ -31,6 +31,7 @@ async def import_d2y_batch(body: D2YImportIn = D2YImportIn()):
 
 
 class D2YEnqueueIn(BaseModel):
+    manifest_version: int = Field(default=1, ge=1, le=1)
     account_id: int | None = None
     videos: list[dict] = Field(max_length=100)
     visibility: str = 'public'

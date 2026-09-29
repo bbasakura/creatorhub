@@ -27,6 +27,23 @@ class D2YEnqueueTests(unittest.TestCase):
     def tearDown(self):
         db._engine.dispose(); db._engine = self.previous; self.tmp.cleanup()
 
+    def test_manifest_version_is_explicit_and_supported(self):
+        result = enqueue_d2y(self.account_id, self.videos, manifest_version=1)
+        self.assertEqual(1, result['manifest_version'])
+        with self.assertRaisesRegex(ValueError, 'manifest_version'):
+            enqueue_d2y(self.account_id, self.videos, manifest_version=2)
+
+    def test_same_intent_rejects_changed_manifest_content(self):
+        enqueue_d2y(self.account_id, self.videos, intent_id='stable')
+        changed = [dict(self.videos[0], title_en='changed title')]
+        with self.assertRaisesRegex(ValueError, 'intent conflict'):
+            enqueue_d2y(self.account_id, changed, intent_id='stable')
+
+    def test_reconcile_without_projector_never_imports_source_repository(self):
+        enqueue_d2y(self.account_id, self.videos)
+        with patch('app.services.d2y.source_adapter', side_effect=AssertionError('cross repo import')):
+            self.assertEqual(1, reconcile_d2y())
+
     def test_retry_and_parallel_import_return_same_task(self):
         def run(_):
             return enqueue_d2y(self.account_id, self.videos)['tasks'][0]['task_id']

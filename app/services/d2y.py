@@ -25,6 +25,7 @@ def default_batch_size() -> int:
 
 
 def source_adapter():
+    """Legacy cross-repository bridge used only by /import-batch compatibility."""
     root = Path(os.environ.get('D2Y_ROOT', str(Path(__file__).resolve().parents[3] / '自媒体自动化')))
     if not (root / 'src/douyin_to_youtube/d2y_to_creatorhub.py').is_file():
         raise RuntimeError('D2Y source module missing; configure D2Y_ROOT')
@@ -54,8 +55,26 @@ def _record(task, account):
                 error=task.error, intent_key=task.source_intent_key, revision=task.source_revision)
 
 
+def _manifest_fingerprint(account_id, video, *, visibility, intent_id, manifest_version):
+    payload = {
+        'manifest_version': int(manifest_version),
+        'account_id': int(account_id),
+        'source_id': int(video['id']),
+        'processed_path': str(Path(video['processed_path']).resolve()),
+        'title_en': str(video.get('title_en') or ''),
+        'desc_en': str(video.get('desc_en') or ''),
+        'tags_en': str(video.get('tags_en') or ''),
+        'visibility': str(visibility),
+        'intent_id': str(intent_id),
+    }
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+
+
 def enqueue_d2y(account_id, videos, *, visibility='public', interval_seconds=150,
-                start_time=None, intent_id='initial'):
+                start_time=None, intent_id='initial', manifest_version=1):
+    if manifest_version != 1:
+        raise ValueError('Unsupported D2Y manifest_version; supported version is 1')
     if visibility not in {'public', 'unlisted', 'private'} or not 0 <= interval_seconds <= 86400:
         raise ValueError('Invalid visibility or interval_seconds')
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', intent_id):
@@ -74,8 +93,16 @@ def enqueue_d2y(account_id, videos, *, visibility='public', interval_seconds=150
             raise ValueError('Invalid source id or missing media file')
     for index, video in enumerate(videos):
         key=f"d2y:{account['id']}:{int(video['id'])}:upload:{intent_id}"
+        fingerprint = _manifest_fingerprint(
+            account['id'], video, visibility=visibility,
+            intent_id=intent_id, manifest_version=manifest_version)
+        legacy_fingerprint = hashlib.sha256(key.encode()).hexdigest()
         with get_session() as s:
             task=s.exec(select(PublishTask).where(PublishTask.source_intent_key==key)).first()
+            if task is not None and task.content_fingerprint not in {'', None, legacy_fingerprint, fingerprint}:
+                raise ValueError(
+                    f'D2Y intent conflict for source id {int(video["id"])}: '
+                    'same intent_id was already used with different manifest content')
             if task is None:
                 task=PublishTask(platform='youtube', account_id=account['id'],media_type='video',
                     title=(video.get('title_en') or 'Douyin Shorts').strip()[:100],
@@ -83,7 +110,7 @@ def enqueue_d2y(account_id, videos, *, visibility='public', interval_seconds=150
                     media_json=json.dumps([video['processed_path']]),visibility=visibility,operation='upload',
                     scheduled_at=start+timedelta(seconds=index*interval_seconds),
                     source_platform='d2y',source_content_id=int(video['id']),source_intent_key=key,
-                    content_fingerprint=hashlib.sha256(key.encode()).hexdigest())
+                    content_fingerprint=fingerprint)
                 s.add(task)
                 try:
                     s.commit();s.refresh(task);created+=1
@@ -92,7 +119,8 @@ def enqueue_d2y(account_id, videos, *, visibility='public', interval_seconds=150
                     task=s.exec(select(PublishTask).where(PublishTask.source_intent_key==key)).first()
                     if task is None:raise
             tasks.append(_record(task,account))
-    return dict(ok=True,count=len(tasks),created_count=created,account=account['nickname'],tasks=tasks,
+    return dict(ok=True,manifest_version=manifest_version,count=len(tasks),created_count=created,
+                account=account['nickname'],tasks=tasks,
                 message=f'已确认 {len(tasks)} 条任务，新建 {created} 条')
 
 
@@ -106,8 +134,8 @@ def reconcile_d2y(*, projector=None):
             if account and t.source_content_id:
                 latest[t.source_content_id]=_record(t,account.model_dump())
     records=list(latest.values())
-    if records:
-        (projector or source_adapter().apply_task_results)(records)
+    if records and projector is not None:
+        projector(records)
     return len(records)
 
 
@@ -140,6 +168,9 @@ def import_batch(*, batch_size=None, visibility='public',interval_seconds=150,ac
         videos=json.loads(batch.videos_json);start_time=batch.start_time
     result=enqueue_d2y(account['id'],videos,visibility=visibility,interval_seconds=interval_seconds,start_time=start_time)
     result['request_id']=request_id
-    # A failure here leaves committed intents which the next run will reconcile.
+    result['legacy_adapter']=True
+    result['deprecated']=True
+    result['replacement']='/api/youtube/d2y/enqueue'
+    # A failure here leaves committed intents which the next legacy run can replay.
     reconcile_d2y(projector=source.apply_task_results)
     return result
