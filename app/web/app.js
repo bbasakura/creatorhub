@@ -849,6 +849,15 @@ const PAGE_META = {
   hub: {
     title: "我的作品", desc: "查看与同步各平台已发布作品、粉丝、数据与线上表现。"
   },
+  "x-intel": {
+    title: "X 情报", desc: "观察对标账号、爆款增速、起爆信号与黑马，发现当前值得跟进的内容机会。"
+  },
+  "x-ops": {
+    title: "X 运营", desc: "统一执行浇友、催关、串门和发帖，并以后端真实任务状态控制本轮目标。"
+  },
+  "x-data": {
+    title: "X 数据", desc: "查看官方曝光互动、帖子生命周期、涨粉归因与收益资格进度。"
+  },
   publish: {
     title: "发布作品", desc: "准备素材与文案，创建立即或定时发布任务。"
   },
@@ -869,11 +878,18 @@ const PAGE_META = {
   },
 };
 function updatePageContext(name = CURRENT_TAB) {
-  const meta = PAGE_META[name] || PAGE_META.overview;
+  let meta = PAGE_META[name] || PAGE_META.overview;
+  if (PLATFORM === "x" && name === "hub") {
+    meta = { title: "X 账号", desc: "管理本账号作品、关注、粉丝和私信，关系操作与运营策略保持分离。" };
+  } else if (PLATFORM === "x" && name === "publish") {
+    meta = { title: "X 内容", desc: "管理帖子文案、附件与发布任务；内容机会生成的草稿在确认后再进入发布。" };
+  } else if (PLATFORM === "x" && name === "queue") {
+    meta = { title: "X 任务", desc: "按运营动作和执行状态查看浇友、催关、串门、发帖、回关、取关的真实执行情况。" };
+  }
   if ($("page-title")) $("page-title").textContent = meta.title;
   if ($("page-desc")) $("page-desc").textContent = meta.desc;
   if ($("page-platform")) $("page-platform").textContent = PF_NAME[PLATFORM] || "当前平台";
-  if ($("page-kicker")) $("page-kicker").textContent = pfIsChannels(PLATFORM) ? "本账号工作台" : "多平台工作台";
+  if ($("page-kicker")) $("page-kicker").textContent = PLATFORM === "x" ? "增长工作台" : pfIsChannels(PLATFORM) ? "本账号工作台" : "多平台工作台";
   document.title = `${meta.title} · ${PF_NAME[PLATFORM] || ""} | CreatorHub`;
 }
 // 是否支持「发布」面板(四平台均有)
@@ -930,6 +946,9 @@ function applyPlatformUI() {
   document.querySelectorAll(".sh-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "shipinhao"));
   document.querySelectorAll(".mp-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "wechat_mp"));
   document.querySelectorAll(".x-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "x"));
+  document.querySelectorAll(".nonx-only").forEach(e => e.classList.toggle("hidden", PLATFORM === "x"));
+  syncTaskQueueFiltersForPlatform();
+  if (PLATFORM !== "x" && ["x-intel", "x-ops", "x-data"].includes(CURRENT_TAB)) switchTab("overview");
   // 发布类型按平台能力重建，避免公众号 article/podcast 泄漏到 X 等平台。
   const pubType = $("pub-type");
   if (pubType) {
@@ -953,6 +972,8 @@ function applyPlatformUI() {
   document.querySelectorAll('[data-tab="monitors"], [data-tab="comments"], [data-tab="autocomment"]').forEach(e => e.classList.toggle("hidden", PLATFORM === "x"));
   if (PLATFORM === "x" && ["monitors", "comments", "autocomment"].includes(CURRENT_TAB)) switchTab("publish");
   if (PLATFORM === "youtube" && HUB_TAB === "dm") switchHubTab("myworks");
+  if ($("hub-stats-tab")) $("hub-stats-tab").classList.toggle("hidden", PLATFORM === "x");
+  if (PLATFORM === "x" && HUB_TAB === "stats" && CURRENT_TAB === "hub") switchHubTab("myworks");
   const fLabel = $("hb-following-label");
   if (fLabel) fLabel.textContent = PLATFORM === "youtube" ? "订阅频道" : "关注";
   document.querySelectorAll(".collect-only").forEach(e => e.classList.toggle("hidden", PLATFORM !== "douyin"));
@@ -960,7 +981,10 @@ function applyPlatformUI() {
     e.textContent = (PF_NAME[PLATFORM] || "当前平台") + "内独立";
   });
   // 发布面板入口:抖音 / 小红书 / 快手均显示
-  document.querySelectorAll(".pub-only").forEach(e => e.classList.toggle("hidden", !pfHasPublish(PLATFORM)));
+  document.querySelectorAll(".pub-only").forEach(e => {
+    const hideForXNav = PLATFORM === "x" && e.classList.contains("nonx-only");
+    e.classList.toggle("hidden", !pfHasPublish(PLATFORM) || hideForXNav);
+  });
   // 发布面板文案随平台切换
   const ks = PLATFORM === "kuaishou", dy = PLATFORM === "douyin", sph = PLATFORM === "shipinhao"; const mp = PLATFORM === "wechat_mp", isX = PLATFORM === "x";
   const pubSub = $("pub-head-sub");
@@ -1107,12 +1131,13 @@ function switchTab(name, pushHistory = false) {
   if (!PAGE_META[name]) name = "overview";
   const changed = CURRENT_TAB !== name;
   CURRENT_TAB = name;
+  const actualPanel = name === "x-data" ? "x-intel" : name === "x-ops" ? "hub" : name;
   if (_openSelectClose) _openSelectClose();
   if (_openDateClose) _openDateClose();
   if (OPEN_META_COMBO) OPEN_META_COMBO.close();
   let activePanel = null;
   document.querySelectorAll("[data-panel]").forEach(p => {
-    const active = p.dataset.panel === name;
+    const active = p.dataset.panel === actualPanel;
     p.style.display = active ? "" : "none";
     p.classList.remove("panel-enter");
     if (active) activePanel = p;
@@ -1131,6 +1156,30 @@ function switchTab(name, pushHistory = false) {
     }
     else t.removeAttribute("aria-current");
   });
+
+  const intelRoute = name === "x-intel";
+  const dataRoute = name === "x-data";
+  document.querySelectorAll(".x-data-card").forEach(card => {
+    card.style.display = intelRoute ? "none" : "";
+  });
+  document.querySelectorAll(".x-intel-card").forEach(card => {
+    card.style.display = dataRoute ? "none" : "";
+  });
+
+  const hubTabs = document.querySelector(".hub-tabs-row");
+  if (hubTabs) hubTabs.style.display = name === "x-ops" ? "none" : "";
+  const hubTitle = $("hub-card-title");
+  const hubSub = $("hub-card-sub");
+  if (hubTitle) {
+    if (name === "x-ops") {
+      hubTitle.childNodes[0].nodeValue = "X 自动运营 ";
+      if (hubSub) hubSub.textContent = "浇友 · 催关 · 串门 · 发帖";
+    } else {
+      hubTitle.childNodes[0].nodeValue = "账号管理 ";
+      if (hubSub) hubSub.textContent = "本账号的作品 / 关注 / 粉丝 / 私信";
+    }
+  }
+
   try { localStorage.setItem("dym-tab", name); } catch (e) {}
   try {
     if (pushHistory && changed) history.pushState(null, "", "#" + name);
@@ -1142,8 +1191,18 @@ function switchTab(name, pushHistory = false) {
     const title = $("page-title");
     if (title) title.focus({ preventScroll: true });
   });
-  if (name === "hub") { refreshHubSummary(); refreshHubPanel(); }
-  else stopDmStream();   // 离开本账号管理即断开私信实时流
+
+  if (name === "x-ops") {
+    refreshHubSummary();
+    switchHubTab("ops");
+  } else if (name === "hub") {
+    refreshHubSummary();
+    if (HUB_TAB === "ops" || (PLATFORM === "x" && HUB_TAB === "stats")) switchHubTab("myworks");
+    else refreshHubPanel();
+  } else {
+    stopDmStream();   // 离开账号/运营即断开私信实时流
+  }
+  if ((name === "x-intel" || name === "x-data") && typeof window.refreshXIntel === "function") window.refreshXIntel();
   if (name === "share-download") {
     loadShareAccounts();
     refreshShareHistory();
@@ -1967,6 +2026,7 @@ async function refreshAccounts() {
   populateHubAccounts();
   const at = document.querySelector('.navitem.active');
   if (at && at.dataset.tab === "hub") refreshHubPanel();
+  if (CURRENT_TAB === "x-intel" && typeof window.refreshXIntel === "function") window.refreshXIntel();
 }
 
 // ═══════════ 风控中心 ═══════════
@@ -2439,12 +2499,13 @@ async function refreshHubSummary() {
 }
 function refreshHubPanel() {
   const active = document.querySelector('.navitem.active');
-  if (!active || active.dataset.tab !== "hub") return;
+  if (!active || !["hub", "x-ops"].includes(active.dataset.tab || "")) return;
   if (HUB_TAB === "myworks") refreshMyWorks();
   else if (HUB_TAB === "following") refreshFollows("following");
-  else if (HUB_TAB === "fans") refreshFollows("fan");
+  else if (HUB_TAB === "fans") { refreshFollows("fan"); if (PLATFORM === "x") refreshXOpsState(false); }
   else if (HUB_TAB === "dm") { refreshDmConvs(); startDmStream(); }
   else if (HUB_TAB === "stats") loadHubStats();
+  else if (HUB_TAB === "ops") refreshXOpsState(false);
 }
 
 // ── 本账号数据分析(B4)──
@@ -2663,7 +2724,752 @@ async function syncWorkComments() {
 // ── 关注 / 粉丝 ──
 // 小红书网页端不提供关注/粉丝列表(App 专属:实测无接口、无弹层),不做无用的同步
 const XHS_FOLLOW_NA = "小红书网页端不提供关注 / 粉丝列表(仅 App 可见),无法同步。抖音 / 快手可正常同步。";
-async function refreshFollows(direction) {
+const FOLLOW_ROWS = { following: [], fan: [] };
+const FOLLOW_SELECTED = { following: new Set(), fan: new Set() };
+const FOLLOW_PAGE = { following: 1, fan: 1 };
+const FOLLOW_PAGE_SIZE = { following: 50, fan: 50 };
+let X_REL_BATCH_SNAPSHOT = new Map();
+let X_GROWTH_STATE = null;
+let X_OPS_STATE = null;
+
+function filteredFollowRows(direction) {
+  const rows = FOLLOW_ROWS[direction] || [];
+  if (PLATFORM !== "x") return rows;
+  const prefix = direction === "fan" ? "x-fan" : "x-following";
+  const q = ($(prefix + "-search")?.value || "").trim().toLowerCase();
+  const verified = ($(prefix + "-verified")?.value || "").trim();
+  const relation = direction === "fan"
+    ? ( $("x-fan-following")?.value || "" )
+    : ( $("x-following-mutual")?.value || "" );
+  return rows.filter(f => {
+    const hay = [f.nickname, f.sec_uid, f.uid, f.signature].map(v => String(v || "").toLowerCase()).join(" ");
+    if (q && !hay.includes(q)) return false;
+    if (verified === "verified" && !f.verified) return false;
+    if (verified === "unverified" && f.verified) return false;
+    if (direction === "following") {
+      if (relation === "mutual" && !f.is_mutual) return false;
+      if (relation === "not_mutual" && f.is_mutual) return false;
+    } else {
+      if (relation === "following" && !f.is_following) return false;
+      if (relation === "not_following" && f.is_following) return false;
+    }
+    return true;
+  });
+}
+
+function followFilterChanged(direction) {
+  FOLLOW_PAGE[direction] = 1;
+  renderFollowRows(direction);
+}
+
+function setFollowPageSize(direction, value) {
+  const size = Math.max(1, Math.min(200, Number(value) || 50));
+  FOLLOW_PAGE_SIZE[direction] = size;
+  FOLLOW_PAGE[direction] = 1;
+  renderFollowRows(direction);
+}
+
+function changeFollowPage(direction, delta) {
+  const rows = filteredFollowRows(direction);
+  const size = FOLLOW_PAGE_SIZE[direction] || 50;
+  const pages = Math.max(1, Math.ceil(rows.length / size));
+  FOLLOW_PAGE[direction] = Math.max(1, Math.min(pages, (FOLLOW_PAGE[direction] || 1) + Number(delta || 0)));
+  renderFollowRows(direction);
+}
+
+function updateFollowPagination(direction, filteredCount) {
+  if (PLATFORM !== "x") return;
+  const prefix = direction === "fan" ? "x-fan" : "x-following";
+  const size = FOLLOW_PAGE_SIZE[direction] || 50;
+  const pages = Math.max(1, Math.ceil(filteredCount / size));
+  FOLLOW_PAGE[direction] = Math.max(1, Math.min(pages, FOLLOW_PAGE[direction] || 1));
+  const info = $(prefix + "-page-info");
+  const prev = $(prefix + "-prev");
+  const next = $(prefix + "-next");
+  if (info) info.textContent = `第 ${FOLLOW_PAGE[direction]} / ${pages} 页 · ${filteredCount} 条`;
+  if (prev) prev.disabled = FOLLOW_PAGE[direction] <= 1;
+  if (next) next.disabled = FOLLOW_PAGE[direction] >= pages;
+}
+
+function updateFollowSelectionBar(direction = "following") {
+  const selected = FOLLOW_SELECTED[direction];
+  if (!selected) return;
+  const validIds = new Set((FOLLOW_ROWS[direction] || []).map(f => Number(f.id)));
+  for (const id of Array.from(selected)) if (!validIds.has(Number(id))) selected.delete(id);
+  const count = selected.size;
+  const label = $(direction === "fan" ? "x-fan-selected-count" : "x-following-selected-count");
+  const button = $(direction === "fan" ? "x-fan-visit-drafts" : "x-following-batch-unfollow");
+  if (label) label.textContent = `已选 ${count}`;
+  if (button) button.disabled = count === 0;
+}
+
+function toggleFollowSelected(direction, edgeId, checked) {
+  const selected = FOLLOW_SELECTED[direction];
+  const id = Number(edgeId);
+  if (!selected || !id) return;
+  if (checked) selected.add(id);
+  else selected.delete(id);
+  updateFollowSelectionBar(direction);
+}
+
+function selectFilteredFollows(direction) {
+  if (PLATFORM !== "x" || !FOLLOW_SELECTED[direction]) return;
+  for (const f of filteredFollowRows(direction)) {
+    if (!f.id) continue;
+    if (direction === "following" && !f.is_following) continue;
+    FOLLOW_SELECTED[direction].add(Number(f.id));
+  }
+  renderFollowRows(direction);
+}
+
+function clearFollowSelection(direction) {
+  if (!FOLLOW_SELECTED[direction]) return;
+  FOLLOW_SELECTED[direction].clear();
+  renderFollowRows(direction);
+}
+
+function renderFollowRows(direction) {
+  const tbody = $(direction === "fan" ? "fans-table" : "following-table");
+  if (!tbody) return;
+  const allRows = FOLLOW_ROWS[direction] || [];
+  const rows = filteredFollowRows(direction);
+  const size = FOLLOW_PAGE_SIZE[direction] || 50;
+  const pages = Math.max(1, Math.ceil(rows.length / size));
+  FOLLOW_PAGE[direction] = Math.max(1, Math.min(pages, FOLLOW_PAGE[direction] || 1));
+  const start = (FOLLOW_PAGE[direction] - 1) * size;
+  const pageRows = rows.slice(start, start + size);
+  if (PLATFORM === "x") {
+    const countEl = $(direction === "fan" ? "x-fan-filter-count" : "x-following-filter-count");
+    if (countEl) countEl.textContent = `筛选 ${rows.length} / 已同步 ${allRows.length}`;
+  }
+  tbody.innerHTML = pageRows.length ? pageRows.map(f => followRow(f, direction)).join("")
+    : empty(3, allRows.length ? "当前筛选无匹配结果" : (direction === "fan" ? "暂无粉丝明细" : "暂无关注数据"), "i-user");
+  updateFollowPagination(direction, rows.length);
+  updateFollowSelectionBar(direction);
+}
+
+function xBatchStatusLabel(status) {
+  return ({ active: "执行中", paused: "已暂停", canceled: "已取消", completed: "已完成" })[status] || status;
+}
+
+function renderXRelationshipBatchList(hostId, list, action, title) {
+  const host = $(hostId);
+  if (!host) return;
+  const rows = PLATFORM === "x" ? list.filter(b => b.action === action) : [];
+  if (!rows.length) { host.innerHTML = ""; return; }
+  host.innerHTML = rows.map(b => {
+    const actions = b.status === "active"
+      ? `<button class="ghost sm" onclick="controlXRelationshipBatch(${b.id},\'pause\')">暂停</button><button class="ghost sm danger" onclick="controlXRelationshipBatch(${b.id},\'cancel\')">取消剩余</button>`
+      : b.status === "paused"
+        ? `<button class="ghost sm" onclick="controlXRelationshipBatch(${b.id},\'resume\')">继续</button><button class="ghost sm danger" onclick="controlXRelationshipBatch(${b.id},\'cancel\')">取消剩余</button>`
+        : "";
+    const reason = b.status === "paused" && b.pause_reason
+      ? `<div class="x-batch-reason">暂停原因：${esc(b.pause_reason)}${b.stop_signal ? ` · ${esc(b.stop_signal)}` : ""}</div>`
+      : "";
+    return `<div class="x-batch-card">
+      <div class="x-batch-head">
+        <div><b>${title} #${b.id}</b> <span class="pill bare">${esc(xBatchStatusLabel(b.status))}</span></div>
+        <span class="mut">${b.progress}%</span>
+      </div>
+      <div class="job-progress">
+        <div class="progress-track"><div class="progress-fill" style="width:${Math.max(0,Math.min(100,b.progress || 0))}%"></div></div>
+      </div>
+      <div class="x-batch-meta">
+        <span>总数 ${b.total_count}</span><span>成功 ${b.done_count}</span><span>排队 ${b.pending_count}</span>
+        <span>执行中 ${b.doing_count}</span><span>失败 ${b.failed_count}</span>
+        <span>不确定 ${b.uncertain_count}</span><span>取消 ${b.canceled_count}</span>
+        ${b.skipped_count ? `<span>跳过 ${b.skipped_count}</span>` : ""}
+      </div>
+      ${reason}
+      ${actions ? `<div class="x-batch-actions">${actions}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+function renderXRelationshipBatches(list) {
+  renderXRelationshipBatchList("x-unfollow-batches", list, "unfollow", "批量取关");
+  renderXRelationshipBatchList("x-followback-batches", list, "follow", "一键回关");
+}
+
+async function refreshXRelationshipBatches(refreshRowsOnProgress = false) {
+  if (PLATFORM !== "x" || !HUB_ACC) return;
+  try {
+    const list = await api(`/api/x/relationship-batches?account_id=${HUB_ACC}&limit=8`);
+    let successfulProgressChanged = false;
+    const nextSnapshot = new Map();
+    for (const b of list) {
+      const prev = X_REL_BATCH_SNAPSHOT.get(Number(b.id));
+      if (refreshRowsOnProgress && prev && Number(prev.done_count) !== Number(b.done_count)) {
+        successfulProgressChanged = true;
+      }
+      nextSnapshot.set(Number(b.id), { done_count: Number(b.done_count), status: b.status });
+    }
+    X_REL_BATCH_SNAPSHOT = nextSnapshot;
+    renderXRelationshipBatches(list);
+    if (successfulProgressChanged && (HUB_TAB === "following" || HUB_TAB === "fans")) {
+      await refreshFollows(HUB_TAB === "fans" ? "fan" : "following", true, true);
+      refreshHubSummary();
+    }
+  } catch (e) {
+    // 批次面板是辅助控制面，读取失败不覆盖关注列表。
+  }
+}
+
+function xOpsDisabledReason(action) {
+  const state = X_OPS_STATE || {};
+  if (!state.login_valid) return "X 登录态无效，请先重新登录";
+  if (action === "remind") {
+    const remind = state.remind || {};
+    if (remind.status === "all_completed") return "全部未回关对象已催关完成";
+    if (remind.rate_limited) return "催关正在冷却，约 " + Number(remind.remaining_minutes || 1) + " 分钟";
+    if (Number(remind.active || 0) > 0) return "催关任务正在运行，队列 " + Number(remind.active || 0) + " 位";
+  }
+  if (action === "post" && state.post && state.post.state && state.post.state.enabled) return "一键发帖正在运行";
+  if (action === "followback" && state.followback && ["active", "paused"].includes(state.followback.status)) {
+    return state.followback.status === "paused" ? "已有回关批次暂停中，请先处理该批次" : "已有回关批次正在运行";
+  }
+  return "当前后端状态不允许执行该操作";
+}
+
+function applyXOpsStateControls() {
+  const state = X_OPS_STATE;
+  const ids = {
+    growth: "x-ops-growth-btn",
+    remind: "x-ops-remind-btn",
+    visit: "x-ops-visit-btn",
+    post: "x-ops-post-btn",
+    followback: "x-fan-followback-all",
+  };
+  if (!state) {
+    Object.values(ids).forEach(id => { const btn = $(id); if (btn) btn.disabled = true; });
+    if ($("x-ops-state-source")) $("x-ops-state-source").textContent = "等待后端状态…";
+    return;
+  }
+
+  const target = Math.max(1, Number(state.target_count || 100));
+  if ($("x-ops-target-count")) $("x-ops-target-count").value = String(target);
+
+  if ($("x-ops-state-source")) {
+    const raw = String(state.updated_at || "");
+    const dateValue = raw ? new Date(raw.endsWith("Z") ? raw : raw + "Z") : null;
+    const when = dateValue && !Number.isNaN(dateValue.getTime())
+      ? dateValue.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      : "—";
+    $("x-ops-state-source").textContent = "状态来源：后端 · " + when + (state.login_valid ? "" : " · 登录失效");
+  }
+
+  const disabled = state.disabled || {};
+  Object.entries(ids).forEach(([action, id]) => {
+    const btn = $(id);
+    if (!btn) return;
+    btn.disabled = !!disabled[action];
+    btn.title = btn.disabled ? xOpsDisabledReason(action) : "";
+  });
+
+  const growth = state.growth && state.growth.state || {};
+  const growthBtn = $("x-ops-growth-btn");
+  if (growthBtn) {
+    const label = growthBtn.querySelector("b");
+    if (label) label.textContent = growth.enabled ? "停止浇友" : "一键浇友";
+  }
+  if ($("x-ops-growth-live")) {
+    $("x-ops-growth-live").textContent = growth.enabled
+      ? xGrowthStatusLabel(growth.status) + " · " + Number(growth.run_followed || 0) + " / " + Number(growth.target_count || target)
+      : xGrowthStatusLabel(growth.status) + " · 目标 " + target;
+  }
+
+  const remind = state.remind || {};
+  const remindBtn = $("x-ops-remind-btn");
+  if (remindBtn) {
+    const label = remindBtn.querySelector("b");
+    if (label) {
+      label.textContent = remind.status === "all_completed"
+        ? "未回关已催完"
+        : remind.rate_limited
+          ? "冷却 " + Number(remind.remaining_minutes || 1) + " 分钟"
+          : Number(remind.active || 0) > 0
+            ? "催关进行中（" + Number(remind.active || 0) + "）"
+            : "一键催关";
+    }
+  }
+  if ($("x-ops-remind-live")) {
+    $("x-ops-remind-live").textContent = "已催 " + Number(remind.reminded_total || 0) + " · 待催 " + Number(remind.remaining || 0);
+  }
+
+  const visit = state.visit || {};
+  if ($("x-ops-visit-live")) {
+    $("x-ops-visit-live").textContent = "目标 " + target + " · 待审核草稿 " + Number(visit.review_count || 0);
+  }
+
+  const post = state.post && state.post.state || {};
+  const postBtn = $("x-ops-post-btn");
+  if (postBtn) {
+    const label = postBtn.querySelector("b");
+    if (label) label.textContent = post.enabled ? "发帖进行中" : "一键发帖";
+  }
+  if ($("x-ops-post-live")) {
+    $("x-ops-post-live").textContent = post.enabled
+      ? String(post.status || "运行中") + " · " + Number(post.run_published || 0) + " / " + Number(post.target_count || target)
+      : "目标 " + target + " · 待启动";
+  }
+
+  const followback = state.followback || null;
+  const followLabel = $("x-fan-followback-label");
+  if (followLabel) {
+    if (followback && ["active", "paused"].includes(followback.status)) {
+      followLabel.textContent = followback.status === "paused"
+        ? "回关已暂停 " + Number(followback.done_count || 0) + "/" + Number(followback.total_count || 0)
+        : "回关进行中 " + Number(followback.done_count || 0) + "/" + Number(followback.total_count || 0);
+    } else {
+      followLabel.textContent = "一键回关（目标 " + target + "）";
+    }
+  }
+}
+
+async function refreshXOpsState(showError = false) {
+  if (PLATFORM !== "x" || !HUB_ACC) {
+    X_OPS_STATE = null;
+    applyXOpsStateControls();
+    return null;
+  }
+  try {
+    const payload = await api("/api/x/ops/state?account_id=" + HUB_ACC);
+    X_OPS_STATE = payload || null;
+    X_GROWTH_STATE = payload && payload.growth || null;
+    if (payload && payload.growth) {
+      renderXGrowthCampaign({
+        state: payload.growth.state || {},
+        active_tasks: payload.growth.active_tasks || [],
+        limits: {},
+      });
+    }
+    if (payload && payload.remind) renderXRemindStatus(payload.remind);
+    applyXOpsStateControls();
+    return payload;
+  } catch (e) {
+    X_OPS_STATE = null;
+    applyXOpsStateControls();
+    if ($("x-ops-state-source")) $("x-ops-state-source").textContent = "后端状态读取失败";
+    if (showError) toast("X 运营状态读取失败：" + e.message, "err", 6500);
+    return null;
+  }
+}
+
+async function controlXRelationshipBatch(batchId, action) {
+  const labels = { pause: "暂停", resume: "继续", cancel: "取消剩余任务" };
+  if (action === "cancel" && !await uiConfirm({
+    title: "取消批次剩余任务",
+    message: "只取消尚未执行的关系任务；已经成功、失败或结果不确定的任务不会回滚。",
+    okText: "取消剩余",
+    danger: true,
+  })) return;
+  try {
+    const r = await api(`/api/x/relationship-batches/${batchId}/${action}`, { method: "POST" });
+    toast(`批次 #${batchId} 已${labels[action] || action}${r.canceled ? `，取消 ${r.canceled} 条` : ""}`, "ok");
+    await refreshXRelationshipBatches(false);
+    await refreshXOpsState(false);
+  } catch (e) {
+    toast(`批次操作失败：${e.message}`, "err", 6500);
+  }
+}
+
+function xGrowthStatusLabel(status) {
+  return ({
+    running: "运行中",
+    cooldown: "冷却中",
+    stopped: "已停止",
+    login_required: "登录失效",
+    paused_uncertain: "结果待核验",
+    completed: "已达目标",
+  })[status] || status || "未启动";
+}
+
+function renderXGrowthCampaign(payload) {
+  X_GROWTH_STATE = payload || null;
+  const host = $("x-growth-status");
+  const btn = $("x-ops-growth-btn");
+  if (!host) return;
+  if (PLATFORM !== "x" || !payload) {
+    host.innerHTML = "";
+    if (btn) {
+      const label = btn.querySelector("b");
+      if (label) label.textContent = "一键浇友";
+    }
+    return;
+  }
+  const s = payload.state || {};
+  const limits = payload.limits || {};
+  const active = payload.active_tasks || [];
+  const enabled = !!s.enabled;
+  if (btn) {
+    btn.classList.toggle("danger", enabled);
+    const label = btn.querySelector("b");
+    if (label) label.textContent = enabled ? "停止浇友" : "一键浇友";
+  }
+  const latest = s.last_handle
+    ? `最近：<b>${esc(s.last_nickname || ("@" + s.last_handle))}</b> <span class="mut">@${esc(s.last_handle)}</span>${s.last_source ? ` · ${esc(s.last_source)}` : ""}`
+    : "最近：尚无成功关注";
+  const pause = s.paused_until
+    ? `<div class="x-batch-reason">冷却至：${esc(new Date(s.paused_until).toLocaleString())}${s.last_error ? ` · ${esc(s.last_error)}` : ""}</div>`
+    : s.last_error
+      ? `<div class="x-batch-reason">${esc(s.last_error)}</div>`
+      : "";
+  host.innerHTML = `<div class="x-batch-card">
+    <div class="x-batch-head">
+      <div><b>一键浇友</b> <span class="pill bare">${esc(xGrowthStatusLabel(s.status))}</span></div>
+      <span class="mut">${active.length ? `队列 ${active.length}` : "无待执行"}</span>
+    </div>
+    <div class="x-batch-meta">
+      <span>本轮成功 ${Number(s.run_followed || 0)} / ${Number(s.target_count || 100)}</span>
+      <span>累计成功 ${Number(s.total_followed || 0)}</span>
+      <span>累计入队 ${Number(s.total_queued || 0)}</span>
+      <span>筛选跳过 ${Number(s.skipped_count || 0)}</span>
+    </div>
+    <div class="mut" style="margin-top:7px">${latest}</div>
+    <div class="mut" style="margin-top:5px">双通道轮换：#蓝V互关 / 浇朋友 / 有关必回 / 蓝朋友 + 为你推荐；只关注蓝V且具互关、AI/Web3/创作者意向的未关注账号。</div>
+    <div class="mut" style="margin-top:5px">实际节奏：每位随机 50–70 秒；不再叠加旧 SOCIAL 小时/每日额度。仍保留账号串行、活跃时段、平台硬熔断、真实限流冷却与 uncertain 防重复。</div>
+    ${pause}
+  </div>`;
+}
+
+async function refreshXGrowthCampaign(showError = false) {
+  if (PLATFORM !== "x" || !HUB_ACC) return;
+  try {
+    const payload = await api(`/api/x/growth-campaign?account_id=${HUB_ACC}`);
+    renderXGrowthCampaign(payload);
+  } catch (e) {
+    if (showError) toast("浇友状态读取失败：" + e.message, "err", 6500);
+  }
+}
+
+async function toggleXGrowthCampaign(triggerBtn = null) {
+  if (PLATFORM !== "x" || !HUB_ACC) {
+    toast("请先选择 X 账号", "err");
+    return;
+  }
+  const enabled = !!(X_GROWTH_STATE && X_GROWTH_STATE.state && X_GROWTH_STATE.state.enabled);
+  const target = enabled
+    ? getXOpsTargetCount()
+    : await saveXOpsTargetCount(getXOpsTargetCount(), false);
+  if (!enabled) {
+    const ok = await uiConfirm({
+      title: "启动一键浇友",
+      message: [
+        `本轮目标成功关注 ${target} 位；达到目标后自动停止。`,
+        "系统会持续轮换检索 #蓝V互关、浇朋友、有关必回、蓝朋友，以及「为你推荐」流。",
+        "只有蓝V、未关注、且推文/简介具有互关、AI、Web3 或创作者意向的账号才会进入关注队列；主页会再次核验蓝V。",
+        "实际执行按每位 50–70 秒随机节奏；不再叠加旧 SOCIAL 小时/每日额度。",
+        "遇 X 限流/风控至少冷却 15 分钟；登录失效或关注结果不确定时自动停止。成功关注会同步飞书互动台账。",
+      ].join("\n"),
+      okText: "开始浇友",
+    });
+    if (!ok) return;
+  }
+  const btn = triggerBtn || $("x-ops-growth-btn");
+  await withBusy(btn, enabled ? "停止中" : "校验登录态", async () => {
+    try {
+      const payload = await api(
+        enabled ? "/api/x/growth-campaign/stop" : "/api/x/growth-campaign/start",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account_id: +HUB_ACC, target_count: target }),
+        }
+      );
+      renderXGrowthCampaign(payload);
+      toast(
+        enabled
+          ? `一键浇友已停止${payload.canceled_pending ? `，取消 ${payload.canceled_pending} 条待执行关注` : ""}`
+          : `一键浇友已启动：本轮目标 ${target} 位；到数自动停止`,
+        "ok", 6500
+      );
+      await refreshXOpsState(false);
+    } catch (e) {
+      toast((enabled ? "停止失败：" : "启动失败：") + e.message, "err", 7000);
+      await refreshXOpsState(false);
+    }
+  });
+}
+
+let X_REMIND_STATE = null;
+let X_REMIND_REFRESH_TIMER = null;
+
+function xRemindStatusLabel(status) {
+  return {
+    ready: "待启动",
+    queued: "已入队",
+    running: "执行中",
+    already_running: "执行中",
+    rate_limited: "冷却中",
+    all_completed: "已完成",
+  }[status] || status || "未知";
+}
+
+function renderXRemindStatus(payload) {
+  X_REMIND_STATE = payload || null;
+  const host = $("x-remind-status");
+  const btn = $("x-ops-remind-btn");
+  if (!host || !payload) return;
+  const status = payload.status || "ready";
+  const active = Number(payload.active || 0);
+  const remaining = Number(payload.remaining || 0);
+  const reminded = Number(payload.reminded_total || 0);
+  const rateLimited = !!payload.rate_limited;
+  const recent = Array.isArray(payload.recent) ? payload.recent.slice(0, 5) : [];
+
+  if (X_REMIND_REFRESH_TIMER) {
+    clearTimeout(X_REMIND_REFRESH_TIMER);
+    X_REMIND_REFRESH_TIMER = null;
+  }
+  if ((active > 0 || rateLimited) && PLATFORM === "x" && HUB_ACC) {
+    X_REMIND_REFRESH_TIMER = setTimeout(
+      () => refreshXOpsState(false), 30000);
+  }
+
+  if (btn) {
+    const label = btn.querySelector("b");
+    if (label) {
+      label.textContent = status === "all_completed"
+        ? "未回关已催完"
+        : rateLimited
+          ? `冷却 ${Number(payload.remaining_minutes || 1)} 分钟`
+          : active > 0
+            ? `催关进行中（${active}）`
+            : "一键催关";
+    }
+  }
+
+  const latest = recent.length
+    ? recent.map(item => {
+        const handle = String(item.handle || "").replace(/^@/, "");
+        const link = item.tweet_link
+          ? `<a href="${esc(item.tweet_link)}" target="_blank" rel="noopener">@${esc(handle)}</a>`
+          : `@${esc(handle)}`;
+        return `<div class="mut" style="margin-top:5px">${link} · ${esc(item.reply_text || "")}${item.remind_time ? ` · ${esc(item.remind_time)}` : ""}</div>`;
+      }).join("")
+    : `<div class="mut" style="margin-top:7px">暂无已成功催关记录。</div>`;
+
+  const cooldown = rateLimited
+    ? `<div class="x-batch-reason">平台限流冷却中：约 ${Number(payload.remaining_minutes || 1)} 分钟后继续。</div>`
+    : "";
+
+  host.innerHTML = `<div class="x-batch-card">
+    <div class="x-batch-head">
+      <div><b>一键催关</b> <span class="pill bare">${esc(xRemindStatusLabel(status))}</span></div>
+      <span class="mut">${active ? `队列 ${active}` : "无待执行"}</span>
+    </div>
+    <div class="x-batch-meta">
+      <span>已催关 ${reminded}</span>
+      <span>剩余待催 ${remaining}</span>
+      <span>队列中 ${active}</span>
+      <span>失败 ${Number(payload.failed_tasks || 0)}</span>
+      <span>跳过/取消 ${Number(payload.canceled_tasks || 0)}</span>
+    </div>
+    <div class="mut" style="margin-top:7px">实际发送：每位随机 50–70 秒；不叠加旧 COMMENT 小时/每日额度。成功后进入 24 小时观察并同步飞书；平台真实限流仍会触发冷却。</div>
+    ${cooldown}
+    ${latest}
+  </div>`;
+}
+
+async function refreshXRemindStatus(showError = false) {
+  return refreshXOpsState(showError);
+}
+
+async function startXRemindAll(triggerBtn = null) {
+  if (PLATFORM !== "x" || !HUB_ACC) {
+    toast("请先选择 X 账号", "err");
+    return;
+  }
+  let status;
+  try {
+    status = await api(`/api/x/remind/status?account_id=${HUB_ACC}`);
+    renderXRemindStatus(status);
+  } catch (e) {
+    toast("催关状态读取失败：" + e.message, "err", 6500);
+    return;
+  }
+
+  if (status.status === "all_completed") {
+    toast("全部未回关博主已催关完毕！", "ok", 6500);
+    return;
+  }
+  if (status.rate_limited) {
+    toast(`当前正在限流冷却，约 ${Number(status.remaining_minutes || 1)} 分钟后继续`, "warn", 6500);
+    return;
+  }
+  if (Number(status.active || 0) > 0) {
+    toast(`催关任务已在运行，当前队列 ${Number(status.active || 0)} 位`, "info", 6500);
+    return;
+  }
+
+  const ok = await uiConfirm({
+    title: "启动一键催关",
+    message: [
+      `当前待催关 ${Number(status.remaining || 0)} 位，已催关 ${Number(status.reminded_total || 0)} 位。`,
+      "每位发送前都会重新打开主页核验：必须仍显示“正在关注 / Following”、对方没有“关注了你 / Follows you”、且存在可回复推文。",
+      "不满足条件会自动记录为未关注、已回关保护或无推文并跳过，绝不发送。",
+      "实际发送按每位 50–70 秒随机节奏；不叠加旧 COMMENT 小时/每日额度；遇速度限制/429/风控后统一冷却至少 15 分钟。",
+      "发送成功后才开启 24 小时观察，并同步飞书互动台账；任务可在统一任务队列中取消。",
+    ].join("\n"),
+    okText: `开始催关（${Number(status.remaining || 0)}）`,
+  });
+  if (!ok) return;
+
+  const btn = triggerBtn || $("x-ops-remind-btn");
+  await withBusy(btn, "正在入队", async () => {
+    try {
+      const payload = await api("/api/x/remind/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: +HUB_ACC }),
+      });
+      renderXRemindStatus(payload);
+      if (payload.status === "all_completed") {
+        toast("全部未回关博主已催关完毕！", "ok", 6500);
+      } else if (payload.status === "rate_limited") {
+        toast(payload.message || "催关处于限流冷却中", "warn", 6500);
+      } else {
+        toast(`${payload.message || "催关任务已启动"}；${payload.pacing || "按安全节奏执行"}`, "ok", 7500);
+      }
+      await refreshXOpsState(false);
+    } catch (e) {
+      toast("一键催关启动失败：" + e.message, "err", 7000);
+      await refreshXRemindStatus(false);
+    }
+  });
+}
+
+async function startXOneClickPost(triggerBtn = null) {
+  if (PLATFORM !== "x" || !HUB_ACC) {
+    toast("请先选择 X 账号", "err");
+    return;
+  }
+  const target = await saveXOpsTargetCount(getXOpsTargetCount(), false);
+  if (!await uiConfirm({
+    title: "启动一键发帖",
+    message: [
+      `本轮目标发布 ${target} 条；达到目标后自动停止。`,
+      "系统会参考该账号昨天已同步的近百条帖子：长度约 60 字、短句分行、口语表达、少总结少套话。",
+      "始终只保持 1 条一键发帖在途：上一条成功后才生成下一条，不会一次性把目标数全部塞进发布队列。",
+      "每条确认成功后随机等待 5–10 分钟再生成下一条；不叠加旧 PUBLISH 2小时/小时日额度，仍保留账号串行、活跃时段、平台硬熔断、真实限流冷却与 uncertain 保护。"
+    ].join("\n"),
+    okText: `开始发帖（${target}）`,
+  })) return;
+
+  const btn = triggerBtn || evtBtn();
+  await withBusy(btn, "启动中", async () => {
+    try {
+      const r = await api("/api/x/post/one-click", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: +HUB_ACC, target_count: target }),
+      });
+      if (r.uncertain) {
+        toast(r.message || "上一条一键发帖结果待核验，未启动新一轮", "warn", 9000);
+      } else if (r.already_running) {
+        const s = r.state || {};
+        toast(`一键发帖已在运行：${Number(s.run_published || 0)} / ${Number(s.target_count || target)}`, "info", 8000);
+      } else {
+        toast(r.message || `一键发帖已启动，本轮目标 ${target} 条`, "ok", 8000);
+      }
+      await refreshTaskQueueBadge();
+      await refreshXOpsState(false);
+    } catch (e) {
+      toast("一键发帖启动失败：" + e.message, "err", 8000);
+      await refreshXOpsState(false);
+    }
+  });
+}
+
+function getXOpsTargetCount() {
+  const input = $("x-ops-target-count");
+  const raw = Number(input?.value || X_OPS_STATE?.target_count || 100);
+  const value = Math.max(1, Math.min(10000, Math.floor(Number.isFinite(raw) ? raw : 100)));
+  if (input) input.value = String(value);
+  return value;
+}
+async function saveXOpsTargetCount(value, showToast = true) {
+  const parsed = Math.max(1, Math.min(10000, Math.floor(Number(value) || 100)));
+  const input = $("x-ops-target-count");
+  if (input) input.value = String(parsed);
+  if (PLATFORM !== "x" || !HUB_ACC) return parsed;
+  try {
+    const result = await api("/api/x/ops/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account_id: +HUB_ACC, target_count: parsed }),
+    });
+    if (X_OPS_STATE) X_OPS_STATE.target_count = Number(result.target_count || parsed);
+    if (input) input.value = String(result.target_count || parsed);
+    applyXOpsStateControls();
+    if (showToast) toast("X 一键目标数已保存：" + Number(result.target_count || parsed), "ok", 3500);
+    return Number(result.target_count || parsed);
+  } catch (e) {
+    if (showToast) toast("目标数保存失败：" + e.message, "err", 6000);
+    throw e;
+  }
+}
+
+async function startXQuickVisit(triggerBtn = null) {
+  if (PLATFORM !== "x" || !HUB_ACC) {
+    toast("请先选择 X 账号", "err");
+    return;
+  }
+  await refreshFollows("fan", true, true);
+  const rows = FOLLOW_ROWS.fan || [];
+  if (!rows.length) {
+    toast("当前没有已同步粉丝，先点「同步粉丝」后再串门", "info", 6500);
+    return;
+  }
+  const target = await saveXOpsTargetCount(getXOpsTargetCount(), false);
+  const mutual = rows.filter(row => row.is_following);
+  const mutualIds = new Set(mutual.map(row => Number(row.id)));
+  const others = rows.filter(row => !mutualIds.has(Number(row.id)));
+  const selected = [...mutual, ...others].filter(row => row.id != null).slice(0, target);
+  const ids = selected.map(row => Number(row.id));
+  if (!ids.length) {
+    toast("没有可串门的粉丝", "info", 5000);
+    return;
+  }
+  const selectedMutual = selected.filter(row => row.is_following).length;
+  toast(
+    `串门目标 ${target} 位，本地可用 ${rows.length} 位；本轮 ${ids.length} 位`
+      + (selectedMutual ? `（优先互关 ${selectedMutual} 位）` : "")
+      + "，只生成待审核草稿",
+    "info", 6500
+  );
+  await generateXVisitDrafts(triggerBtn, ids, target);
+}
+
+async function runXHubTool(action) {
+  const triggerBtn = evtBtn();
+  if (PLATFORM !== "x" || !HUB_ACC) {
+    toast("请先选择 X 账号", "err");
+    return;
+  }
+  await refreshXOpsState(false);
+  if (X_OPS_STATE && X_OPS_STATE.disabled && X_OPS_STATE.disabled[action]) {
+    toast(xOpsDisabledReason(action), "info", 6500);
+    return;
+  }
+  if (action === "growth") {
+    await toggleXGrowthCampaign(triggerBtn);
+    return;
+  }
+  if (action === "remind") {
+    await startXRemindAll(triggerBtn);
+    return;
+  }
+  if (action === "visit") {
+    await startXQuickVisit(triggerBtn);
+    return;
+  }
+  if (action === "post") {
+    await startXOneClickPost(triggerBtn);
+  }
+}
+
+async function refreshFollows(direction, skipBatchRefresh = false, preservePage = false) {
   const tbody = $(direction === "fan" ? "fans-table" : "following-table"); if (!tbody) return;
   if (PLATFORM === "youtube" && direction === "fan") {
     const a = ACCOUNTS.find(x => x.id === +HUB_ACC);
@@ -2689,6 +3495,10 @@ async function refreshFollows(direction) {
   if (!HUB_ACC) { tbody.innerHTML = empty(3, "请先选择已登录账号", "i-user"); return; }
   try {
     const list = await api(`/api/follows?account_id=${HUB_ACC}&direction=${direction}`);
+    FOLLOW_ROWS[direction] = list;
+    if (!preservePage) FOLLOW_PAGE[direction] = 1;
+    const validIds = new Set(list.map(f => Number(f.id)));
+    for (const id of Array.from(FOLLOW_SELECTED[direction])) if (!validIds.has(Number(id))) FOLLOW_SELECTED[direction].delete(id);
     const a = ACCOUNTS.find(x => x.id === +HUB_ACC);
     const authTotal = direction === "fan" ? (a && a.follower_count) : (a && a.following_count);
     const badge = $(direction === "fan" ? "hb-fans" : "hb-following");
@@ -2696,13 +3506,17 @@ async function refreshFollows(direction) {
     const hintEl = $(direction === "fan" ? "hb-fans-hint" : "hb-following-hint");
     if (hintEl && authTotal) {
       hintEl.innerHTML = direction === "fan"
-        ? `粉丝总数 <b>${fmtNum(authTotal)}</b> 位，当前已同步本地明细 <b>${list.length}</b> 位。可对未回关的粉丝发起「回关」。`
-        : `点「同步关注」从该账号主页抓取已关注用户列表。关注总数 <b>${fmtNum(authTotal)}</b> 人，当前已同步本地明细 <b>${list.length}</b> 位。`;
+        ? `粉丝总数 <b>${fmtNum(authTotal)}</b> 位，当前已同步本地明细 <b>${list.length}</b> 位。可按蓝V和回关状态筛选。`
+        : `关注总数 <b>${fmtNum(authTotal)}</b> 人，当前已同步本地明细 <b>${list.length}</b> 位。互关按已同步粉丝/关注明细交集计算。`;
     }
-    tbody.innerHTML = list.length ? list.map(f => followRow(f, direction)).join("")
-      : empty(3, direction === "fan" ? "暂无粉丝明细" : "暂无关注数据", "i-user",
-        direction === "fan" && authTotal ? `该账号在平台共有 ${fmtNum(authTotal)} 位粉丝；明细列表可点右上「同步粉丝」抓取` : "点右上「同步」抓取");
-  } catch (e) { tbody.innerHTML = empty(3, "加载失败:" + e.message, "i-info"); }
+    renderFollowRows(direction);
+    if (PLATFORM === "x" && !skipBatchRefresh && (direction === "following" || direction === "fan")) {
+      await refreshXRelationshipBatches(false);
+    }
+  } catch (e) {
+    FOLLOW_ROWS[direction] = [];
+    tbody.innerHTML = empty(3, "加载失败:" + e.message, "i-info");
+  }
 }
 function followRow(f, direction) {
   const rel = f.is_mutual ? `<span class="pill active bare">互相关注</span>`
@@ -2711,15 +3525,165 @@ function followRow(f, direction) {
   const act = f.is_following
     ? `<button class="ghost sm" onclick="actFollow('unfollow',${f.id})">取关</button>`
     : `<button class="ghost sm" onclick="actFollow('follow',${f.id})">回关</button>`;
+  const selector = PLATFORM === "x" && (direction === "following" || direction === "fan")
+    ? `<input type="checkbox" aria-label="选择 @${esc(f.sec_uid || f.uid || f.nickname)}" ${FOLLOW_SELECTED[direction].has(Number(f.id)) ? "checked" : ""} onchange="toggleFollowSelected('${direction}',${Number(f.id)},this.checked)" style="margin-right:8px">`
+    : "";
   return `<tr>
     <td><div class="fu-cell">
+      ${selector}
       ${f.avatar ? `<img class="avatar" src="${f.avatar}" referrerpolicy="no-referrer" alt="">` : `<span class="avatar"></span>`}
-      <div><div><b>${esc(f.nickname)}</b>${f.platform === "x" && f.sec_uid ? ` <span class="mut">@${esc(f.sec_uid)}</span>` : ""}</div>${f.signature ? `<div class="fu-sign">${esc(f.signature)}</div>` : ""}</div>
+      <div><div><b>${esc(f.nickname)}</b>${f.platform === "x" && f.verified ? ` <span title="X 蓝V认证" aria-label="X 蓝V认证" style="color:#1d9bf0;font-weight:900">✓</span>` : ""}${f.platform === "x" && f.sec_uid ? ` <span class="mut">@${esc(f.sec_uid)}</span>` : ""}</div>${f.signature ? `<div class="fu-sign">${esc(f.signature)}</div>` : ""}</div>
     </div></td>
     <td>${rel}</td>
     <td class="acttd">${act}</td>
   </tr>`;
 }
+
+async function batchUnfollowSelected() {
+  if (PLATFORM !== "x") return;
+  const ids = Array.from(FOLLOW_SELECTED.following);
+  if (!ids.length) { toast("请先选择要取关的账号", "err"); return; }
+  const selectedRows = (FOLLOW_ROWS.following || []).filter(f => FOLLOW_SELECTED.following.has(Number(f.id)));
+  const mutualCount = selectedRows.filter(f => f.is_mutual).length;
+  const verifiedCount = selectedRows.filter(f => f.verified).length;
+  const detail = [
+    `已选择 ${ids.length} 个账号。`,
+    mutualCount ? `其中互关 ${mutualCount} 个。` : "",
+    verifiedCount ? `其中蓝V ${verifiedCount} 个。` : "",
+    "确认后会一次提交全部已选账号；服务端会自动按 500 条分块入队，你不需要手动拆分。worker 仍按现有账号间隔、额度和风控逐条执行。"
+  ].filter(Boolean).join("\n");
+  if (!await uiConfirm({
+    title: "批量取关确认",
+    message: detail,
+    okText: `加入取关队列（${ids.length}）`,
+    danger: true,
+  })) return;
+  try {
+    const r = await api("/api/account-actions/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account_id: +HUB_ACC, action: "unfollow", edge_ids: ids }),
+    });
+    FOLLOW_SELECTED.following.clear();
+    renderFollowRows("following");
+    await refreshXRelationshipBatches(false);
+    toast(`已创建取关批次 #${r.batch_id}，入队 ${r.queued} 个${r.chunks > 1 ? `（服务端自动拆成 ${r.chunks} 个查询块）` : ""}${r.skipped ? `，跳过 ${r.skipped} 个重复/无效目标` : ""}`, "ok", 6500);
+  } catch (e) {
+    toast("批量取关入队失败:" + e.message, "err", 6500);
+  }
+}
+
+async function startXFollowBackAll(triggerBtn = null) {
+  if (PLATFORM !== "x" || !HUB_ACC) {
+    toast("请先选择 X 账号", "err");
+    return;
+  }
+  await refreshXOpsState(false);
+  if (X_OPS_STATE && X_OPS_STATE.disabled && X_OPS_STATE.disabled.followback) {
+    toast(xOpsDisabledReason("followback"), "info", 6500);
+    return;
+  }
+  const target = await saveXOpsTargetCount(getXOpsTargetCount(), false);
+  await refreshFollows("fan", true, true);
+  const rows = FOLLOW_ROWS.fan || [];
+  const allCandidates = rows.filter(f => f.id && !f.is_following);
+  const candidates = allCandidates.slice(0, target);
+  if (!candidates.length) {
+    toast(rows.length ? "当前已同步粉丝都已回关" : "暂无已同步粉丝，请先同步粉丝", "info", 6500);
+    return;
+  }
+  const verified = candidates.filter(f => f.verified).length;
+  if (!await uiConfirm({
+    title: "一键回关",
+    message: [
+      `当前已同步粉丝中有 ${allCandidates.length} 位尚未回关；统一目标数 ${target}，本轮最多处理 ${candidates.length} 位${verified ? `，本轮蓝V ${verified} 位` : ""}。`,
+      "确认后会建立一个持久回关批次；后端再次按统一目标数截断，已回关和重复任务自动跳过。",
+      "worker 仍按账号间隔、小时/每日额度和统一风控逐条执行；遇登录失效、限流或结果不确定会自动暂停批次。",
+    ].join("\n"),
+    okText: `开始回关（最多 ${candidates.length}）`,
+  })) return;
+  const btn = triggerBtn || $("x-fan-followback-all");
+  await withBusy(btn, "正在入队", async () => {
+    try {
+      const r = await api("/api/account-actions/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account_id: +HUB_ACC,
+          action: "follow",
+          edge_ids: allCandidates.map(f => Number(f.id)),
+          target_count: target,
+        }),
+      });
+      await refreshXRelationshipBatches(false);
+      await refreshXOpsState(false);
+      toast(`已创建回关批次 #${r.batch_id}，目标 ${Number(r.target_count || target)}，入队 ${r.queued} 位${r.skipped ? `，跳过 ${r.skipped} 位已回关/重复目标` : ""}`, "ok", 7000);
+    } catch (e) {
+      toast("一键回关入队失败：" + e.message, "err", 7000);
+    }
+  });
+}
+
+async function generateXVisitDrafts(triggerBtn = null, idsOverride = null, targetOverride = null) {
+  if (PLATFORM !== "x") return;
+  const target = targetOverride || await saveXOpsTargetCount(getXOpsTargetCount(), false);
+  const sourceIds = Array.isArray(idsOverride) ? idsOverride : Array.from(FOLLOW_SELECTED.fan);
+  const ids = sourceIds.slice(0, target);
+  if (!ids.length) { toast("没有可生成串门草稿的粉丝", "err"); return; }
+  const mode = $("x-visit-mode")?.value || "content";
+  const labels = {
+    content: "按最新帖子内容生成短回复",
+    morning: "早安短句",
+    evening: "晚安短句",
+    visit: "串门短句",
+  };
+  if (!await uiConfirm({
+    title: "生成串门草稿",
+    message: [
+      `已选择 ${ids.length} 个粉丝。`,
+      `文案模式：${labels[mode] || mode}。`,
+      "系统会逐个读取对方最新原创帖子，跳过近 24 小时已经互动过的人、重复帖子和过旧帖子。",
+      "本操作只生成评论草稿，不会直接发送到 X。"
+    ].join("\n"),
+    okText: `生成草稿（${ids.length}）`,
+  })) return;
+
+  await withBusy(triggerBtn || evtBtn(), "生成中", async () => {
+    let created = 0, skipped = 0, errors = 0;
+    const chunkSize = 25;
+    for (let start = 0; start < ids.length; start += chunkSize) {
+      const chunk = ids.slice(start, start + chunkSize);
+      try {
+        const r = await api("/api/x/visit/drafts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            account_id: +HUB_ACC,
+            edge_ids: chunk,
+            target_count: target,
+            mode,
+            threshold: 4,
+            skip_recent_hours: 24,
+            max_post_age_days: 30,
+          }),
+        });
+        created += Number(r.created || 0);
+        skipped += Number(r.skipped || 0);
+        errors += Number(r.errors || 0);
+      } catch (e) {
+        errors += chunk.length;
+      }
+    }
+    if (!Array.isArray(idsOverride)) {
+      FOLLOW_SELECTED.fan.clear();
+      renderFollowRows("fan");
+    }
+    await refreshXOpsState(false);
+    toast(`串门草稿生成完成：目标 ${target}，本轮处理 ${ids.length}；新建 ${created}，跳过 ${skipped}${errors ? `，读取失败 ${errors}` : ""}。可到任务队列审核/取消。`,
+      errors ? "warn" : "ok", 8000);
+  });
+}
+
 async function syncFollows(direction) {
   if (PLATFORM === "xhs") { toast(XHS_FOLLOW_NA, "info", 6000); return; }
   if (!HUB_ACC) { toast("请先选择账号", "err"); return; }
@@ -2744,7 +3708,7 @@ async function actFollow(action, edgeId) {
       if (PLATFORM === "x") {
         await api("/api/x/relationship", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ account_id: +HUB_ACC, target: edge.sec_uid || edge.uid, action })
+          body: JSON.stringify({ account_id: +HUB_ACC, handle: edge.sec_uid || edge.uid, action })
         });
       } else {
         await api("/api/account-actions", {
@@ -6306,6 +7270,7 @@ async function refreshPublish() {
   const rows = await api("/api/publish?platform=" + (pfHasPublish(PLATFORM) ? PLATFORM : "xhs"));
   PUBLISH_TASKS = rows;
   if ($("tb-pub")) $("tb-pub").textContent = rows.length;
+  if ($("tb-pub-x")) $("tb-pub-x").textContent = rows.length;
   $("pub-table").innerHTML = rows.map(t => `<tr>
     <td class="wrap" style="max-width:220px">${esc(t.platform === "x" ? (t.desc || t.title || "(无内容)") : (t.title || "(无标题)"))}</td>
     <td>${t.platform === "wechat_mp" ? ({article: "文章", images: "贴图", video: "视频", podcast: "播客"}[t.media_type] || esc(t.media_type)) : t.platform === "x" ? ({text: "无附件", media: "混合媒体", images: "图片", video: "视频"}[t.media_type] || esc(t.media_type)) : t.media_type === "video" ? "视频" : "图文"}</td>
@@ -6858,6 +7823,8 @@ let TASK_QUEUE_PAGES = 1;
 let TASK_QUEUE_LOADING = false;
 let TASK_QUEUE_REFRESH_PENDING = false;
 let TASK_QUEUE_BADGE_LOADING = false;
+let TASK_QUEUE_PAGE_ITEMS = [];
+const TASK_QUEUE_SELECTED = new Set();
 
 const TASK_QUEUE_RAW_STATUS = {
   draft: "草稿待审", pending: "等待执行", running: "采集中", publishing: "发布中",
@@ -6869,6 +7836,85 @@ const TASK_QUEUE_STATE_META = {
   blocked: ["风控延后", "queue-blocked"], failed: ["执行失败", "failed"],
   completed: ["已完成", "queue-completed"],
 };
+const X_TASK_QUEUE_STATE_META = {
+  pending: ["等待执行", "pending"],
+  running: ["正在执行", "queue-running"],
+  cooldown: ["正常冷却", "queue-running"],
+  blocked: ["任务阻塞", "queue-blocked"],
+  draft: ["待审任务", "skipped"],
+  uncertain: ["结果待定", "queue-blocked"],
+  failed: ["执行失败", "failed"],
+  completed: ["执行完成", "queue-completed"],
+  canceled: ["任务取消", "skipped"],
+};
+const X_TASK_QUEUE_ACTION_OPTIONS = [
+  ["", "全部任务"],
+  ["growth", "一键浇友"],
+  ["remind", "一键催关"],
+  ["visit", "一键串门"],
+  ["post", "一键发帖"],
+  ["followback", "一键回关"],
+  ["unfollow", "一键取关"],
+  ["other", "其他任务"],
+];
+const X_TASK_QUEUE_STATUS_OPTIONS = [
+  ["active", "活动任务"],
+  ["pending", "等待执行"],
+  ["running", "正在执行"],
+  ["cooldown", "正常冷却"],
+  ["blocked", "任务阻塞"],
+  ["draft", "待审任务"],
+  ["uncertain", "结果待定"],
+  ["failed", "执行失败"],
+  ["completed", "执行完成"],
+  ["canceled", "任务取消"],
+  ["all", "全部状态"],
+];
+const GENERIC_TASK_QUEUE_TYPE_OPTIONS = [
+  ["", "全部队列"], ["collections", "关键词采集"], ["publishes", "内容发布"],
+  ["comments", "自动评论"], ["actions", "账号动作"],
+  ["monitor_downloads", "监控下载"], ["collection_downloads", "采集下载"],
+];
+const GENERIC_TASK_QUEUE_STATUS_OPTIONS = [
+  ["active", "活动任务"], ["pending", "等待执行"], ["running", "正在执行"],
+  ["blocked", "风控延后"], ["failed", "失败任务"], ["completed", "已完成"],
+  ["all", "全部状态"],
+];
+
+function replaceTaskQueueOptions(select, options, fallback) {
+  if (!select) return;
+  select.innerHTML = options.map(([value, label]) =>
+    `<option value="${value}">${label}</option>`).join("");
+  select.value = options.some(([value]) => value === fallback) ? fallback : options[0][0];
+  if (select._csSync) select._csSync();
+}
+
+function syncTaskQueueFiltersForPlatform() {
+  const isX = PLATFORM === "x";
+  const typeSelect = $("queue-type");
+  const stateSelect = $("queue-state");
+  if (!typeSelect || !stateSelect) return;
+  const mode = isX ? "x" : "generic";
+  const changed = typeSelect.dataset.queueMode !== mode;
+  if (changed) {
+    replaceTaskQueueOptions(
+      typeSelect, isX ? X_TASK_QUEUE_ACTION_OPTIONS : GENERIC_TASK_QUEUE_TYPE_OPTIONS, "");
+    replaceTaskQueueOptions(
+      stateSelect, isX ? X_TASK_QUEUE_STATUS_OPTIONS : GENERIC_TASK_QUEUE_STATUS_OPTIONS, "active");
+    typeSelect.dataset.queueMode = mode;
+  }
+  if ($("queue-platform-field")) $("queue-platform-field").classList.toggle("hidden", isX);
+  if ($("queue-type-label")) $("queue-type-label").textContent = isX ? "任务类型" : "队列类型";
+  if ($("queue-card-sub")) $("queue-card-sub").textContent = isX
+    ? "按运营动作与真实执行状态查看 X 持久任务"
+    : "统一查看采集、发布、评论、账号动作和下载任务";
+  document.querySelectorAll(".queue-generic-stat").forEach(el => el.classList.toggle("hidden", isX));
+  document.querySelectorAll(".x-queue-stat").forEach(el => el.classList.toggle("hidden", !isX));
+  if (isX && $("queue-platform")) {
+    $("queue-platform").value = "current";
+    if ($("queue-platform")._csSync) $("queue-platform")._csSync();
+  }
+}
 
 function updateTaskQueuePlatformLabel() {
   const option = $("queue-platform-current");
@@ -6907,6 +7953,81 @@ const TASK_QUEUE_ACTION_LABEL = {
 function taskQueueActionButtons(item) {
   const actions = Array.isArray(item.actions) ? item.actions : [];
   return actions.map(action => `<button type="button" class="ghost sm" onclick="taskQueueAction('${esc(item.queue_type)}',${Number(item.id)},'${esc(action)}')">${esc(TASK_QUEUE_ACTION_LABEL[action] || action)}</button>`).join("");
+}
+
+function taskQueueSelectionKey(queueType, id) {
+  return `${String(queueType || "").trim()}:${Number(id)}`;
+}
+
+function taskQueueCancelable(item) {
+  return Array.isArray(item.actions) && item.actions.includes("cancel");
+}
+
+function syncTaskQueueSelectionUI() {
+  const cancelable = TASK_QUEUE_PAGE_ITEMS.filter(taskQueueCancelable);
+  const selectedOnPage = cancelable.filter(item =>
+    TASK_QUEUE_SELECTED.has(taskQueueSelectionKey(item.queue_type, item.id))).length;
+  const selAll = $("queue-selall");
+  if (selAll) {
+    selAll.disabled = cancelable.length === 0;
+    selAll.checked = cancelable.length > 0 && selectedOnPage === cancelable.length;
+    selAll.indeterminate = selectedOnPage > 0 && selectedOnPage < cancelable.length;
+  }
+  const count = TASK_QUEUE_SELECTED.size;
+  if ($("queue-selected-count")) $("queue-selected-count").textContent = `已选 ${count} 个可取消任务`;
+  if ($("queue-bulk-cancel")) $("queue-bulk-cancel").disabled = count === 0;
+  if ($("queue-clear-selected")) $("queue-clear-selected").disabled = count === 0;
+}
+
+function toggleTaskQueueSelected(queueType, id, checked) {
+  const key = taskQueueSelectionKey(queueType, id);
+  if (checked) TASK_QUEUE_SELECTED.add(key); else TASK_QUEUE_SELECTED.delete(key);
+  syncTaskQueueSelectionUI();
+}
+
+function toggleTaskQueuePageSelection(checked) {
+  TASK_QUEUE_PAGE_ITEMS.filter(taskQueueCancelable).forEach(item => {
+    const key = taskQueueSelectionKey(item.queue_type, item.id);
+    if (checked) TASK_QUEUE_SELECTED.add(key); else TASK_QUEUE_SELECTED.delete(key);
+  });
+  document.querySelectorAll('#queue-table input[data-queue-select="1"]').forEach(cb => {
+    if (!cb.disabled) cb.checked = checked;
+  });
+  syncTaskQueueSelectionUI();
+}
+
+function clearTaskQueueSelection() {
+  TASK_QUEUE_SELECTED.clear();
+  document.querySelectorAll('#queue-table input[data-queue-select="1"]').forEach(cb => cb.checked = false);
+  syncTaskQueueSelectionUI();
+}
+
+async function cancelSelectedTaskQueue() {
+  if (!TASK_QUEUE_SELECTED.size) return;
+  const selected = [...TASK_QUEUE_SELECTED].map(key => {
+    const cut = key.lastIndexOf(":");
+    return { queue_type: key.slice(0, cut), id: Number(key.slice(cut + 1)) };
+  }).filter(item => item.queue_type && item.id > 0);
+  if (!selected.length) return;
+  if (!await uiConfirm({
+    title: "批量取消任务",
+    message: `确认取消已选的 ${selected.length} 个任务？采集中的任务会按现有逻辑安全停止；不支持取消的任务不会被勾选。`,
+    okText: "取消已选",
+    danger: true,
+  })) return;
+  try {
+    const result = await api("/api/task-queue/batch/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: selected }),
+    });
+    TASK_QUEUE_SELECTED.clear();
+    toast(`已取消 ${result.canceled || 0} 个任务${result.skipped ? `，跳过 ${result.skipped} 个` : ""}`,
+      result.skipped ? "warn" : "ok", 6500);
+    await refreshTaskQueue();
+  } catch (e) {
+    toast(`批量取消失败：${e.message}`, "err", 6500);
+  }
 }
 
 async function showTaskQueueEvents(queueType, id) {
@@ -6948,7 +8069,9 @@ async function taskQueueAction(queueType, id, action) {
 }
 
 function taskQueueRow(item) {
-  const stateMeta = TASK_QUEUE_STATE_META[item.state] || [item.state || "未知", "skipped"];
+  const stateMeta = item.platform === "x"
+    ? (X_TASK_QUEUE_STATE_META[item.x_status] || [item.x_status || "未知状态", "skipped"])
+    : (TASK_QUEUE_STATE_META[item.state] || [item.state || "未知", "skipped"]);
   const rawStatus = TASK_QUEUE_RAW_STATUS[item.status] || item.status || "未知";
   const account = item.account_name || (item.account_id ? `账号 #${item.account_id}` : "未绑定账号");
   const scheduled = item.scheduled_at ? `<b>计划 ${taskQueueDate(item.scheduled_at)}</b>` : "";
@@ -6958,7 +8081,10 @@ function taskQueueRow(item) {
   const reasonClass = item.error && !item.blocked_reason ? " has-error" : "";
   const signal = item.blocked_signal ? `<small>信号：${esc(item.blocked_signal)}</small>` : "";
   const queueActions = taskQueueActionButtons(item);
+  const cancelable = taskQueueCancelable(item);
+  const checked = TASK_QUEUE_SELECTED.has(taskQueueSelectionKey(item.queue_type, item.id));
   return `<tr>
+    <td class="queue-col-select"><input type="checkbox" data-queue-select="1" aria-label="选择任务 #${Number(item.id)}" ${cancelable ? "" : "disabled"} ${checked ? "checked" : ""} onchange="toggleTaskQueueSelected('${esc(item.queue_type)}',${Number(item.id)},this.checked)"></td>
     <td><span class="pill q bare">${esc(item.queue_label)}</span><small class="mut" style="display:block;margin-top:5px">${esc(PF_NAME[item.platform] || item.platform || "—")}</small></td>
     <td><div class="queue-copy"><b title="${esc(item.title)}">${esc(item.title)}</b>${item.detail ? `<small>${esc(item.detail)}</small>` : ""}</div></td>
     <td><div class="queue-account"><b>${esc(account)}</b>${item.account_id ? `<small>ID ${Number(item.account_id)}</small>` : ""}</div></td>
@@ -6984,39 +8110,55 @@ function renderTaskQueuePager(data) {
   pager.hidden = false;
 }
 
-function renderTaskQueueSummary(summary = {}) {
+function renderTaskQueueSummary(summary = {}, xSummary = {}) {
   ["active", "pending", "running", "blocked", "failed"].forEach(name => {
     const el = $(`queue-stat-${name}`);
     if (el) el.textContent = fmtNum(Number(summary[name] || 0));
   });
+  ["active", "pending", "running", "cooldown", "blocked", "uncertain", "failed", "completed"].forEach(name => {
+    const el = $(`x-queue-stat-${name}`);
+    if (el) el.textContent = fmtNum(Number(xSummary[name] || 0));
+  });
   const badge = $("tb-queue");
   if (badge) badge.textContent = fmtNum(Number(summary.active || 0));
+  const xBadge = $("tb-queue-x");
+  if (xBadge) xBadge.textContent = fmtNum(Number(xSummary.active || summary.active || 0));
   const selected = $("queue-state")?.value || "active";
   document.querySelectorAll("[data-queue-state]").forEach(button =>
-    button.classList.toggle("active", button.dataset.queueState === selected));
+    button.classList.toggle("active", PLATFORM !== "x" && button.dataset.queueState === selected));
+  document.querySelectorAll("[data-x-queue-state]").forEach(button =>
+    button.classList.toggle("active", PLATFORM === "x" && button.dataset.xQueueState === selected));
 }
 
 async function refreshTaskQueue(resetPage = false) {
   const body = $("queue-table");
-  if (resetPage) TASK_QUEUE_PAGE = 1;
+  if (resetPage) {
+    TASK_QUEUE_PAGE = 1;
+    TASK_QUEUE_SELECTED.clear();
+  }
   if (!body) return;
   if (TASK_QUEUE_LOADING) { TASK_QUEUE_REFRESH_PENDING = true; return; }
   TASK_QUEUE_LOADING = true;
   $("queue-table-wrap")?.classList.add("stale");
+  const isX = PLATFORM === "x";
   const params = new URLSearchParams({
-    platform: taskQueuePlatform(),
-    queue_type: $("queue-type")?.value || "",
-    state: $("queue-state")?.value || "active",
+    platform: isX ? "x" : taskQueuePlatform(),
+    queue_type: isX ? "" : ($("queue-type")?.value || ""),
+    state: isX ? "all" : ($("queue-state")?.value || "active"),
+    x_action: isX ? ($("queue-type")?.value || "") : "",
+    x_status: isX ? ($("queue-state")?.value || "active") : "",
     q: $("queue-query")?.value.trim() || "",
     page: String(TASK_QUEUE_PAGE),
     page_size: String(TASK_QUEUE_PAGE_SIZE),
   });
   try {
     const data = await api("/api/task-queue?" + params.toString());
-    body.innerHTML = data.items?.length
-      ? data.items.map(taskQueueRow).join("")
-      : empty(7, "当前筛选范围内没有任务", "i-inbox", "切换状态或平台范围后再查看");
-    renderTaskQueueSummary(data.summary || {});
+    TASK_QUEUE_PAGE_ITEMS = Array.isArray(data.items) ? data.items : [];
+    body.innerHTML = TASK_QUEUE_PAGE_ITEMS.length
+      ? TASK_QUEUE_PAGE_ITEMS.map(taskQueueRow).join("")
+      : empty(8, "当前筛选范围内没有任务", "i-inbox", "切换状态或平台范围后再查看");
+    syncTaskQueueSelectionUI();
+    renderTaskQueueSummary(data.summary || {}, data.x_summary || {});
     renderTaskQueuePager(data);
   } catch (e) {
     body.innerHTML = empty(7, "任务队列加载失败", "i-info", e.message || "请稍后重试");
@@ -7035,10 +8177,18 @@ async function refreshTaskQueueBadge() {
   if (TASK_QUEUE_BADGE_LOADING || CURRENT_TAB === "queue") return;
   TASK_QUEUE_BADGE_LOADING = true;
   try {
-    const params = new URLSearchParams({ platform: PLATFORM, state: "active", page_size: "1" });
+    const isX = PLATFORM === "x";
+    const params = new URLSearchParams({
+      platform: PLATFORM,
+      state: isX ? "all" : "active",
+      x_status: isX ? "active" : "",
+      page_size: "1",
+    });
     const data = await api("/api/task-queue?" + params.toString());
     const badge = $("tb-queue");
     if (badge) badge.textContent = fmtNum(Number(data.summary?.active || 0));
+    const xBadge = $("tb-queue-x");
+    if (xBadge) xBadge.textContent = fmtNum(Number(data.x_summary?.active || data.summary?.active || 0));
   } catch (e) {
     // 导航徽章是辅助信息，失败时保留上次值，不打断当前页面操作。
   } finally { TASK_QUEUE_BADGE_LOADING = false; }
@@ -7076,6 +8226,13 @@ function loop() {
   refreshMonitors(); refreshContents(); refreshWatches(); refreshComments(); refreshDanmakuWatches(); refreshDanmaku(); refreshOverviewChart(); refreshCommentRules(); refreshCommentTasks(); if (pfHasPublish(PLATFORM)) refreshPublish();
   if (CURRENT_TAB === "collections") refreshCollections();
   if (CURRENT_TAB === "risk-control") refreshRiskCenter();
+  if (CURRENT_TAB === "hub" && PLATFORM === "x" && (HUB_TAB === "following" || HUB_TAB === "fans")) {
+    refreshXRelationshipBatches(true);
+    refreshXOpsState(false);
+  }
+  if (CURRENT_TAB === "hub" && PLATFORM === "x" && HUB_TAB === "ops") {
+    refreshXOpsState(false);
+  }
   if (CURRENT_TAB === "queue") refreshTaskQueue(); else refreshTaskQueueBadge();
 }
 
@@ -7089,10 +8246,10 @@ $("danmaku-watch-table").innerHTML = skeleton(8);
 $("danmaku-table").innerHTML = skeleton(6);
 $("collection-job-table").innerHTML = collectionTaskSkeleton(3);
 $("collection-content-list").innerHTML = collectionResultSkeleton(4);
-$("queue-table").innerHTML = skeleton(7);
+$("queue-table").innerHTML = skeleton(8);
 
 // restore last-selected section (default: 总览);旧版四个独立页已并入「账号管理」
-const VALID_TABS = ["overview", "accounts", "risk-control", "queue", "collections", "monitors", "comments", "danmaku", "hub", "publish", "autocomment", "share-download", "notifications", "settings"];
+const VALID_TABS = ["overview", "accounts", "risk-control", "queue", "collections", "monitors", "comments", "danmaku", "hub", "x-intel", "x-ops", "x-data", "publish", "autocomment", "share-download", "notifications", "settings"];
 const LEGACY_HUB_TABS = ["myworks", "following", "fans", "dm"];
 switchTab((() => {
   try {
@@ -7174,6 +8331,12 @@ Object.assign(window, {
   addDanmakuWatch, clearDanmaku, goDanmakuPage, changeDanmakuPage,
   handleDanmakuPageInput, jumpDanmakuPage, switchHubTab,
   syncMyWorks, syncFollows, syncDm, openHubAccountBrowser, sendDm, loadHubStats,
+  controlXRelationshipBatch, refreshXRelationshipBatches,
+  toggleXGrowthCampaign, refreshXGrowthCampaign,
+  refreshXOpsState, applyXOpsStateControls,
+  runXHubTool, startXOneClickPost, startXQuickVisit, startXRemindAll, refreshXRemindStatus,
+  startXFollowBackAll,
+  saveXOpsTargetCount,
   hidePreview, hideRepost, submitRepost, hideCollectionComments, hideWorkComments,
   syncWorkComments, uiModalCancel, uiModalOk, hideRiskEvents,
   authorizeYoutube, toggleYtConfig, saveYtConfig, resumeYoutube, disconnectYoutube, importD2YBatch, onMyWorksSort, delAccountWork,

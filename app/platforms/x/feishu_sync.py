@@ -77,12 +77,23 @@ class XFeishuSync:
 
     # ==================== 互动日志表 (tblIj4aDV3hO2A0x) ====================
 
-    def record_post(self, post_text: str, post_link: str = "", category: str = "", note: str = "") -> bool:
+    def record_post(
+        self,
+        post_text: str,
+        post_link: str = "",
+        category: str = "",
+        note: str = "",
+        account_nick: str = "sakura",
+        account_handle: str = "@sakurakk730",
+    ) -> bool:
         now_ms = int(time.time() * 1000)
+        handle = str(account_handle or "").strip()
+        if handle and not handle.startswith("@"):
+            handle = f"@{handle}"
         fields = {
             "日期": now_ms,
-            "账号昵称": "sakura",
-            "Handle": "@sakurakk730",
+            "账号昵称": account_nick or handle or "X 账号",
+            "Handle": handle or "—",
             "动作": ["发帖"],
             "留言内容": post_text,
             "回关": "—",
@@ -128,6 +139,27 @@ class XFeishuSync:
             body={"fields": fields},
         )
         return res.get("code") == 0
+
+    def record_relationship(
+        self,
+        target_nick: str,
+        target_handle: str,
+        action: str,
+        note: str = "",
+    ) -> bool:
+        """记录关注/取关成功动作到互动日志."""
+        value = str(action or "").strip().lower()
+        if value not in {"follow", "unfollow"}:
+            raise ValueError("action must be follow or unfollow")
+        label = "关注" if value == "follow" else "取关"
+        return self.record_reply(
+            target_nick=target_nick,
+            target_handle=target_handle,
+            reply_text=f"{label} {target_handle}".strip(),
+            actions=[label],
+            refollow_status="—",
+            note=note,
+        )
 
     # ==================== 推文备选题材库表 (tblDP1JFPjybcnMI) ====================
 
@@ -241,4 +273,28 @@ class XFeishuSync:
                 "fields": it.get("fields", {}),
             }
             for it in items
+        ]
+
+    def update_candidate_topic(self, record_id: str, fields: Dict[str, Any]) -> bool:
+        """更新推文备选题材库单条记录."""
+        res = self._api_request(
+            f"/bitable/v1/apps/{self.app_token}/tables/{self.topic_table_id}/records/{record_id}",
+            method="PUT",
+            body={"fields": fields},
+        )
+        return res.get("code") == 0
+
+    def update_candidate_status(self, record_id: str, status: str, tweet_link: str = "") -> bool:
+        """更新题材采纳状态（如 '已采纳', '已发布', '弃用'）."""
+        fields: Dict[str, Any] = {"采纳状态": status}
+        if tweet_link:
+            fields["原文链接"] = {"link": tweet_link, "text": "推文链接"}
+        return self.update_candidate_topic(record_id, fields)
+
+    def get_approved_topics(self, status: str = "已采纳", page_size: int = 100) -> List[Dict[str, Any]]:
+        """获取所有已采纳（待发布）的推文题材."""
+        records = self.get_candidate_topics(page_size=page_size)
+        return [
+            r for r in records
+            if r.get("fields", {}).get("采纳状态") == status
         ]

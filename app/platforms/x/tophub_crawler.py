@@ -13,6 +13,7 @@ import re
 from typing import Dict, Any, List, Optional
 import urllib.request
 import urllib.error
+import urllib.parse
 
 try:
     from bs4 import BeautifulSoup
@@ -24,6 +25,7 @@ RUNTIME_DIR = os.path.join(_PROJECT_ROOT, "runtime")
 CACHE_FILE = os.path.join(RUNTIME_DIR, "tophub_cache.json")
 
 TOPHUB_URL = "https://tophub.today/"
+DAILYHOT_API_BASE = os.environ.get("DAILYHOT_API_BASE", "http://43.133.65.89:6688")
 
 # 来源分类定义
 SOURCE_CATEGORIES = {
@@ -263,13 +265,64 @@ class TopHubCrawler:
                 return topics
         return self._parse_html_without_bs4(html) or FALLBACK_TOPICS
 
+    def _fetch_from_dailyhot_api(self) -> List[Dict[str, Any]]:
+        """从自建 VPS DailyHotApi 高可用获取结构化热榜（含 GitHub Trending、HackerNews 等）."""
+        api_targets = [
+            ("github", {"type": "daily"}, "tech_ai", "GitHub Trending"),
+            ("hackernews", {}, "tech_ai", "Hacker News"),
+            ("36kr", {"type": "hot"}, "tech_ai", "36氪"),
+            ("douyin", {}, "hot_buzz", "抖音"),
+            ("zhihu", {}, "workplace_career", "知乎"),
+            ("v2ex", {"type": "hot"}, "tech_ai", "V2EX"),
+            ("nytimes", {"area": "china"}, "workplace_career", "纽约时报"),
+        ]
+        all_topics = []
+        for route, params, default_cat, source_title in api_targets:
+            try:
+                query_str = ("?" + urllib.parse.urlencode(params)) if params else ""
+                url = f"{DAILYHOT_API_BASE}/{route}{query_str}"
+                req = urllib.request.Request(url, headers={"User-Agent": "CreatorHub-Bot/1.0"})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    if resp.status == 200:
+                        payload = json.loads(resp.read().decode("utf-8"))
+                        items = payload.get("data", [])
+                        for idx, item in enumerate(items[:15], 1):
+                            title = item.get("title", "").strip()
+                            if not title or len(title) < 4:
+                                continue
+                            link = item.get("url") or item.get("link") or ""
+                            desc = item.get("desc", "").strip()
+                            heat = str(item.get("hot", "")) or "热门"
+                            all_topics.append({
+                                "title": title,
+                                "source": source_title,
+                                "category": default_cat,
+                                "heat": heat,
+                                "rank": idx,
+                                "link": link,
+                                "desc": desc,
+                            })
+            except Exception:
+                continue
+        return all_topics
+
     def fetch_topics(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
-        """获取题材库热点列表（优先缓存，带容错兜底）."""
+        """获取题材库热点列表（优先缓存，优先 DailyHotApi，带容错兜底）."""
         if not force_refresh:
             cached = self._load_cache()
             if cached:
                 return cached
 
+        # 1. 优先尝试从自建 VPS DailyHotApi 拉取高可用结构化数据
+        try:
+            api_topics = self._fetch_from_dailyhot_api()
+            if api_topics and len(api_topics) >= 10:
+                self._save_cache(api_topics)
+                return api_topics
+        except Exception as e:
+            print(f"[TopHubCrawler] DailyHotApi 拉取异常，降级回退: {e}", file=sys.stderr)
+
+        # 2. 降级回退到 TopHub 页面抓取
         try:
             html = self._fetch_html()
             topics = self._parse_html(html)
@@ -277,7 +330,7 @@ class TopHubCrawler:
                 self._save_cache(topics)
                 return topics
         except Exception as e:
-            print(f"[TopHubCrawler] 实时抓取失败，降级回退: {e}", file=sys.stderr)
+            print(f"[TopHubCrawler] 实时网页抓取失败，降级回退: {e}", file=sys.stderr)
 
         # 普通读取失败时可退到过期缓存；显式 force_refresh 则不复用旧结果。
         if not force_refresh and os.path.exists(self.cache_file):

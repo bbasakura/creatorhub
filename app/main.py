@@ -99,7 +99,8 @@ from .models import (ContentRecord, CommentRecord, CommentRule, CommentTask,
                      DouyinAccount, MonitorTarget,
                      NotificationChannel, ProxyPool, BrowserRuntime, PublishTask,
                      AccountWork, FollowEdge, DmConversation, DmMessage,
-                      AccountActionTask, AccountStatSnapshot,
+                      AccountActionTask, XRelationshipBatch, AccountStatSnapshot,
+                      XAccountGrowthSnapshot, XWorkMetricSnapshot, XRevenueProfile,
                       ShareDownloadRecord, AccountRiskState, RiskEvent, RiskAdminAudit,
                       KeywordCollectionJob, KeywordCollectionContent,
                       KeywordCollectionComment)
@@ -128,6 +129,17 @@ from .services.task_queue_actions import (
     perform_queue_action as _perform_queue_action,
 )
 from .services.task_events import list_task_events as _list_task_events
+from .services.x_relationship_batches import (
+    relationship_batch_dict as _relationship_batch_dict,
+    refresh_relationship_batch as _refresh_relationship_batch,
+)
+from .services.x_ops_settings import (
+    get_x_ops_target_count as _get_x_ops_target_count,
+    save_x_ops_target_count as _save_x_ops_target_count,
+)
+from .services.x_growth_campaign import (
+    parse_growth_task_metadata as _parse_growth_task_metadata,
+)
 from .services.platform_capabilities import (
     media_capability as _media_capability,
     media_types_for as _media_types_for,
@@ -1652,17 +1664,29 @@ async def list_accounts(platform: str | None = None):
 @app.get("/api/task-queue")
 async def list_task_queue(platform: str | None = None, queue_type: str = "",
                           state: str = "active", q: str = "", page: int = 1,
-                          page_size: int = 20):
+                          page_size: int = 20, x_action: str = "",
+                          x_status: str = ""):
     """Return persistent jobs from every worker queue in one normalized view."""
     platform = str(platform or "").strip().lower()
     if platform == "all":
         platform = ""
     queue_type = str(queue_type or "").strip().lower()
     state = str(state or "active").strip().lower()
+    x_action = str(x_action or "").strip().lower()
+    x_status = str(x_status or "").strip().lower()
+    x_actions = {"growth", "remind", "visit", "post", "followback", "unfollow", "other"}
+    x_statuses = {
+        "active", "pending", "running", "cooldown", "blocked", "draft",
+        "uncertain", "failed", "completed", "canceled", "all",
+    }
     if queue_type and queue_type not in _QUEUE_TYPES:
         raise HTTPException(400, "未知队列类型")
     if state not in _QUEUE_STATES:
         raise HTTPException(400, "未知队列状态")
+    if x_action and x_action not in x_actions:
+        raise HTTPException(400, "未知 X 任务类型")
+    if x_status and x_status not in x_statuses:
+        raise HTTPException(400, "未知 X 任务状态")
     q_text = str(q or "").strip()[:200]
     q_folded = q_text.casefold()
     page = max(1, int(page or 1))
@@ -1673,6 +1697,7 @@ async def list_task_queue(platform: str | None = None, queue_type: str = "",
         accounts = {row.id: row for row in session.exec(select(DouyinAccount)).all()}
         targets = {row.id: row for row in session.exec(select(MonitorTarget)).all()}
         jobs = {row.id: row for row in session.exec(select(KeywordCollectionJob)).all()}
+        x_batches = {row.id: row for row in session.exec(select(XRelationshipBatch)).all()}
         items: list[dict[str, Any]] = []
 
         def account_name(account_id: int | None) -> str:
@@ -1684,10 +1709,31 @@ async def list_task_queue(platform: str | None = None, queue_type: str = "",
                 status: str, created_at: datetime | None,
                 source_tab: str, scheduled_at: datetime | None = None,
                 blocked_reason: str = "", blocked_signal: str = "",
-                next_allowed_at: datetime | None = None, error: str = "") -> None:
+                next_allowed_at: datetime | None = None, error: str = "",
+                x_action_name: str = "") -> None:
             queue_state = _queue_state(
                 status, blocked_reason=blocked_reason,
                 next_allowed_at=next_allowed_at)
+            raw_status = str(status or "pending").lower()
+            now = datetime.utcnow()
+            if raw_status == "draft":
+                x_task_status = "draft"
+            elif raw_status == "uncertain":
+                x_task_status = "uncertain"
+            elif raw_status in {"failed", "partial"}:
+                x_task_status = "failed"
+            elif raw_status == "canceled":
+                x_task_status = "canceled"
+            elif raw_status in {"done", "skipped"}:
+                x_task_status = "completed"
+            elif blocked_reason:
+                x_task_status = "blocked"
+            elif next_allowed_at and next_allowed_at > now:
+                x_task_status = "cooldown"
+            elif raw_status in {"running", "publishing", "doing", "downloading"}:
+                x_task_status = "running"
+            else:
+                x_task_status = "pending"
             items.append({
                 "key": f"{queue}:{row_id}",
                 "queue_type": queue,
@@ -1707,6 +1753,8 @@ async def list_task_queue(platform: str | None = None, queue_type: str = "",
                 "blocked_signal": str(blocked_signal or "")[:120],
                 "error": str(error or "")[:1000],
                 "source_tab": source_tab,
+                "x_action": x_action_name if row_platform == "x" else "",
+                "x_status": x_task_status if row_platform == "x" else "",
                 "actions": _available_queue_actions(
                     queue, status,
                     blocked_reason=blocked_reason,
@@ -1764,39 +1812,65 @@ async def list_task_queue(platform: str | None = None, queue_type: str = "",
                 next_allowed_at=row.next_allowed_at, error=row.error)
 
         for row in loaded[PublishTask]:
+            is_x = row.platform == "x"
             add(
-                queue="publishes", queue_label="内容发布", row_id=row.id,
+                queue="publishes", queue_label="一键发帖" if is_x else "内容发布", row_id=row.id,
                 row_platform=row.platform, account_id=row.account_id,
                 title=row.title or row.desc or f"{row.media_type} 发布任务",
                 detail=row.desc if row.title else (row.topics or row.media_type),
                 status=row.status, created_at=row.created_at,
                 scheduled_at=row.scheduled_at, source_tab="publish",
                 blocked_reason=row.blocked_reason, blocked_signal=row.blocked_signal,
-                next_allowed_at=row.next_allowed_at, error=row.error)
+                next_allowed_at=row.next_allowed_at, error=row.error,
+                x_action_name="post" if is_x else "")
 
         for row in loaded[CommentTask]:
             target = f"回复 {row.target_nick}" if row.target_nick else f"作品 {row.aweme_id}"
+            x_comment_action = ""
+            x_comment_label = "自动评论"
+            if row.platform == "x":
+                token = str(row.xsec_token or "")
+                if token.startswith("x_remind:"):
+                    x_comment_action, x_comment_label = "remind", "一键催关"
+                elif token.startswith("x_visit:"):
+                    x_comment_action, x_comment_label = "visit", "一键串门"
+                else:
+                    x_comment_action, x_comment_label = "other", "其他任务"
             add(
-                queue="comments", queue_label="自动评论", row_id=row.id,
+                queue="comments", queue_label=x_comment_label, row_id=row.id,
                 row_platform=row.platform, account_id=row.account_id,
                 title=row.content or "待发送评论", detail=target,
                 status=row.status, created_at=row.created_at,
                 scheduled_at=row.scheduled_at, source_tab="autocomment",
                 blocked_reason=row.blocked_reason, blocked_signal=row.blocked_signal,
-                next_allowed_at=row.next_allowed_at, error=row.error)
+                next_allowed_at=row.next_allowed_at, error=row.error,
+                x_action_name=x_comment_action)
 
         action_labels = {"follow": "关注", "unfollow": "取关", "send_dm": "发送私信"}
         for row in loaded[AccountActionTask]:
             action_label = action_labels.get(row.action, row.action or "账号动作")
             target = row.target_nick or row.target_uid or row.target_sec_uid or "目标账号"
+            x_action_name = ""
+            x_queue_label = "账号动作"
+            if row.platform == "x":
+                batch = x_batches.get(row.batch_id) if row.batch_id else None
+                if row.action == "follow" and _parse_growth_task_metadata(row.content):
+                    x_action_name, x_queue_label = "growth", "一键浇友"
+                elif row.action == "follow" and batch and batch.action == "follow":
+                    x_action_name, x_queue_label = "followback", "一键回关"
+                elif row.action == "unfollow":
+                    x_action_name, x_queue_label = "unfollow", "一键取关"
+                else:
+                    x_action_name, x_queue_label = "other", "其他任务"
             add(
-                queue="actions", queue_label="账号动作", row_id=row.id,
+                queue="actions", queue_label=x_queue_label, row_id=row.id,
                 row_platform=row.platform, account_id=row.account_id,
                 title=f"{action_label} · {target}", detail=row.content,
                 status=row.status, created_at=row.created_at,
                 scheduled_at=row.scheduled_at, source_tab="hub",
                 blocked_reason=row.blocked_reason, blocked_signal=row.blocked_signal,
-                next_allowed_at=row.next_allowed_at, error=row.error)
+                next_allowed_at=row.next_allowed_at, error=row.error,
+                x_action_name=x_action_name)
 
         for row in loaded[ContentRecord]:
             target = targets.get(row.target_id)
@@ -1825,6 +1899,8 @@ async def list_task_queue(platform: str | None = None, queue_type: str = "",
         items = [item for item in items if item["platform"] == platform]
     if queue_type:
         items = [item for item in items if item["queue_type"] == queue_type]
+    if x_action:
+        items = [item for item in items if item.get("x_action") == x_action]
     if q_folded:
         def matches(item: dict[str, Any]) -> bool:
             haystack = " ".join(str(item.get(key) or "") for key in (
@@ -1842,7 +1918,26 @@ async def list_task_queue(platform: str | None = None, queue_type: str = "",
         if item_state in {"pending", "running", "blocked"}:
             summary["active"] += 1
 
-    if state == "active":
+    x_summary = {name: 0 for name in (
+        "total", "active", "pending", "running", "cooldown", "blocked",
+        "draft", "uncertain", "failed", "completed", "canceled")}
+    if platform == "x":
+        x_summary["total"] = len(items)
+        for item in items:
+            item_x_status = item.get("x_status") or "pending"
+            x_summary[item_x_status] += 1
+            if item_x_status in {"pending", "running", "cooldown", "blocked"}:
+                x_summary["active"] += 1
+
+    if x_status and platform == "x":
+        if x_status == "active":
+            filtered = [item for item in items if item.get("x_status") in {
+                "pending", "running", "cooldown", "blocked"}]
+        elif x_status == "all":
+            filtered = items
+        else:
+            filtered = [item for item in items if item.get("x_status") == x_status]
+    elif state == "active":
         filtered = [item for item in items if item["state"] in {"pending", "running", "blocked"}]
     elif state == "all":
         filtered = items
@@ -1874,14 +1969,65 @@ async def list_task_queue(platform: str | None = None, queue_type: str = "",
         "page_size": page_size,
         "pages": pages,
         "summary": summary,
+        "x_summary": x_summary,
         "history_limit_per_queue": 1000,
         "generated_at": _queue_iso(datetime.utcnow()),
     }
 
 
+class TaskQueueBulkItemIn(BaseModel):
+    queue_type: str
+    id: int
+
+
+class TaskQueueBulkCancelIn(BaseModel):
+    items: list[TaskQueueBulkItemIn]
+
+
 @app.get("/api/task-queue/{queue_type}/{row_id}/events")
 async def task_queue_events(queue_type: str, row_id: int, limit: int = 100):
     return _list_task_events(queue_type, row_id, limit=limit)
+
+
+@app.post("/api/task-queue/batch/cancel")
+async def cancel_task_queue_batch(body: TaskQueueBulkCancelIn):
+    items = body.items or []
+    if not items:
+        raise HTTPException(400, "请至少选择一个可取消任务")
+    if len(items) > 2000:
+        raise HTTPException(400, "单次最多取消 2000 个任务")
+
+    seen: set[tuple[str, int]] = set()
+    canceled = 0
+    skipped = 0
+    failures: list[dict[str, Any]] = []
+    for item in items:
+        queue_type = str(item.queue_type or "").strip().lower()
+        row_id = int(item.id or 0)
+        key = (queue_type, row_id)
+        if not queue_type or row_id <= 0 or key in seen:
+            skipped += 1
+            continue
+        seen.add(key)
+        try:
+            await _perform_queue_action(
+                queue_type, row_id, "cancel", engine=engine)
+            canceled += 1
+        except _QueueActionError as exc:
+            skipped += 1
+            failures.append({
+                "queue_type": queue_type,
+                "id": row_id,
+                "error": str(exc),
+            })
+    return {
+        "ok": True,
+        "requested": len(items),
+        "unique": len(seen),
+        "canceled": canceled,
+        "skipped": skipped,
+        "failures": failures[:100],
+    }
 
 
 @app.post("/api/task-queue/{queue_type}/{row_id}/{action}")
@@ -3335,6 +3481,7 @@ async def sync_account_works(account_id: int):
                     cur.following_count = int(profile.get("following_count") or 0)
                 cur.aweme_count = int(profile.get("aweme_count") or cur.aweme_count or len(items))
                 s.add(cur)
+            recent_cutoff = int((now - timedelta(days=30)).timestamp())
             for w in items:
                 existing = s.exec(select(AccountWork).where(
                     AccountWork.account_id == account_id,
@@ -3348,6 +3495,43 @@ async def sync_account_works(account_id: int):
                     s.add(AccountWork(platform="x", account_id=account_id,
                                       fetched_at=now, **w))
                     added += 1
+
+                create_time = int(w.get("create_time") or 0)
+                if create_time and create_time >= recent_cutoff:
+                    last_metric = s.exec(select(XWorkMetricSnapshot).where(
+                        XWorkMetricSnapshot.account_id == account_id,
+                        XWorkMetricSnapshot.item_id == str(w["item_id"]),
+                    ).order_by(XWorkMetricSnapshot.captured_at.desc())).first()
+                    current_metric = (
+                        int(w.get("play_count") or 0),
+                        int(w.get("like_count") or 0),
+                        int(w.get("comment_count") or 0),
+                        int(w.get("share_count") or 0),
+                    )
+                    previous_metric = (
+                        (
+                            int(last_metric.play_count or 0),
+                            int(last_metric.like_count or 0),
+                            int(last_metric.comment_count or 0),
+                            int(last_metric.share_count or 0),
+                        )
+                        if last_metric else None
+                    )
+                    stale_metric = (
+                        last_metric is None
+                        or (now - last_metric.captured_at).total_seconds() >= 3600
+                    )
+                    if previous_metric != current_metric or stale_metric:
+                        s.add(XWorkMetricSnapshot(
+                            account_id=account_id,
+                            item_id=str(w["item_id"]),
+                            create_time=create_time,
+                            play_count=current_metric[0],
+                            like_count=current_metric[1],
+                            comment_count=current_metric[2],
+                            share_count=current_metric[3],
+                            captured_at=now,
+                        ))
             today = datetime.now().strftime("%Y-%m-%d")
             snap = s.exec(select(AccountStatSnapshot).where(
                 AccountStatSnapshot.account_id == account_id,
@@ -3365,6 +3549,35 @@ async def sync_account_works(account_id: int):
             else:
                 s.add(AccountStatSnapshot(platform="x", account_id=account_id,
                                           date=today, **totals))
+
+            last_growth = s.exec(select(XAccountGrowthSnapshot).where(
+                XAccountGrowthSnapshot.account_id == account_id
+            ).order_by(XAccountGrowthSnapshot.captured_at.desc())).first()
+            growth_values = (
+                int(totals["follower_count"]),
+                int(profile.get("following_count") or (cur.following_count if cur else 0)),
+                int(totals["aweme_count"]),
+            )
+            previous_growth = (
+                (
+                    int(last_growth.follower_count or 0),
+                    int(last_growth.following_count or 0),
+                    int(last_growth.post_count or 0),
+                )
+                if last_growth else None
+            )
+            growth_stale = (
+                last_growth is None
+                or (now - last_growth.captured_at).total_seconds() >= 3600
+            )
+            if previous_growth != growth_values or growth_stale:
+                s.add(XAccountGrowthSnapshot(
+                    account_id=account_id,
+                    follower_count=growth_values[0],
+                    following_count=growth_values[1],
+                    post_count=growth_values[2],
+                    captured_at=now,
+                ))
             s.commit()
         return {"ok": True, "fetched": len(items), "added": added,
                 "total": int(profile.get("aweme_count") or len(items))}
@@ -3529,17 +3742,53 @@ async def sync_work_danmaku(work_id: int):
 
 # ─────────── 本账号管理:关注 / 粉丝 ───────────
 def _follow_dict(f: FollowEdge) -> dict:
+    verified = False
+    try:
+        raw = json.loads(f.raw_json or "{}")
+        verified = bool(raw.get("verified")) if isinstance(raw, dict) else False
+    except (TypeError, ValueError, json.JSONDecodeError):
+        verified = False
     return {
         "id": f.id, "platform": f.platform, "account_id": f.account_id,
         "direction": f.direction, "uid": f.uid, "sec_uid": f.sec_uid,
         "nickname": f.nickname, "avatar": f.avatar, "signature": f.signature,
         "is_mutual": f.is_mutual, "is_following": f.is_following,
+        "verified": verified,
         "fetched_at": f.fetched_at.isoformat() if f.fetched_at else None,
     }
 
 
+def _follow_identity(f: FollowEdge) -> str:
+    return str(f.sec_uid or f.uid or "").strip().lstrip("@").casefold()
+
+
+def _refresh_follow_mutuals(s, account_id: int) -> None:
+    """Recompute mutual/following flags from the two locally synced X snapshots."""
+    rows = s.exec(select(FollowEdge).where(
+        FollowEdge.account_id == account_id,
+        FollowEdge.platform == "x")).all()
+    following = {
+        _follow_identity(row) for row in rows
+        if row.direction == "following" and _follow_identity(row)
+    }
+    fans = {
+        _follow_identity(row) for row in rows
+        if row.direction == "fan" and _follow_identity(row)
+    }
+    mutual = following & fans
+    for row in rows:
+        key = _follow_identity(row)
+        row.is_mutual = bool(key and key in mutual)
+        if row.direction == "following":
+            row.is_following = True
+        elif row.direction == "fan":
+            row.is_following = bool(key and key in following)
+        s.add(row)
+
+
 @app.get("/api/follows")
-async def list_follows(account_id: int, direction: str = "following", limit: int = 500):
+async def list_follows(account_id: int, direction: str = "following", limit: int = 5000):
+    limit = max(1, min(5000, int(limit or 5000)))
     with get_session() as s:
         q = (select(FollowEdge).where(FollowEdge.account_id == account_id,
                                       FollowEdge.direction == direction)
@@ -3586,8 +3835,48 @@ async def sync_follows(account_id: int, direction: str = "following"):
             raise HTTPException(503, "引擎未就绪")
         identity = browser.identity_for(acc)
         async def _fetch_x_follows():
-            users, profile = await fetch_x_relationships(browser, identity, direction, limit=500)
-            return {"users": users, "profile": profile}, ""
+            provider = "agent_reach"
+            fallback_reason = ""
+            reach_profile = {}
+            try:
+                from .platforms.x.agent_reach import (
+                    AgentReachAuthMismatch,
+                    AgentReachReadAdapter,
+                    AgentReachSchemaError,
+                    AgentReachUnavailable,
+                    AgentReachUnsupported,
+                )
+                reach_adapter = AgentReachReadAdapter(acc.sec_uid or "")
+                reach_profile = await reach_adapter.profile()
+                users, profile = await reach_adapter.relationships(
+                    direction, count=2000)
+            except (
+                    AgentReachUnavailable,
+                    AgentReachAuthMismatch,
+                    AgentReachUnsupported,
+                    AgentReachSchemaError,
+            ) as reach_exc:
+                provider = "browser"
+                fallback_reason = type(reach_exc).__name__
+                expected_total = int(
+                    reach_profile.get(
+                        "following_count" if direction == "following"
+                        else "follower_count") or 0)
+                users, browser_profile = await fetch_x_relationships(
+                    browser, identity, direction, limit=2000,
+                    expected_total=expected_total)
+                profile = dict(browser_profile or {})
+                # Agent Reach profile/status remains authoritative even when
+                # the relationship-list command itself is unsupported.
+                # Browser snapshots can report 0 counts on relationship pages.
+                if reach_profile:
+                    profile.update(reach_profile)
+            return {
+                "users": users,
+                "profile": profile,
+                "provider": provider,
+                "fallback_reason": fallback_reason,
+            }, ""
         result, err = await engine.guarded_read_pair(
             account_id, OperationKind.READ_LIGHT,
             f"x-follows:{account_id}:{direction}", _fetch_x_follows,
@@ -3599,6 +3888,8 @@ async def sync_follows(account_id: int, direction: str = "following"):
             raise HTTPException(400, f"X 关系列表同步失败: {err}")
         users = result.get("users") or []
         profile = result.get("profile") or {}
+        provider = result.get("provider") or "browser"
+        fallback_reason = result.get("fallback_reason") or ""
         now = datetime.utcnow()
         with get_session() as s:
             for old in s.exec(select(FollowEdge).where(
@@ -3608,6 +3899,8 @@ async def sync_follows(account_id: int, direction: str = "following"):
             for u in users:
                 s.add(FollowEdge(platform="x", account_id=account_id,
                                  direction=direction, fetched_at=now, **u))
+            s.flush()
+            _refresh_follow_mutuals(s, account_id)
             cur = s.get(DouyinAccount, account_id)
             if cur:
                 if profile.get("follower_count") is not None:
@@ -3618,8 +3911,13 @@ async def sync_follows(account_id: int, direction: str = "following"):
             s.commit()
         total = (profile.get("follower_count") if direction == "fan"
                  else profile.get("following_count"))
-        return {"ok": True, "fetched": len(users), "added": len(users),
-                "total": int(total or len(users))}
+        payload = {
+            "ok": True, "fetched": len(users), "added": len(users),
+            "total": int(total or len(users)), "provider": provider,
+        }
+        if fallback_reason:
+            payload["fallback_reason"] = fallback_reason
+        return payload
 
     if browser is None:
         raise HTTPException(503, "浏览器未就绪")
@@ -3967,6 +4265,13 @@ class ActionIn(BaseModel):
     run_now: bool = False        # True=立即执行;False=入队(引擎节流后执行)
 
 
+class BatchActionIn(BaseModel):
+    account_id: int
+    action: str
+    edge_ids: list[int]
+    target_count: int | None = None
+
+
 def _action_dict(t: AccountActionTask) -> dict:
     return {
         "id": t.id, "platform": t.platform, "account_id": t.account_id,
@@ -4020,6 +4325,214 @@ async def create_account_action(body: ActionIn):
             raise HTTPException(400, f"执行失败:{detail}")
         return {"ok": True, "id": task_id, "ran": True}
     return {"ok": True, "id": task_id, "ran": False}
+
+
+@app.post("/api/account-actions/batch")
+async def create_account_actions_batch(body: BatchActionIn):
+    """Queue selected X relationship actions through the durable worker."""
+    if body.action not in {"follow", "unfollow"}:
+        raise HTTPException(400, "批量关系操作仅支持 follow | unfollow")
+    edge_ids = list(dict.fromkeys(
+        int(v) for v in body.edge_ids if int(v) > 0))
+    target_count = None
+    if body.action == "follow":
+        target_count = (
+            _save_x_ops_target_count(body.account_id, body.target_count)
+            if body.target_count is not None
+            else _get_x_ops_target_count(body.account_id)
+        )
+    if not edge_ids:
+        raise HTTPException(400, "请至少选择一个账号")
+    chunk_size = 500
+
+    with get_session() as s:
+        acc = s.get(DouyinAccount, body.account_id)
+        if not acc:
+            raise HTTPException(404, "账号不存在")
+        if acc.platform != "x":
+            raise HTTPException(400, "批量关注关系操作当前仅用于 X")
+
+        by_id = {}
+        for start in range(0, len(edge_ids), chunk_size):
+            chunk = edge_ids[start:start + chunk_size]
+            edges = s.exec(select(FollowEdge).where(
+                FollowEdge.account_id == body.account_id,
+                FollowEdge.id.in_(chunk))).all()
+            by_id.update(
+                {int(edge.id): edge for edge in edges if edge.id is not None})
+
+        existing = s.exec(select(AccountActionTask).where(
+            AccountActionTask.account_id == body.account_id,
+            AccountActionTask.platform == "x",
+            AccountActionTask.action == body.action,
+            AccountActionTask.status.in_(["pending", "doing", "uncertain"]))).all()
+        existing_targets = {
+            str(task.target_sec_uid or task.target_uid or "")
+            .strip().lstrip("@").casefold()
+            for task in existing
+        }
+
+        specs = []
+        skipped = 0
+        for edge_id in edge_ids:
+            edge = by_id.get(edge_id)
+            eligible = bool(
+                edge and (
+                    (body.action == "unfollow" and edge.direction == "following" and edge.is_following)
+                    or (body.action == "follow" and edge.direction == "fan" and not edge.is_following)
+                )
+            )
+            if not eligible:
+                skipped += 1
+                continue
+            target = str(edge.sec_uid or edge.uid or "").strip().lstrip("@")
+            if not target or target.casefold() in existing_targets:
+                skipped += 1
+                continue
+            specs.append((edge, target))
+            existing_targets.add(target.casefold())
+            if body.action == "follow" and target_count is not None and len(specs) >= target_count:
+                break
+
+        now = datetime.utcnow()
+        batch = XRelationshipBatch(
+            platform="x",
+            account_id=body.account_id,
+            action=body.action,
+            status="active" if specs else "completed",
+            requested_count=(
+                min(len(edge_ids), int(target_count))
+                if body.action == "follow" and target_count is not None
+                else len(edge_ids)
+            ),
+            total_count=len(specs),
+            skipped_count=skipped,
+            done_at=None if specs else now,
+            created_at=now,
+            updated_at=now,
+        )
+        s.add(batch)
+        s.flush()
+
+        task_ids = []
+        for edge, target in specs:
+            min_gap_seconds = (
+                75 + secrets.randbelow(31)
+                if body.action == "follow"
+                else 50 + secrets.randbelow(21)
+            )
+            task = AccountActionTask(
+                platform="x",
+                account_id=body.account_id,
+                batch_id=batch.id,
+                action=body.action,
+                target_uid=edge.uid or target,
+                target_sec_uid=edge.sec_uid or target,
+                target_nick=edge.nickname or target,
+                status="pending",
+                min_gap_seconds=min_gap_seconds,
+            )
+            s.add(task)
+            s.flush()
+            task_ids.append(task.id)
+        s.commit()
+        batch_id = batch.id
+
+    return {
+        "ok": True,
+        "batch_id": batch_id,
+        "queued": len(task_ids),
+        "skipped": skipped,
+        "target_count": target_count,
+        "task_ids": task_ids,
+        "chunk_size": chunk_size,
+        "chunks": (len(edge_ids) + chunk_size - 1) // chunk_size,
+    }
+
+
+@app.get("/api/x/relationship-batches")
+async def list_x_relationship_batches(account_id: int, limit: int = 10):
+    limit = max(1, min(50, int(limit or 10)))
+    with get_session() as s:
+        batches = s.exec(select(XRelationshipBatch).where(
+            XRelationshipBatch.account_id == account_id,
+            XRelationshipBatch.platform == "x",
+        ).order_by(XRelationshipBatch.id.desc()).limit(limit)).all()
+        payload = [_relationship_batch_dict(s, batch) for batch in batches]
+        s.commit()
+        return payload
+
+
+@app.post("/api/x/relationship-batches/{batch_id}/pause")
+async def pause_x_relationship_batch(batch_id: int):
+    with get_session() as s:
+        batch = s.get(XRelationshipBatch, batch_id)
+        if not batch:
+            raise HTTPException(404, "批次不存在")
+        _refresh_relationship_batch(s, batch)
+        if batch.status == "completed":
+            raise HTTPException(400, "批次已完成")
+        if batch.status == "canceled":
+            raise HTTPException(400, "批次已取消")
+        batch.status = "paused"
+        batch.pause_reason = "人工暂停"
+        batch.stop_signal = "manual_pause"
+        batch.updated_at = datetime.utcnow()
+        s.add(batch)
+        s.commit()
+        return {"ok": True, "batch": _relationship_batch_dict(s, batch)}
+
+
+@app.post("/api/x/relationship-batches/{batch_id}/resume")
+async def resume_x_relationship_batch(batch_id: int):
+    with get_session() as s:
+        batch = s.get(XRelationshipBatch, batch_id)
+        if not batch:
+            raise HTTPException(404, "批次不存在")
+        _refresh_relationship_batch(s, batch)
+        if batch.status == "completed":
+            raise HTTPException(400, "批次已完成")
+        if batch.status == "canceled":
+            raise HTTPException(400, "批次已取消")
+        batch.status = "active"
+        batch.updated_at = datetime.utcnow()
+        batch.done_at = None
+        s.add(batch)
+        s.commit()
+        return {"ok": True, "batch": _relationship_batch_dict(s, batch)}
+
+
+@app.post("/api/x/relationship-batches/{batch_id}/cancel")
+async def cancel_x_relationship_batch(batch_id: int):
+    with get_session() as s:
+        batch = s.get(XRelationshipBatch, batch_id)
+        if not batch:
+            raise HTTPException(404, "批次不存在")
+        if batch.status == "completed":
+            raise HTTPException(400, "批次已完成")
+        if batch.status == "canceled":
+            return {"ok": True, "canceled": 0,
+                    "batch": _relationship_batch_dict(s, batch)}
+        pending = s.exec(select(AccountActionTask).where(
+            AccountActionTask.batch_id == batch_id,
+            AccountActionTask.status == "pending")).all()
+        for task in pending:
+            task.status = "canceled"
+            task.error = "批次已取消剩余任务"
+            s.add(task)
+        now = datetime.utcnow()
+        batch.status = "canceled"
+        batch.pause_reason = "人工取消剩余任务"
+        batch.stop_signal = "manual_cancel"
+        batch.updated_at = now
+        batch.done_at = now
+        s.add(batch)
+        s.commit()
+        return {
+            "ok": True,
+            "canceled": len(pending),
+            "batch": _relationship_batch_dict(s, batch),
+        }
 
 
 @app.post("/api/account-actions/{task_id}/run-now")
@@ -8801,6 +9314,8 @@ async def update_publish(tid: int, body: PublishUpdate):
         if body.allow_save is not None:
             t.allow_save = body.allow_save
         if "scheduled_at" in body.model_fields_set:
+            if body.scheduled_at and not _supports_schedule(t.platform):
+                raise HTTPException(400, f"{t.platform} 当前不支持定时发布")
             if body.scheduled_at and _parse_when(body.scheduled_at) is None:
                 raise HTTPException(400, "定时发布时间格式无效")
             t.scheduled_at = _parse_when(body.scheduled_at)

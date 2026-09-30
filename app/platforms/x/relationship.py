@@ -99,7 +99,123 @@ async def _relationship_state(page: Any) -> tuple[str, Any]:
     if follow is not None:
         return "not_following", follow
 
+    follow_back = await _visible_named_button(
+        page, r"^(Follow back|回关)(?:\s|@|$)")
+    if follow_back is not None:
+        return "not_following", follow_back
+
+    subscribe = await _visible_named_button(
+        page, r"^(Subscribe|订阅)(?:\s|@|$)")
+    if subscribe is not None:
+        return "not_following", subscribe
+
     return "unknown", None
+
+
+async def _profile_verified(page: Any) -> bool:
+    try:
+        node = page.locator(
+            '[data-testid="UserName"] [data-testid="icon-verified"], '
+            '[data-testid="primaryColumn"] [data-testid="icon-verified"], '
+            'svg[aria-label*="Verified"], svg[aria-label*="认证"]'
+        ).first
+        return bool(await node.count() and await node.is_visible())
+    except Exception:
+        return False
+
+
+async def inspect_x_growth_profile(
+        mgr: BrowserManager, identity: Identity, target: str) -> dict[str, Any]:
+    handle, profile_url = normalize_x_handle(target)
+    async with mgr.visible_page(identity, url=profile_url) as page:
+        if await _page_logged_out(page):
+            raise RuntimeError("logged_out:X 登录态已失效，请重新登录")
+        await page.wait_for_timeout(700)
+        risk_marker = await detect_x_write_risk(page)
+        state, _button = await _relationship_state(page)
+        verified = await _profile_verified(page)
+        bio = ""
+        nickname = handle
+        body_text = ""
+        try:
+            body_text = str(await page.locator("body").inner_text() or "")
+        except Exception:
+            pass
+        follows_you = "Follows you" in body_text or "关注了你" in body_text
+        unavailable_markers = (
+            "This account doesn’t exist", "This account doesn't exist",
+            "Account suspended", "账号已被冻结", "账号不存在", "此账号不存在",
+        )
+        profile_unavailable = any(marker in body_text for marker in unavailable_markers)
+        try:
+            node = page.locator('[data-testid="UserDescription"]').first
+            if await node.count():
+                bio = str(await node.inner_text() or "").strip()
+        except Exception:
+            pass
+        try:
+            header = page.locator('[data-testid="UserName"]').first
+            if await header.count():
+                raw = str(await header.inner_text() or "").strip()
+                if raw:
+                    nickname = raw.splitlines()[0].strip() or handle
+        except Exception:
+            pass
+
+        latest_tweet_id = ""
+        latest_tweet_url = ""
+        pinned_fallback: tuple[str, str] | None = None
+        if not profile_unavailable:
+            try:
+                articles = page.locator('article[data-testid="tweet"]')
+                count = min(await articles.count(), 12)
+                for index in range(count):
+                    article = articles.nth(index)
+                    raw_text = str(await article.inner_text() or "")
+                    links = article.locator('a[href*="/status/"]')
+                    link_count = await links.count()
+                    candidate_id = ""
+                    candidate_url = ""
+                    for link_index in range(link_count):
+                        href = str(await links.nth(link_index).get_attribute("href") or "")
+                        match = re.search(r"/status/(\d+)", href)
+                        if not match:
+                            continue
+                        path_handle = href.strip("/").split("/", 1)[0].casefold()
+                        if path_handle and path_handle != handle.casefold():
+                            continue
+                        candidate_id = match.group(1)
+                        candidate_url = (
+                            href if href.startswith("http")
+                            else f"https://x.com{href if href.startswith('/') else '/' + href}"
+                        )
+                        break
+                    if not candidate_id:
+                        continue
+                    is_pinned = "Pinned" in raw_text or "已置顶" in raw_text
+                    if not is_pinned:
+                        latest_tweet_id, latest_tweet_url = candidate_id, candidate_url
+                        break
+                    if pinned_fallback is None:
+                        pinned_fallback = (candidate_id, candidate_url)
+                if not latest_tweet_id and pinned_fallback:
+                    latest_tweet_id, latest_tweet_url = pinned_fallback
+            except Exception:
+                pass
+
+        return {
+            "handle": handle,
+            "url": profile_url,
+            "nickname": nickname,
+            "bio": bio,
+            "verified": verified,
+            "relationship_state": state,
+            "follows_you": follows_you,
+            "profile_unavailable": profile_unavailable,
+            "latest_tweet_id": latest_tweet_id,
+            "latest_tweet_url": latest_tweet_url,
+            "risk_marker": risk_marker or "",
+        }
 
 
 async def _wait_for_state(page: Any, expected: set[str], timeout_ms: int = 7000) -> str:
@@ -118,7 +234,7 @@ async def set_x_following(
         identity: Identity,
         target: str,
         should_follow: bool,
-        *, on_submit=None,
+        *, on_submit=None, require_verified: bool = False,
 ) -> XRelationshipOutcome:
     """Follow/unfollow one X account and verify the resulting UI state."""
     action: Literal["follow", "unfollow"] = "follow" if should_follow else "unfollow"
@@ -144,6 +260,12 @@ async def set_x_following(
                     error=f"risk_blocked:X {action} 前检测到平台风控/验证提示: {risk_marker}",
                 )
             state, button = await _relationship_state(page)
+
+            if should_follow and require_verified and not await _profile_verified(page):
+                return XRelationshipOutcome(
+                    "failed", action, handle,
+                    error="quality_gate:X 目标账号不是蓝V认证，已跳过关注",
+                )
 
             if should_follow and state in {"following", "pending"}:
                 return XRelationshipOutcome(

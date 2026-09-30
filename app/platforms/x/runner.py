@@ -45,15 +45,12 @@ class XRunner:
         }
 
     def on_post_success(self, post_text: str, post_link: str = "", category: str = "", note: str = ""):
-        """主帖发布成功后的钩子: 同步飞书多维表格"""
-        ok = self.feishu.record_post(
-            post_text=post_text,
-            post_link=post_link,
-            category=category,
-            note=note or "自动化引擎发布",
+        """Compatibility hook kept fail-closed; worker owns X success evidence."""
+        del post_text, post_link, category, note
+        raise RuntimeError(
+            "legacy X success hook is disabled; "
+            "CreatorHub PublishTask worker owns success and Feishu sync"
         )
-        print(f"[Feishu] Post record synced: {ok}")
-        return ok
 
     def plan_reply(self, tweet_text: str, author_nick: str = "", author_handle: str = "", tweet_link: str = "") -> Dict[str, Any]:
         """针对指定推文规划微回复内容与浏览器执行代码"""
@@ -79,19 +76,12 @@ class XRunner:
         refollow_status: str = "—",
         note: str = "",
     ):
-        """回复成功后的钩子: 记录内存历史并同步飞书多维表格"""
-        self.replier.record_reply(tweet_link, target_handle)
-        ok = self.feishu.record_reply(
-            target_nick=target_nick,
-            target_handle=target_handle,
-            reply_text=reply_text,
-            tweet_link=tweet_link,
-            actions=["留言"],
-            refollow_status=refollow_status,
-            note=note or "极速微回复",
+        """Compatibility hook kept fail-closed; worker owns X success evidence."""
+        del target_nick, target_handle, reply_text, tweet_link, refollow_status, note
+        raise RuntimeError(
+            "legacy X success hook is disabled; "
+            "CreatorHub CommentTask worker owns success and Feishu sync"
         )
-        print(f"[Feishu] Reply record synced: {ok}")
-        return ok
 
 
 if __name__ == "__main__":

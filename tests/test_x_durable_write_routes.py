@@ -71,6 +71,18 @@ def test_relationship_submit_callback_precedes_click_and_failure_is_uncertain():
     assert outcome.changed is False
 
 
+def test_growth_verified_gate_blocks_non_verified_profile_before_submit():
+    calls = []
+    outcome = asyncio.run(set_x_following(
+        _Manager(), SimpleNamespace(), "example", True,
+        on_submit=lambda: calls.append("submitted"),
+        require_verified=True,
+    ))
+    assert outcome.status == "failed"
+    assert "不是蓝V认证" in outcome.error
+    assert calls == []
+
+
 def test_relationship_task_is_durable_and_only_dedupes_active_attempts():
     previous = db._engine
     with tempfile.TemporaryDirectory() as directory:
@@ -135,3 +147,12 @@ def test_x_api_has_no_direct_reply_or_relationship_writer_imports():
     assert "set_x_following" not in source
     assert 'perform_queue_action(\n            "comments"' in source
     assert 'perform_queue_action(\n            "actions"' in source
+
+
+def test_monitor_routes_x_relationship_actions_before_generic_follow_adapter():
+    source = Path("app/engine/monitor.py").read_text(encoding="utf-8")
+    start = source.index('if platform == "x" and action in {"follow", "unfollow"}:')
+    generic = source.index('elif action == "follow":', start)
+    branch = source[start:generic]
+    assert "set_x_following(" in branch
+    assert "do_follow(" not in branch

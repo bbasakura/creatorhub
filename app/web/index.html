@@ -390,6 +390,30 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
   .fu-cell b { color:var(--fg-strong); }
   .fu-sign { color:var(--mut); font-size:11.5px; max-width:360px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
+  /* X 的品牌强调色是近白色，不能直接拿来做选择控件填充，否则深色页会出现白块。 */
+  body.pf-x :is(#following-table,#fans-table) .fu-cell input[type="checkbox"] {
+    background:#0f1419; border-color:#536471; box-shadow:inset 0 1px 2px rgba(0,0,0,.35);
+  }
+  body.pf-x :is(#following-table,#fans-table) .fu-cell input[type="checkbox"]:hover { border-color:#1d9bf0; }
+  body.pf-x :is(#following-table,#fans-table) .fu-cell input[type="checkbox"]:checked {
+    background:#1d9bf0; border-color:#1d9bf0;
+    box-shadow:0 0 0 1px rgba(29,155,240,.18), 0 0 0 3px rgba(29,155,240,.12);
+  }
+  body.pf-x :is(#following-table,#fans-table) .fu-cell input[type="checkbox"]:focus-visible {
+    border-color:#1d9bf0; box-shadow:0 0 0 3px rgba(29,155,240,.28);
+  }
+  body.pf-x :is(#x-following-filterbar,#x-fan-filterbar) .toolbar-actions > button.ghost {
+    color:#e7e9ea; background:linear-gradient(180deg,#18202a,#111820); border-color:#38444d; box-shadow:none;
+  }
+  body.pf-x :is(#x-following-filterbar,#x-fan-filterbar) .toolbar-actions > button.ghost:hover {
+    color:#fff; background:#1b2732; border-color:#536471; filter:none;
+  }
+  body.pf-x :is(#x-following-filterbar,#x-fan-filterbar) .toolbar-actions > button.ghost:focus,
+  body.pf-x :is(#x-following-filterbar,#x-fan-filterbar) .toolbar-actions > button.ghost:focus-visible {
+    outline:none; color:#fff; background:#162330; border-color:#1d9bf0;
+    box-shadow:0 0 0 3px rgba(29,155,240,.22);
+  }
+
   /* ── 私信两栏 ── */
   .dm-wrap { display:grid; grid-template-columns:260px 1fr; gap:0; border:1px solid var(--line-soft); border-radius:var(--r); overflow:hidden; min-height:440px; }
   .dm-list { border-right:1px solid var(--line-soft); max-height:560px; overflow-y:auto; background:var(--surface-2); }
@@ -480,6 +504,44 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
     background:var(--bg); border:1px solid var(--line); padding:2px 6px; border-radius:999px;
   }
   .tab.active .tab-badge { color:var(--acc); border-color:var(--acc-ring); background:var(--acc-soft); }
+  .hub-tabs-row { display:block; margin-bottom:14px; }
+  .hub-tabs-row .tabbar { margin:0 !important; }
+  .x-ops-panel { display:grid; gap:16px; }
+  .x-ops-controlbar {
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    padding:12px 14px; border:1px solid var(--line); border-radius:12px;
+    background:var(--surface-2);
+  }
+  .x-ops-controlbar label { font-size:13px; font-weight:700; color:var(--fg-strong); }
+  .x-ops-controlbar input {
+    width:100px; padding:8px 10px; border-radius:9px; text-align:center;
+    font:700 13px/1 var(--mono);
+  }
+  .x-ops-controlbar small { color:var(--mut); font-size:11.5px; }
+  .x-ops-actions {
+    display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px;
+  }
+  .x-ops-action {
+    min-height:92px; padding:14px 16px; border-radius:13px; border:1px solid transparent;
+    display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:5px;
+    text-align:left; box-shadow:var(--sh-sm); color:#fff;
+  }
+  .x-ops-action svg { width:18px; height:18px; margin-bottom:2px; }
+  .x-ops-action b { font-size:14px; color:inherit; }
+  .x-ops-action small { font-size:11.5px; line-height:1.4; color:rgba(255,255,255,.82); font-weight:450; }
+  .x-ops-action .x-ops-live { margin-top:3px; font-size:11px; line-height:1.35; color:#fff; font-weight:750; }
+  .x-ops-action:disabled { cursor:not-allowed; opacity:.48; filter:saturate(.55); transform:none; }
+  .x-ops-action:hover:not(:disabled) { transform:translateY(-1px); filter:brightness(1.06); }
+  .x-ops-action.growth { background:linear-gradient(145deg,#1677ff,#0b5fd7); border-color:#4691ff; }
+  .x-ops-action.remind { background:linear-gradient(145deg,#a855f7,#7e22ce); border-color:#c084fc; }
+  .x-ops-action.visit { background:linear-gradient(145deg,#16a34a,#0f7a37); border-color:#4ade80; }
+  .x-ops-action.post { background:linear-gradient(145deg,#f59e0b,#d97706); border-color:#fbbf24; }
+  .x-ops-note {
+    padding:10px 12px; border:1px solid var(--line-soft); border-radius:10px;
+    color:var(--mut); font-size:12px; line-height:1.6; background:var(--bg);
+  }
+  @media(max-width:900px){ .x-ops-actions{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  @media(max-width:560px){ .x-ops-actions{grid-template-columns:1fr;} }
   @media(max-width:600px){ .tab{padding:8px 11px} }
   @media(max-width:820px){ .grid2{grid-template-columns:1fr} }
   @media(max-width:600px){ main{padding:16px} header{padding:12px 16px} .stats{grid-template-columns:repeat(2,1fr)} }
@@ -1309,6 +1371,19 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
   .job-progress-head { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--mut); font-size:11px; }
   .progress-track { height:6px; overflow:hidden; border-radius:999px; background:var(--surface-3); border:1px solid var(--line-soft); }
   .progress-fill { height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--acc),var(--info)); transition:width .25s var(--ease); }
+  .x-batch-list { display:grid; gap:9px; margin:10px 0 14px; }
+  .x-batch-card {
+    display:grid; gap:8px; padding:12px 14px;
+    background:var(--bg); border:1px solid var(--line-soft); border-radius:var(--r-sm);
+  }
+  .x-batch-head, .x-batch-meta, .x-batch-actions {
+    display:flex; align-items:center; gap:9px; flex-wrap:wrap;
+  }
+  .x-batch-head { justify-content:space-between; }
+  .x-batch-head b { color:var(--fg-strong); }
+  .x-batch-meta { color:var(--mut); font-size:11.5px; }
+  .x-batch-actions { justify-content:flex-end; }
+  .x-batch-reason { color:var(--warn); font-size:11.5px; line-height:1.45; }
   .keyword-stack { display:flex; flex-wrap:wrap; gap:4px; max-width:260px; }
   .keyword-stack .meta-chip { max-width:120px; }
   .collection-step { max-width:280px; margin-top:4px; color:var(--mut-2); font-size:10.5px; line-height:1.35; overflow-wrap:anywhere; }
@@ -1503,6 +1578,18 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
   .platform-callout p { margin:2px 0 0; }
   .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
   .kpi-card { min-width:0; padding:13px 14px; background:var(--bg); border:1px solid var(--line-soft); border-radius:var(--r-sm); }
+  .revenue-qual-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px; margin-bottom:10px; }
+  .revenue-qual-card { min-width:0; padding:12px 13px; background:var(--bg); border:1px solid var(--line-soft); border-radius:var(--r-sm); transition:border-color .18s var(--ease),background .18s var(--ease); }
+  .revenue-qual-card.done { border-color:rgba(52,211,153,.35); background:var(--success-soft); }
+  .revenue-qual-head { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:24px; }
+  .revenue-qual-label { color:var(--mut); font-size:11.5px; font-weight:600; }
+  .revenue-qual-status { color:var(--fg-strong); font:650 13px/1.2 var(--mono); white-space:nowrap; }
+  .revenue-qual-card.done .revenue-qual-status { color:var(--success); }
+  .revenue-qual-toggle { display:flex; align-items:center; gap:7px; cursor:pointer; }
+  .revenue-qual-track { height:6px; margin-top:9px; overflow:hidden; border-radius:999px; background:var(--surface-3); border:1px solid var(--line-soft); }
+  .revenue-qual-fill { display:block; width:0; height:100%; border-radius:inherit; background:var(--acc); transition:width .25s var(--ease),background .18s var(--ease); }
+  .revenue-qual-card.done .revenue-qual-fill { background:var(--success); }
+  .revenue-qual-foot { display:flex; justify-content:space-between; gap:8px; margin-top:6px; color:var(--mut); font-size:10.5px; }
   .kpi-label { color:var(--mut); font-size:11.5px; font-weight:550; }
   .kpi-value { display:flex; align-items:baseline; gap:8px; margin-top:4px; color:var(--fg-strong); font:650 23px/1.2 var(--mono); letter-spacing:-.4px; }
   .kpi-delta { font:550 11px/1.2 var(--sans); }
@@ -1580,7 +1667,8 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
   }
   .queue-toolbar .form-field { min-width:0; }
   .queue-toolbar button { min-height:40px; }
-  .queue-table { min-width:1040px; table-layout:fixed; }
+  .queue-table { min-width:1080px; table-layout:fixed; }
+  .queue-table .queue-col-select { width:42px; text-align:center; }
   .queue-table .queue-col-type { width:122px; }
   .queue-table .queue-col-content { width:310px; }
   .queue-table .queue-col-account { width:150px; }
@@ -1779,6 +1867,35 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
     .risk-event { grid-template-columns:92px 74px 1fr; }
     .risk-event-detail { grid-column:1/-1; }
   }
+  /* X 深色主题：品牌主色保持黑白，但交互选中态统一使用 X 蓝，避免近白 --acc 造成白块/白字。 */
+  body.pf-x input[type="checkbox"]:checked,
+  body.pf-x input[type="radio"]:checked {
+    border-color:#1d9bf0; background:#1d9bf0;
+    box-shadow:0 0 0 1px rgba(29,155,240,.18), 0 5px 12px -8px rgba(29,155,240,.75);
+  }
+  body.pf-x input[type="checkbox"]:indeterminate { border-color:#1d9bf0; background:#1d9bf0; }
+  body.pf-x input[type="checkbox"]:hover,
+  body.pf-x input[type="radio"]:hover { border-color:#1d9bf0; }
+  body.pf-x input[type="checkbox"]:focus-visible,
+  body.pf-x input[type="radio"]:focus-visible { box-shadow:0 0 0 3px rgba(29,155,240,.28); }
+  body.pf-x .switch-row:has(input:checked) {
+    border-color:rgba(29,155,240,.34); background:rgba(29,155,240,.06);
+  }
+  body.pf-x .switch-row:has(input:focus-visible) { border-color:#1d9bf0; box-shadow:0 0 0 3px rgba(29,155,240,.22); }
+  body.pf-x .switch-row input[type="checkbox"]:checked { border-color:#1d9bf0; background:#1d9bf0; }
+  body.pf-x tbody tr:has(input[type="checkbox"]:checked) { background:rgba(29,155,240,.07); }
+  body.pf-x tbody tr:has(input[type="checkbox"]:checked):hover { background:rgba(29,155,240,.11); }
+  body.pf-x .dt-day.today { color:#1d9bf0; }
+  body.pf-x .dt-day.sel { color:#fff; background:#1d9bf0; }
+  body.pf-x .meta-combo-opt.selected .mark { color:#fff; border-color:#1d9bf0; background:#1d9bf0; }
+  body.pf-x #uimodal .fp-segment button.active { color:#fff; background:#1d9bf0; box-shadow:0 2px 8px rgba(29,155,240,.24); }
+  body.pf-x .dm-conv .unread { color:#fff; background:#1d9bf0; }
+  body.pf-x .dm-bubble.out:not(.card) { color:#fff; background:#1d9bf0; }
+  body.pf-x .revenue-qual-fill { background:#1d9bf0; }
+  body.pf-x .revenue-qual-card.done .revenue-qual-fill { background:var(--success); }
+  body.pf-x .skip-link { color:#fff; background:#1d9bf0; }
+  body.pf-x input[type=date], body.pf-x input[type=datetime-local], body.pf-x input[type=time] { accent-color:#1d9bf0; }
+
 </style>
 </head>
 <body>
@@ -1849,19 +1966,44 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
 <div class="shell">
 <aside class="sidebar">
   <nav class="nav" aria-label="主导航">
-    <button class="navitem" data-tab="overview" onclick="switchTab('overview', true)"><svg><use href="#i-bolt"/></svg><span class="nav-label">总览看板</span></button>
+    <div class="x-only hidden" id="x-primary-nav" style="display:flex;flex-direction:column;gap:4px">
+      <button class="navitem" data-tab="overview" onclick="switchTab('overview', true)"><svg><use href="#i-bolt"/></svg><span class="nav-label">总览</span></button>
+      <div class="nav-sep">增长工作台</div>
+      <button class="navitem" data-tab="x-intel" onclick="switchTab('x-intel', true)"><svg><use href="#i-bolt"/></svg><span class="nav-label">情报</span></button>
+      <button class="navitem" data-tab="x-ops" onclick="switchTab('x-ops', true)"><svg><use href="#i-target"/></svg><span class="nav-label">运营</span></button>
+      <button class="navitem" data-tab="queue" onclick="switchTab('queue', true)"><svg><use href="#i-list"/></svg><span class="nav-label">任务</span><span class="nav-badge" id="tb-queue-x">0</span></button>
+      <button class="navitem" data-tab="publish" onclick="switchTab('publish', true)"><svg><use href="#i-send"/></svg><span class="nav-label">内容</span><span class="nav-badge" id="tb-pub-x">0</span></button>
+      <button class="navitem" data-tab="hub" onclick="switchTab('hub', true)"><svg><use href="#i-user"/></svg><span class="nav-label">账号</span></button>
+      <button class="navitem" data-tab="x-data" onclick="switchTab('x-data', true)"><svg><use href="#i-eye"/></svg><span class="nav-label">数据</span></button>
 
-    <div class="nav-sep">内容分发</div>
-    <button class="navitem pub-only" data-tab="publish" onclick="switchTab('publish', true)"><svg><use href="#i-send"/></svg><span class="nav-label">发布作品</span><span class="nav-badge" id="tb-pub">0</span></button>
-    <button class="navitem" data-tab="queue" onclick="switchTab('queue', true)"><svg><use href="#i-list"/></svg><span class="nav-label">任务队列</span><span class="nav-badge" id="tb-queue">0</span></button>
-    <button class="navitem" data-tab="hub" onclick="switchTab('hub', true)"><svg><use href="#i-user"/></svg><span class="nav-label">我的作品</span></button>
+      <div class="nav-sep" style="margin-top:12px;border-top:1px dashed var(--line-soft);padding-top:12px">系统</div>
+      <details class="nav-more-details" id="x-system-nav" style="padding:0 2px;">
+        <summary class="nav-more-summary" style="font-size:12px;color:var(--mut);padding:8px 10px;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;border-radius:8px;user-select:none;transition:background .15s;">
+          <span style="display:inline-flex;align-items:center;gap:6px;"><svg style="width:14px;height:14px;opacity:.7;"><use href="#i-shield"/></svg>系统</span>
+          <svg class="nav-more-arrow" style="width:12px;height:12px;opacity:.6;transition:transform .2s;"><use href="#i-next"/></svg>
+        </summary>
+        <div style="display:flex;flex-direction:column;gap:4px;padding-top:6px;">
+          <button class="navitem" data-tab="risk-control" onclick="switchTab('risk-control', true)"><svg><use href="#i-shield"/></svg><span class="nav-label">风控中心</span></button>
+          <button class="navitem" data-tab="notifications" onclick="switchTab('notifications', true)"><svg><use href="#i-bell"/></svg><span class="nav-label">通知中心</span></button>
+          <button class="navitem" data-tab="accounts" onclick="switchTab('accounts', true)"><svg><use href="#i-card"/></svg><span class="nav-label">账号授权</span></button>
+        </div>
+      </details>
+      <button class="navitem" data-tab="settings" onclick="switchTab('settings', true)"><svg><use href="#i-settings"/></svg><span class="nav-label">设置</span></button>
+    </div>
 
-    <div class="nav-sep">平台账号</div>
-    <button class="navitem" data-tab="accounts" onclick="switchTab('accounts', true)"><svg><use href="#i-card"/></svg><span class="nav-label">账号授权</span><span class="nav-badge" id="tb-acc">0</span></button>
-    <button class="navitem" data-tab="settings" onclick="switchTab('settings', true)"><svg><use href="#i-settings"/></svg><span class="nav-label">系统设置</span></button>
+    <button class="navitem nonx-only" data-tab="overview" onclick="switchTab('overview', true)"><svg><use href="#i-bolt"/></svg><span class="nav-label">总览看板</span></button>
 
-    <div class="nav-sep nav-more-sep" style="margin-top:12px; border-top:1px dashed var(--line-soft); padding-top:12px;">更多工具</div>
-    <details class="nav-more-details" style="padding:0 2px;">
+    <div class="nav-sep nonx-only">内容分发</div>
+    <button class="navitem pub-only nonx-only" data-tab="publish" onclick="switchTab('publish', true)"><svg><use href="#i-send"/></svg><span class="nav-label">发布作品</span><span class="nav-badge" id="tb-pub">0</span></button>
+    <button class="navitem nonx-only" data-tab="queue" onclick="switchTab('queue', true)"><svg><use href="#i-list"/></svg><span class="nav-label">任务队列</span><span class="nav-badge" id="tb-queue">0</span></button>
+    <button class="navitem nonx-only" data-tab="hub" onclick="switchTab('hub', true)"><svg><use href="#i-user"/></svg><span class="nav-label">我的作品</span></button>
+
+    <div class="nav-sep nonx-only">平台账号</div>
+    <button class="navitem nonx-only" data-tab="accounts" onclick="switchTab('accounts', true)"><svg><use href="#i-card"/></svg><span class="nav-label">账号授权</span><span class="nav-badge" id="tb-acc">0</span></button>
+    <button class="navitem nonx-only" data-tab="settings" onclick="switchTab('settings', true)"><svg><use href="#i-settings"/></svg><span class="nav-label">系统设置</span></button>
+
+    <div class="nav-sep nav-more-sep nonx-only" style="margin-top:12px; border-top:1px dashed var(--line-soft); padding-top:12px;">更多工具</div>
+    <details class="nav-more-details nonx-only" style="padding:0 2px;">
       <summary class="nav-more-summary" style="font-size:12px; color:var(--mut); padding:8px 10px; cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:space-between; border-radius:8px; user-select:none; transition:background .15s;">
         <span style="display:inline-flex; align-items:center; gap:6px;"><svg style="width:14px; height:14px; opacity:.7;"><use href="#i-target"/></svg>监控与工具</span>
         <svg class="nav-more-arrow" style="width:12px; height:12px; opacity:.6; transition:transform .2s;"><use href="#i-next"/></svg>
@@ -2162,27 +2304,41 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
 
   <section data-panel="queue">
     <div class="queue-stats" aria-label="任务队列统计">
-      <button type="button" class="queue-stat active" data-queue-state="active" onclick="setTaskQueueState('active')"><b id="queue-stat-active">—</b><span>处理中 / 等待中</span></button>
-      <button type="button" class="queue-stat" data-queue-state="pending" onclick="setTaskQueueState('pending')"><b id="queue-stat-pending">—</b><span>等待执行</span></button>
-      <button type="button" class="queue-stat" data-queue-state="running" data-tone="info" onclick="setTaskQueueState('running')"><b id="queue-stat-running">—</b><span>正在执行</span></button>
-      <button type="button" class="queue-stat" data-queue-state="blocked" data-tone="warn" onclick="setTaskQueueState('blocked')"><b id="queue-stat-blocked">—</b><span>风控延后</span></button>
-      <button type="button" class="queue-stat" data-queue-state="failed" data-tone="danger" onclick="setTaskQueueState('failed')"><b id="queue-stat-failed">—</b><span>失败 / 待处理</span></button>
+      <button type="button" class="queue-stat queue-generic-stat active" data-queue-state="active" onclick="setTaskQueueState('active')"><b id="queue-stat-active">—</b><span>处理中 / 等待中</span></button>
+      <button type="button" class="queue-stat queue-generic-stat" data-queue-state="pending" onclick="setTaskQueueState('pending')"><b id="queue-stat-pending">—</b><span>等待执行</span></button>
+      <button type="button" class="queue-stat queue-generic-stat" data-queue-state="running" data-tone="info" onclick="setTaskQueueState('running')"><b id="queue-stat-running">—</b><span>正在执行</span></button>
+      <button type="button" class="queue-stat queue-generic-stat" data-queue-state="blocked" data-tone="warn" onclick="setTaskQueueState('blocked')"><b id="queue-stat-blocked">—</b><span>风控延后</span></button>
+      <button type="button" class="queue-stat queue-generic-stat" data-queue-state="failed" data-tone="danger" onclick="setTaskQueueState('failed')"><b id="queue-stat-failed">—</b><span>失败 / 待处理</span></button>
+
+      <button type="button" class="queue-stat x-queue-stat hidden active" data-x-queue-state="active" onclick="setTaskQueueState('active')"><b id="x-queue-stat-active">—</b><span>活动任务</span></button>
+      <button type="button" class="queue-stat x-queue-stat hidden" data-x-queue-state="pending" onclick="setTaskQueueState('pending')"><b id="x-queue-stat-pending">—</b><span>等待执行</span></button>
+      <button type="button" class="queue-stat x-queue-stat hidden" data-x-queue-state="running" data-tone="info" onclick="setTaskQueueState('running')"><b id="x-queue-stat-running">—</b><span>正在执行</span></button>
+      <button type="button" class="queue-stat x-queue-stat hidden" data-x-queue-state="cooldown" data-tone="info" onclick="setTaskQueueState('cooldown')"><b id="x-queue-stat-cooldown">—</b><span>正常冷却</span></button>
+      <button type="button" class="queue-stat x-queue-stat hidden" data-x-queue-state="blocked" data-tone="warn" onclick="setTaskQueueState('blocked')"><b id="x-queue-stat-blocked">—</b><span>任务阻塞</span></button>
+      <button type="button" class="queue-stat x-queue-stat hidden" data-x-queue-state="uncertain" data-tone="warn" onclick="setTaskQueueState('uncertain')"><b id="x-queue-stat-uncertain">—</b><span>结果待定</span></button>
+      <button type="button" class="queue-stat x-queue-stat hidden" data-x-queue-state="failed" data-tone="danger" onclick="setTaskQueueState('failed')"><b id="x-queue-stat-failed">—</b><span>执行失败</span></button>
+      <button type="button" class="queue-stat x-queue-stat hidden" data-x-queue-state="completed" onclick="setTaskQueueState('completed')"><b id="x-queue-stat-completed">—</b><span>执行完成</span></button>
     </div>
     <div class="card">
       <div class="card-head">
         <span class="card-ic"><svg><use href="#i-list"/></svg></span>
-        <h2>任务明细 <span class="sub">统一查看采集、发布、评论、账号动作和下载任务</span></h2>
+        <h2>任务明细 <span class="sub" id="queue-card-sub">统一查看采集、发布、评论、账号动作和下载任务</span></h2>
       </div>
       <div class="queue-toolbar" aria-label="任务队列筛选">
-        <div class="form-field"><label for="queue-platform">平台范围</label><select id="queue-platform" onchange="refreshTaskQueue(true)"><option value="current" id="queue-platform-current">当前平台</option><option value="all">全部平台</option></select></div>
-        <div class="form-field"><label for="queue-type">队列类型</label><select id="queue-type" onchange="refreshTaskQueue(true)"><option value="">全部队列</option><option value="collections">关键词采集</option><option value="publishes">内容发布</option><option value="comments">自动评论</option><option value="actions">账号动作</option><option value="monitor_downloads">监控下载</option><option value="collection_downloads">采集下载</option></select></div>
+        <div class="form-field" id="queue-platform-field"><label for="queue-platform">平台范围</label><select id="queue-platform" onchange="refreshTaskQueue(true)"><option value="current" id="queue-platform-current">当前平台</option><option value="all">全部平台</option></select></div>
+        <div class="form-field"><label for="queue-type" id="queue-type-label">队列类型</label><select id="queue-type" onchange="refreshTaskQueue(true)"><option value="">全部队列</option><option value="collections">关键词采集</option><option value="publishes">内容发布</option><option value="comments">自动评论</option><option value="actions">账号动作</option><option value="monitor_downloads">监控下载</option><option value="collection_downloads">采集下载</option></select></div>
         <div class="form-field"><label for="queue-state">任务状态</label><select id="queue-state" onchange="refreshTaskQueue(true)"><option value="active">活动任务</option><option value="pending">等待执行</option><option value="running">正在执行</option><option value="blocked">风控延后</option><option value="failed">失败任务</option><option value="completed">已完成</option><option value="all">全部状态</option></select></div>
         <div class="form-field"><label for="queue-query">搜索</label><input id="queue-query" type="search" placeholder="任务内容、账号、错误或风控原因" onkeydown="if(event.key==='Enter'){event.preventDefault();refreshTaskQueue(true)}"></div>
         <button type="button" class="ghost" onclick="refreshTaskQueue(true)"><svg><use href="#i-bolt"/></svg>刷新</button>
       </div>
+      <div class="row" id="queue-bulk-bar" style="justify-content:flex-start;gap:10px;margin:8px 0 10px">
+        <span class="mut" id="queue-selected-count">已选 0 个可取消任务</span>
+        <button type="button" class="ghost danger" id="queue-bulk-cancel" onclick="cancelSelectedTaskQueue()" disabled><svg><use href="#i-x"/></svg>取消已选</button>
+        <button type="button" class="ghost sm" id="queue-clear-selected" onclick="clearTaskQueueSelection()" disabled>清空选择</button>
+      </div>
       <div class="table-wrap" id="queue-table-wrap">
         <table class="queue-table" aria-label="任务队列明细">
-          <thead><tr><th class="queue-col-type">队列</th><th class="queue-col-content">任务内容</th><th class="queue-col-account">账号</th><th class="queue-col-time">时间</th><th class="queue-col-status">状态</th><th class="queue-col-reason">阻塞 / 错误</th><th class="queue-col-action">操作</th></tr></thead>
+          <thead><tr><th class="queue-col-select"><input type="checkbox" id="queue-selall" onchange="toggleTaskQueuePageSelection(this.checked)" aria-label="全选本页可取消任务"></th><th class="queue-col-type">队列</th><th class="queue-col-content">任务内容</th><th class="queue-col-account">账号</th><th class="queue-col-time">时间</th><th class="queue-col-status">状态</th><th class="queue-col-reason">阻塞 / 错误</th><th class="queue-col-action">操作</th></tr></thead>
           <tbody id="queue-table"></tbody>
         </table>
       </div>
@@ -3164,22 +3320,368 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
     </div>
   </section>
 
+  <!-- ───────── X 情报：对标账号池 + 爆款雷达 ───────── -->
+  <section data-panel="x-intel" class="x-only hidden">
+    <div class="card x-data-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-eye"/></svg></span>
+        <h2>X 增长与收益驾驶舱 <span class="sub">收益进度 · 帖子生命周期 · 涨粉归因</span></h2>
+        <div class="right row" style="gap:8px;align-items:center">
+          <button class="ghost sm" id="x-growth-official-sync-btn" onclick="syncXCreatorStudioOfficial()"><svg><use href="#i-download"/></svg>同步 X 官方数据</button>
+        </div>
+      </div>
+      <div class="kpi-grid" id="x-growth-kpi" style="margin-bottom:14px">
+        <div class="kpi-card"><div class="kpi-label">当前粉丝</div><div class="kpi-value" id="x-growth-followers">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">官方认证粉丝进度</div><div class="kpi-value" id="x-growth-verified-progress">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">官方 90 天合格曝光</div><div class="kpi-value" id="x-growth-impression-progress">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">X 官方 7 天曝光</div><div class="kpi-value" id="x-growth-public-impressions">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">30 天帖子中位曝光</div><div class="kpi-value" id="x-growth-median-views">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">增长快照</div><div class="kpi-value" id="x-growth-snapshots">—</div></div>
+      </div>
+      <div class="revenue-qual-grid">
+        <div class="revenue-qual-card done" id="x-qual-premium">
+          <div class="revenue-qual-head">
+            <span class="revenue-qual-label">Premium</span>
+            <strong class="revenue-qual-status" id="x-qual-premium-status">已完成</strong>
+          </div>
+          <div class="revenue-qual-track"><i class="revenue-qual-fill" id="x-qual-premium-fill" style="width:100%"></i></div>
+        </div>
+        <div class="revenue-qual-card done" id="x-qual-identity">
+          <div class="revenue-qual-head">
+            <span class="revenue-qual-label">身份认证</span>
+            <strong class="revenue-qual-status" id="x-qual-identity-status">已完成</strong>
+          </div>
+          <div class="revenue-qual-track"><i class="revenue-qual-fill" id="x-qual-identity-fill" style="width:100%"></i></div>
+        </div>
+        <div class="revenue-qual-card" id="x-qual-enrolled">
+          <div class="revenue-qual-head"><span class="revenue-qual-label">奖励加入状态</span><strong class="revenue-qual-status" id="x-qual-enrolled-status">未加入</strong></div>
+          <div class="revenue-qual-track"><i class="revenue-qual-fill" id="x-qual-enrolled-fill"></i></div>
+        </div>
+        <div class="revenue-qual-card" id="x-qual-verified">
+          <div class="revenue-qual-head"><span class="revenue-qual-label">认证粉丝</span><strong class="revenue-qual-status" id="x-qual-verified-status">—</strong></div>
+          <div class="revenue-qual-track"><i class="revenue-qual-fill" id="x-qual-verified-fill"></i></div>
+          <div class="revenue-qual-foot"><span>X 官方同步优先</span><span id="x-qual-verified-pct">—</span></div>
+        </div>
+        <div class="revenue-qual-card" id="x-qual-impressions">
+          <div class="revenue-qual-head"><span class="revenue-qual-label">90 天合格曝光</span><strong class="revenue-qual-status" id="x-qual-impressions-status">—</strong></div>
+          <div class="revenue-qual-track"><i class="revenue-qual-fill" id="x-qual-impressions-fill"></i></div>
+          <div class="revenue-qual-foot"><span>X 官方同步优先</span><span id="x-qual-impressions-pct">—</span></div>
+        </div>
+      </div>
+      <div class="form-note"><svg aria-hidden="true"><use href="#i-info"/></svg><span id="x-growth-scope">未同步 X Creator Studio 时使用本地兜底数据。</span></div>
+    </div>
+
+    <div class="card x-data-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-eye"/></svg></span>
+        <h2>X 官方数据分析 · 7D <span class="sub">Creator Studio Account Analytics 官方口径</span></h2>
+        <div class="right row" style="gap:8px;align-items:center">
+          <span class="pill invalid" id="x-growth-official-source">未同步</span>
+        </div>
+      </div>
+      <div class="kpi-grid" style="margin-bottom:12px">
+        <div class="kpi-card"><div class="kpi-label">曝光</div><div class="kpi-value" id="x-official-impressions">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">互动率</div><div class="kpi-value" id="x-official-engagement-rate">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">互动</div><div class="kpi-value" id="x-official-engagements">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">主页访问</div><div class="kpi-value" id="x-official-profile-visits">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">回复</div><div class="kpi-value" id="x-official-replies">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">点赞</div><div class="kpi-value" id="x-official-likes">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">转发</div><div class="kpi-value" id="x-official-reposts">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">收藏</div><div class="kpi-value" id="x-official-bookmarks">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">分享</div><div class="kpi-value" id="x-official-shares">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">净增关注</div><div class="kpi-value" id="x-official-net-follows">—</div></div>
+      </div>
+      <div class="table-wrap">
+        <table aria-label="X官方7天每日数据">
+          <thead><tr><th>日期</th><th>曝光</th><th>认证用户曝光</th><th>互动</th><th>主页访问</th><th>回复</th><th>点赞</th><th>新增关注</th><th>取关</th></tr></thead>
+          <tbody id="x-official-daily-table"></tbody>
+        </table>
+      </div>
+      <div class="form-note" style="margin-top:12px"><svg aria-hidden="true"><use href="#i-info"/></svg><span id="x-official-analytics-scope">数据来自 X Creator Studio；点击“同步 X 官方数据”更新。</span></div>
+    </div>
+
+    <div class="card x-data-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-bolt"/></svg></span>
+        <h2>帖子生命周期 <span class="sub">同步时自动留快照；1h / 3h / 6h / 24h / 72h 不做伪造回填</span></h2>
+      </div>
+      <div class="table-wrap">
+        <table aria-label="X帖子生命周期">
+          <thead><tr><th>帖子</th><th>当前曝光</th><th>表现</th><th>1h</th><th>3h</th><th>6h</th><th>24h</th><th>72h</th><th>互动率</th></tr></thead>
+          <tbody id="x-growth-lifecycle-table"></tbody>
+        </table>
+      </div>
+      <div class="form-note" style="margin-top:12px"><svg aria-hidden="true"><use href="#i-info"/></svg><span id="x-growth-lifecycle-note">首次启用后需要随时间积累快照。</span></div>
+    </div>
+
+    <div class="card x-data-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-user"/></svg></span>
+        <h2>涨粉归因 <span class="sub">按相邻粉丝快照与近期帖子新增曝光做估算，不冒充 X 官方来源归因</span></h2>
+      </div>
+      <div class="table-wrap">
+        <table aria-label="X涨粉估算归因">
+          <thead><tr><th>帖子</th><th>估算新增粉丝</th><th>归因曝光增量</th><th>参与区间</th></tr></thead>
+          <tbody id="x-growth-attribution-table"></tbody>
+        </table>
+      </div>
+      <div class="form-note" style="margin-top:12px"><svg aria-hidden="true"><use href="#i-info"/></svg><span id="x-growth-attribution-note">需要至少两个账号增长快照和帖子指标快照后才会出现估算结果。</span></div>
+    </div>
+
+    <div class="card x-intel-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-bolt"/></svg></span>
+        <h2>X 情报 <span class="sub">对标账号 · 爆款雷达 · 可追溯扫描快照</span></h2>
+        <div class="right row" style="gap:8px;align-items:center">
+          <label class="mut" for="x-intel-acc" style="font-size:12px">读取账号</label>
+          <select id="x-intel-acc" onchange="refreshXIntel()" style="min-width:180px"></select>
+        </div>
+      </div>
+      <div class="form-note" style="margin-bottom:14px">
+        <svg aria-hidden="true"><use href="#i-info"/></svg>
+        <span id="x-intel-scope">这里不是全 X 榜单。雷达只扫描你启用的对标账号及其最近原创帖，并明确显示本轮覆盖率。</span>
+      </div>
+      <div class="kpi-grid" id="x-intel-kpi">
+        <div class="kpi-card"><div class="kpi-label">对标账号</div><div class="kpi-value" id="x-intel-kpi-bench">0</div></div>
+        <div class="kpi-card"><div class="kpi-label">本轮覆盖</div><div class="kpi-value" id="x-intel-kpi-coverage">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">扫描帖子</div><div class="kpi-value" id="x-intel-kpi-posts">0</div></div>
+        <div class="kpi-card"><div class="kpi-label">读取失败</div><div class="kpi-value" id="x-intel-kpi-failed">0</div></div>
+      </div>
+    </div>
+
+    <div class="card x-intel-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-bolt"/></svg></span>
+        <h2>自动情报 <span class="sub">定时只读采样 · 起爆提醒 · 每日简报</span></h2>
+        <div class="right row" style="gap:8px;align-items:center">
+          <span class="pill invalid" id="x-intel-auto-status">未开启</span>
+          <button id="x-intel-auto-save" onclick="saveXIntelAutomation()">保存设置</button>
+        </div>
+      </div>
+      <div class="form-grid cols-auto" style="margin-bottom:12px">
+        <div class="form-field"><label for="x-intel-auto-enabled">自动采样</label><select id="x-intel-auto-enabled"><option value="0">关闭</option><option value="1">开启</option></select></div>
+        <div class="form-field"><label for="x-intel-auto-interval">采样间隔</label><select id="x-intel-auto-interval"><option value="1">每 1 小时</option><option value="3" selected>每 3 小时</option><option value="6">每 6 小时</option><option value="12">每 12 小时</option><option value="24">每 24 小时</option></select></div>
+        <div class="form-field"><label for="x-intel-auto-posts">每号采样</label><select id="x-intel-auto-posts"><option value="3">最近 3 条</option><option value="5" selected>最近 5 条</option><option value="10">最近 10 条</option></select></div>
+        <div class="form-field"><label for="x-intel-auto-brief">每日简报</label><select id="x-intel-auto-brief"><option value="1" selected>开启</option><option value="0">关闭</option></select></div>
+        <div class="form-field"><label for="x-intel-auto-brief-hour">简报时间</label><select id="x-intel-auto-brief-hour"><option value="8">08:00</option><option value="12">12:00</option><option value="18">18:00</option><option value="20" selected>20:00</option><option value="21">21:00</option><option value="22">22:00</option></select></div>
+      </div>
+      <div class="form-grid cols-auto" style="margin-bottom:12px">
+        <div class="form-field"><label for="x-intel-auto-speed">起爆最低增速 / 小时</label><input id="x-intel-auto-speed" type="number" min="1" step="50" value="300"></div>
+        <div class="form-field"><label for="x-intel-auto-delta">起爆最低曝光增量</label><input id="x-intel-auto-delta" type="number" min="1" step="100" value="800"></div>
+        <div class="form-field"><label for="x-intel-auto-efficiency">最低曝光效率</label><input id="x-intel-auto-efficiency" type="number" min="0" step="0.1" value="0.5"></div>
+        <div class="form-field"><label for="x-intel-auto-notify-explosion">起爆通知</label><select id="x-intel-auto-notify-explosion"><option value="1" selected>推送</option><option value="0">仅页面记录</option></select></div>
+        <div class="form-field"><label for="x-intel-auto-notify-brief">日报通知</label><select id="x-intel-auto-notify-brief"><option value="1" selected>推送</option><option value="0">仅页面记录</option></select></div>
+        <div class="form-field"><label for="x-intel-auto-opportunities">自动选题草稿</label><select id="x-intel-auto-opportunities"><option value="0" selected>关闭</option><option value="1">开启</option></select></div>
+        <div class="form-field"><label for="x-intel-auto-draft-count">每轮草稿数</label><select id="x-intel-auto-draft-count"><option value="1">1 条</option><option value="2">2 条</option><option value="3" selected>3 条</option><option value="4">4 条</option><option value="5">5 条</option><option value="6">6 条</option></select></div>
+      </div>
+      <div class="form-note"><svg aria-hidden="true"><use href="#i-info"/></svg><span id="x-intel-auto-meta">关闭时不会自动访问 X；开启后 scheduler 每分钟只检查是否到点，真正读取按采样间隔执行。</span></div>
+    </div>
+
+    <div class="card x-intel-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-target"/></svg></span>
+        <h2>爆款雷达 <span class="sub">同一次扫描内比较曝光、互动、粉丝归一化效率与新鲜度</span></h2>
+        <div class="right row" style="gap:8px">
+          <select id="x-intel-posts-per-account" class="ghost sm" aria-label="每个对标账号扫描帖子数量">
+            <option value="3">每号 3 条</option>
+            <option value="5" selected>每号 5 条</option>
+            <option value="10">每号 10 条</option>
+          </select>
+          <button id="x-intel-scan-btn" onclick="scanXIntel()"><svg><use href="#i-bolt"/></svg>扫描对标账号</button>
+        </div>
+      </div>
+      <div class="manage-toolbar" style="margin-bottom:12px">
+        <input type="search" id="x-intel-search" placeholder="搜索作者 / 帖子内容" oninput="renderXIntelRadar()" aria-label="搜索X情报雷达结果">
+        <select id="x-intel-sort" onchange="renderXIntelRadar()" aria-label="X情报排序">
+          <option value="score" selected>综合雷达分</option>
+          <option value="views">曝光最高</option>
+          <option value="efficiency">曝光效率</option>
+          <option value="engagement">互动率</option>
+          <option value="growth3">3h 增速</option>
+          <option value="growth6">6h 增速</option>
+          <option value="growth24">24h 增速</option>
+          <option value="time">最新发布</option>
+        </select>
+        <span class="filter-count" id="x-intel-result-count"></span>
+      </div>
+      <div class="table-wrap">
+        <table aria-label="X爆款雷达">
+          <thead><tr><th>#</th><th>作者</th><th>帖子</th><th>曝光 / 互动</th><th>3h / 6h / 24h 增速</th><th>效率</th><th>雷达分</th><th>操作</th></tr></thead>
+          <tbody id="x-intel-radar-table"></tbody>
+        </table>
+      </div>
+      <div class="form-note" style="margin-top:12px">
+        <svg aria-hidden="true"><use href="#i-info"/></svg>
+        <span>“雷达分”仅用于同批扫描内部排序，不代表平台官方评分；曝光效率 = 曝光 ÷ 作者粉丝数。3h/6h/24h 增速来自同一帖子跨扫描快照，历史样本不足时显示“待积累”。</span>
+      </div>
+    </div>
+
+    <div class="card x-intel-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-bolt"/></svg></span>
+        <h2>AI 情报总结 <span class="sub">只基于本轮扫描证据，自动提炼主题、内容机会和观察名单</span></h2>
+        <div class="right row" style="gap:8px">
+          <button class="ghost sm" id="x-intel-digest-btn" onclick="generateXIntelDigest(false)">生成总结</button>
+          <button class="ghost sm" id="x-intel-digest-refresh-btn" onclick="generateXIntelDigest(true)">重新生成</button>
+        </div>
+      </div>
+      <div id="x-intel-digest" class="hint">完成一次扫描后，可以生成本轮情报总结。AI 未配置或调用失败时会自动使用规则摘要。</div>
+    </div>
+
+    <div class="card x-intel-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-send"/></svg></span>
+        <h2>内容机会 <span class="sub">情报证据 → 原创角度 → 待确认草稿，不自动发布</span></h2>
+        <div class="right row" style="gap:8px;align-items:center">
+          <select id="x-intel-opportunity-count" class="ghost sm" aria-label="本轮生成内容机会数量">
+            <option value="1">1 条</option><option value="2">2 条</option><option value="3" selected>3 条</option>
+            <option value="4">4 条</option><option value="5">5 条</option><option value="6">6 条</option>
+          </select>
+          <button class="ghost sm" id="x-intel-opportunity-generate" onclick="generateXIntelOpportunities()">生成机会 + 草稿</button>
+        </div>
+      </div>
+      <div class="form-note" style="margin-bottom:12px">
+        <svg aria-hidden="true"><use href="#i-info"/></svg>
+        <span>每条机会都保留证据帖和策略说明；系统会做 48 小时证据去重与近似文本检查。生成结果只进入发布草稿，必须人工确认后才可能发布。</span>
+      </div>
+      <div class="table-wrap">
+        <table aria-label="X内容机会">
+          <thead><tr><th>分数</th><th>选题 / 原创角度</th><th>为什么现在写</th><th>策略</th><th>待确认草稿</th><th>证据</th><th>状态</th></tr></thead>
+          <tbody id="x-intel-opportunity-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card x-intel-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-bolt"/></svg></span>
+        <h2>起爆信号 <span class="sub">真实历史增速达到阈值才记录；同一帖子只提醒一次</span></h2>
+      </div>
+      <div class="table-wrap">
+        <table aria-label="X起爆信号">
+          <thead><tr><th>时间</th><th>级别</th><th>作者</th><th>增速</th><th>效率</th><th>依据</th><th>通知</th><th>操作</th></tr></thead>
+          <tbody id="x-intel-alert-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card x-intel-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-eye"/></svg></span>
+        <h2>每日简报 <span class="sub">按 X 账号时区每天生成一次并保留历史</span></h2>
+      </div>
+      <div id="x-intel-daily-brief-list" style="display:grid;gap:10px"></div>
+    </div>
+
+    <div class="card x-intel-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-target"/></svg></span>
+        <h2>候选黑马 <span class="sub">默认只看 ≤5万粉账号；结合帖均曝光、曝光效率、互动和已有增速</span></h2>
+        <div class="right row" style="gap:8px;align-items:center">
+          <label class="mut" for="x-intel-blackhorse-max" style="font-size:12px">粉丝上限</label>
+          <select id="x-intel-blackhorse-max" class="ghost sm" onchange="refreshXIntelBlackHorses()">
+            <option value="10000">1万</option>
+            <option value="50000" selected>5万</option>
+            <option value="100000">10万</option>
+            <option value="500000">50万</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table aria-label="X候选黑马">
+          <thead><tr><th>#</th><th>账号</th><th>粉丝</th><th>样本</th><th>帖均曝光</th><th>平均效率</th><th>最快增速</th><th>黑马分</th><th>依据</th></tr></thead>
+          <tbody id="x-intel-blackhorse-table"></tbody>
+        </table>
+      </div>
+      <div class="form-note" style="margin-top:12px">
+        <svg aria-hidden="true"><use href="#i-info"/></svg>
+        <span id="x-intel-blackhorse-note">“候选黑马”只在当前对标账号池里比较，不代表全 X 排名。</span>
+      </div>
+    </div>
+
+    <div class="card x-intel-card">
+      <div class="card-head">
+        <span class="card-ic"><svg><use href="#i-user"/></svg></span>
+        <h2>对标账号池 <span class="sub">只扫描启用账号；资料默认最多 6 小时刷新一次</span></h2>
+      </div>
+      <div class="form-grid cols-auto" style="margin-bottom:12px">
+        <div class="form-field"><label for="x-intel-handle">X Handle</label><input id="x-intel-handle" placeholder="@handle 或 handle"></div>
+        <div class="form-field" style="min-width:260px"><label for="x-intel-note">备注 / 赛道</label><input id="x-intel-note" placeholder="例如：AI 工具 / 个人品牌 / 英文区"></div>
+        <div class="form-field" style="align-self:end"><button onclick="addXIntelBenchmark()"><svg><use href="#i-plus"/></svg>加入对标池</button></div>
+      </div>
+      <div class="table-wrap">
+        <table aria-label="X对标账号列表">
+          <thead><tr><th>账号</th><th>粉丝</th><th>帖子</th><th>备注</th><th>状态</th><th>最后同步</th><th>操作</th></tr></thead>
+          <tbody id="x-intel-benchmark-table"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <!-- ───────── 账号管理(独立面板:本账号的作品/关注/粉丝/私信,数据按所选账号隔离) ───────── -->
   <section data-panel="hub">
     <div class="card">
       <div class="card-head">
         <span class="card-ic"><svg><use href="#i-user"/></svg></span>
-        <h2>账号管理 <span class="sub">本账号的作品 / 关注 / 粉丝 / 私信</span></h2>
+        <h2 id="hub-card-title">账号管理 <span class="sub" id="hub-card-sub">本账号的作品 / 关注 / 粉丝 / 私信</span></h2>
         <div class="right" style="display:flex;gap:8px;align-items:center">
           <select id="hub-acc" onchange="onHubAcc()" style="width:auto;min-width:190px" aria-label="选择账号"></select>
         </div>
       </div>
-      <div class="tabbar" style="position:static;margin-bottom:14px">
-        <button class="tab active" data-hubtab="myworks" onclick="switchHubTab('myworks')"><svg><use href="#i-film"/></svg>我的作品 <span class="tab-badge" id="hb-myworks">0</span></button>
-        <button class="tab notsh-only" data-hubtab="following" onclick="switchHubTab('following')"><svg><use href="#i-user"/></svg><span id="hb-following-label">关注</span> <span class="tab-badge" id="hb-following">0</span></button>
-        <button class="tab notsh-only" data-hubtab="fans" onclick="switchHubTab('fans')"><svg><use href="#i-heart"/></svg>粉丝 <span class="tab-badge" id="hb-fans">0</span></button>
-        <button class="tab notsh-only notyt-only" data-hubtab="dm" onclick="switchHubTab('dm')"><svg><use href="#i-send"/></svg>私信 <span class="tab-badge" id="hb-dm">0</span></button>
-        <button class="tab" data-hubtab="stats" onclick="switchHubTab('stats')"><svg><use href="#i-eye"/></svg>数据 <span class="tab-badge" id="hb-stats">0</span></button>
+      <div class="hub-tabs-row">
+        <div class="tabbar" style="position:static">
+          <button class="tab active" data-hubtab="myworks" onclick="switchHubTab('myworks')"><svg><use href="#i-film"/></svg>我的作品 <span class="tab-badge" id="hb-myworks">0</span></button>
+          <button class="tab notsh-only" data-hubtab="following" onclick="switchHubTab('following')"><svg><use href="#i-user"/></svg><span id="hb-following-label">关注</span> <span class="tab-badge" id="hb-following">0</span></button>
+          <button class="tab notsh-only" data-hubtab="fans" onclick="switchHubTab('fans')"><svg><use href="#i-heart"/></svg>粉丝 <span class="tab-badge" id="hb-fans">0</span></button>
+          <button class="tab notsh-only notyt-only" data-hubtab="dm" onclick="switchHubTab('dm')"><svg><use href="#i-send"/></svg>私信 <span class="tab-badge" id="hb-dm">0</span></button>
+          <button class="tab" data-hubtab="stats" id="hub-stats-tab" onclick="switchHubTab('stats')"><svg><use href="#i-eye"/></svg>数据 <span class="tab-badge" id="hb-stats">0</span></button>
+          <button class="tab hidden" data-hubtab="ops" onclick="switchHubTab('ops')"><svg><use href="#i-send"/></svg>一键运营</button>
+        </div>
+      </div>
+
+      <div data-hubpanel="ops" class="x-ops-panel" style="display:none">
+        <div class="x-ops-controlbar">
+          <label for="x-ops-target-count">一键目标数</label>
+          <input id="x-ops-target-count" type="number" min="1" step="1" value="100"
+                 inputmode="numeric" onchange="saveXOpsTargetCount(this.value)" aria-label="一键运营目标数">
+          <small>统一控制浇友 / 串门 / 发帖 / 粉丝页一键回关的本轮目标数；一键催关不受限制，始终处理全部待催对象</small>
+          <small id="x-ops-state-source">等待后端状态…</small>
+          <label for="x-visit-mode">串门文案</label>
+          <select id="x-visit-mode" class="ghost sm" aria-label="串门文案模式">
+            <option value="content" selected>按帖子内容（AI优先）</option>
+            <option value="morning">早安</option>
+            <option value="evening">晚安</option>
+            <option value="visit">串门</option>
+          </select>
+        </div>
+        <div class="x-ops-actions">
+          <button class="x-ops-action growth" id="x-ops-growth-btn" onclick="runXHubTool('growth')">
+            <svg><use href="#i-user"/></svg><b>一键浇友</b>
+            <small>蓝V互关候选，按目标数持续执行，到数自动停</small>
+            <span class="x-ops-live" id="x-ops-growth-live">读取状态…</span>
+          </button>
+          <button class="x-ops-action remind" id="x-ops-remind-btn" onclick="runXHubTool('remind')">
+            <svg><use href="#i-msg"/></svg><b>一键催关</b>
+            <small>处理全部确认未回关对象，不受目标数限制</small>
+            <span class="x-ops-live" id="x-ops-remind-live">读取状态…</span>
+          </button>
+          <button class="x-ops-action visit" id="x-ops-visit-btn" onclick="runXHubTool('visit')">
+            <svg><use href="#i-heart"/></svg><b>一键串门</b>
+            <small>优先互关粉丝，按目标数生成待审核回复草稿</small>
+            <span class="x-ops-live" id="x-ops-visit-live">读取状态…</span>
+          </button>
+          <button class="x-ops-action post" id="x-ops-post-btn" onclick="runXHubTool('post')">
+            <svg><use href="#i-send"/></svg><b>一键发帖</b>
+            <small>按目标数逐条执行，到数自动停</small>
+            <span class="x-ops-live" id="x-ops-post-live">读取状态…</span>
+          </button>
+        </div>
+        <div class="x-ops-note">
+          浇友 / 串门 / 发帖 / 回关共用同一个后端目标数；催关独立处理全部待催对象。按钮禁用、运行中、冷却、待审核等状态均以后端真实队列和 campaign 状态为准。
+        </div>
+        <div class="x-batch-list x-only hidden" id="x-growth-status" aria-live="polite"></div>
+        <div class="form-note x-only hidden" id="x-remind-note"><svg aria-hidden="true"><use href="#i-info"/></svg><span>一键催关只处理“已确认未回关”的博主；发送前会再次核验仍在关注、对方尚未回关且存在可回复推文。实际节奏为每位随机 50–70 秒；遇平台真实限流统一冷却 15 分钟。任务可在任务队列取消。</span></div>
+        <div class="x-batch-list x-only hidden" id="x-remind-status" aria-live="polite"></div>
       </div>
 
       <div data-hubpanel="myworks">
@@ -3204,15 +3706,67 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
           <div class="hint" id="hb-following-hint" style="margin:0;flex:1">点「同步关注」从该账号主页抓取已关注用户列表。</div>
           <button class="ghost sm" style="flex:0 0 auto" onclick="syncFollows('following')"><svg><use href="#i-download"/></svg>同步关注</button>
         </div>
+        <div class="manage-toolbar x-only hidden" id="x-following-filterbar">
+          <input type="search" id="x-following-search" placeholder="搜索昵称 / @handle / 简介" aria-label="搜索 X 关注列表" oninput="followFilterChanged('following')">
+          <select id="x-following-verified" aria-label="按蓝V筛选关注列表" onchange="followFilterChanged('following')">
+            <option value="">全部认证</option><option value="verified">蓝V</option><option value="unverified">非蓝V</option>
+          </select>
+          <select id="x-following-mutual" aria-label="按互关筛选关注列表" onchange="followFilterChanged('following')">
+            <option value="">全部关系</option><option value="mutual">互关</option><option value="not_mutual">未互关</option>
+          </select>
+          <span class="filter-count" id="x-following-filter-count" role="status" aria-live="polite"></span>
+          <div class="toolbar-actions">
+            <span class="toolbar-actions-label">批量</span>
+            <button class="ghost sm" onclick="selectFilteredFollows('following')">全选筛选结果</button>
+            <button class="ghost sm" onclick="clearFollowSelection('following')">清空选择</button>
+            <span class="mut" id="x-following-selected-count">已选 0</span>
+            <button class="sm danger" id="x-following-batch-unfollow" onclick="batchUnfollowSelected()" disabled>一键取关已选</button>
+          </div>
+        </div>
+        <div class="x-batch-list x-only hidden" id="x-unfollow-batches" aria-live="polite"></div>
         <div class="table-wrap"><table aria-label="关注列表"><thead><tr><th>用户</th><th>关系</th><th>操作</th></tr></thead><tbody id="following-table"></tbody></table></div>
+        <div class="row x-only hidden" id="x-following-pagination" style="justify-content:flex-end;align-items:center;margin-top:10px;gap:8px">
+          <button class="ghost sm" id="x-following-prev" onclick="changeFollowPage('following',-1)">上一页</button>
+          <span class="mut" id="x-following-page-info">第 1 / 1 页</span>
+          <select id="x-following-page-size" class="ghost sm" aria-label="关注列表每页数量" onchange="setFollowPageSize('following',this.value)">
+            <option value="25">25/页</option><option value="50" selected>50/页</option><option value="100">100/页</option><option value="200">200/页</option>
+          </select>
+          <button class="ghost sm" id="x-following-next" onclick="changeFollowPage('following',1)">下一页</button>
+        </div>
       </div>
 
       <div data-hubpanel="fans" style="display:none">
         <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:12px">
-          <div class="hint" id="hb-fans-hint" style="margin:0;flex:1">粉丝列表通过该账号登录态打开粉丝页拦截抓取。可对未回关的粉丝发起「回关」。</div>
+          <div class="hint" id="hb-fans-hint" style="margin:0;flex:1">粉丝页只做粉丝关系管理；「一键回关」使用一键运营里的统一目标数，并服从后端风控与持久批次状态。</div>
+          <button class="sm x-only hidden" id="x-fan-followback-all" style="flex:0 0 auto" onclick="startXFollowBackAll()"><svg><use href="#i-user"/></svg><span id="x-fan-followback-label">一键回关</span></button>
           <button class="ghost sm" style="flex:0 0 auto" onclick="syncFollows('fan')"><svg><use href="#i-download"/></svg>同步粉丝</button>
         </div>
+        <div class="manage-toolbar x-only hidden" id="x-fan-filterbar">
+          <input type="search" id="x-fan-search" placeholder="搜索昵称 / @handle / 简介" aria-label="搜索 X 粉丝列表" oninput="followFilterChanged('fan')">
+          <select id="x-fan-verified" aria-label="按蓝V筛选粉丝列表" onchange="followFilterChanged('fan')">
+            <option value="">全部认证</option><option value="verified">蓝V</option><option value="unverified">非蓝V</option>
+          </select>
+          <select id="x-fan-following" aria-label="按回关状态筛选粉丝列表" onchange="followFilterChanged('fan')">
+            <option value="">全部关系</option><option value="following">已回关</option><option value="not_following">未回关</option>
+          </select>
+          <span class="filter-count" id="x-fan-filter-count" role="status" aria-live="polite"></span>
+          <div class="toolbar-actions">
+            <span class="toolbar-actions-label">批量</span>
+            <button class="ghost sm" onclick="selectFilteredFollows('fan')">全选筛选结果</button>
+            <button class="ghost sm" onclick="clearFollowSelection('fan')">清空选择</button>
+            <span class="mut" id="x-fan-selected-count">已选 0</span>
+          </div>
+        </div>
+        <div class="x-batch-list x-only hidden" id="x-followback-batches" aria-live="polite"></div>
         <div class="table-wrap"><table aria-label="粉丝列表"><thead><tr><th>用户</th><th>关系</th><th>操作</th></tr></thead><tbody id="fans-table"></tbody></table></div>
+        <div class="row x-only hidden" id="x-fan-pagination" style="justify-content:flex-end;align-items:center;margin-top:10px;gap:8px">
+          <button class="ghost sm" id="x-fan-prev" onclick="changeFollowPage('fan',-1)">上一页</button>
+          <span class="mut" id="x-fan-page-info">第 1 / 1 页</span>
+          <select id="x-fan-page-size" class="ghost sm" aria-label="粉丝列表每页数量" onchange="setFollowPageSize('fan',this.value)">
+            <option value="25">25/页</option><option value="50" selected>50/页</option><option value="100">100/页</option><option value="200">200/页</option>
+          </select>
+          <button class="ghost sm" id="x-fan-next" onclick="changeFollowPage('fan',1)">下一页</button>
+        </div>
       </div>
 
       <div data-hubpanel="dm" style="display:none">
@@ -3359,5 +3913,6 @@ body.pf-wechat_mp .badge-lite { color:var(--acc); background:var(--acc-soft); }
 <button id="backtop" class="ghost" type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="返回顶部" title="返回顶部"><svg><use href="#i-next"/></svg></button>
 
 <script src="/static/app.js"></script>
+<script src="/static/x_intel.js"></script>
 </body>
 </html>

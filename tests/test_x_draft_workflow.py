@@ -87,7 +87,10 @@ def test_x_write_risk_probe_detects_platform_lock_signal():
 def test_x_worker_and_client_enforce_submit_boundary_contract():
     monitor = Path("app/engine/monitor.py").read_text(encoding="utf-8")
     client = Path("app/platforms/x/client.py").read_text(encoding="utf-8")
-    assert "from ..platforms.x.client import publish_x, reply_x" in monitor
+    assert "from ..platforms.x.client import (" in monitor
+    assert "publish_x, reply_x" in monitor
+    assert "await publish_x(" in monitor
+    assert "await reply_x(" in monitor
     assert 'elif platform == "x":' in monitor
     assert "CommentTask, task_id" in monitor
     assert "on_submit=None" in client

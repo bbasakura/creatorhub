@@ -205,6 +205,62 @@ class WriteGateTests(unittest.TestCase):
             self.assertEqual(task.status, "pending")
             self.assertIsNotNone(task.scheduled_at)
 
+    def test_x_account_health_probe_uses_x_profile_reader(self):
+        account_id = self._account(platform="x")
+        browser = _BrowserStub()
+        engine = MonitorEngine(self.cfg, browser)
+
+        class Identity:
+            timezone_id = "Asia/Shanghai"
+
+        identity = Identity()
+        probe = (
+            account_id, "x", '{"cookies": []}', "", "", identity, "fixture")
+
+        async def profile(_browser, _identity):
+            self.assertIs(_browser, browser)
+            self.assertIs(_identity, identity)
+            return {
+                "nickname": "@fixture_x", "handle": "fixture_x",
+                "avatar": "https://example/avatar.jpg",
+                "follower_count": 12, "aweme_count": 34,
+            }
+
+        async def region_ok(*_args, **_kwargs):
+            return None
+
+        engine._verify_proxy_region = region_ok
+        with patch("app.engine.monitor.fetch_x_self_profile", profile):
+            result = asyncio.run(engine._probe_account_health(probe))
+
+        self.assertTrue(result["ok"])
+        with db.get_session() as session:
+            account = session.get(DouyinAccount, account_id)
+            self.assertEqual(account.status, "active")
+            self.assertEqual(account.sec_uid, "fixture_x")
+            self.assertEqual(account.douyin_id, "fixture_x")
+            self.assertEqual(account.follower_count, 12)
+            self.assertEqual(account.aweme_count, 34)
+
+    def test_x_publish_does_not_access_detached_account_after_claim_commit(self):
+        account_id = self._account(platform="x")
+        task_id = self._publish_task(account_id, platform="x")
+        engine = MonitorEngine(self.cfg, _BrowserStub())
+        engine._native_write_environment_error = lambda *_args, **_kwargs: ""
+
+        async def sent(*_args, **kwargs):
+            self.assertIn("on_submit", kwargs)
+            return True, "https://x.com/i/web/status/123456789", ""
+
+        with patch("app.engine.monitor.publish_x", sent):
+            result = asyncio.run(engine.publish_task(task_id, manual=True))
+
+        self.assertTrue(result["ok"])
+        with db.get_session() as session:
+            task = session.get(PublishTask, task_id)
+            self.assertEqual(task.status, "done")
+            self.assertEqual(task.result_url, "https://x.com/i/web/status/123456789")
+
     def test_publish_with_missing_account_fails_before_browser_use(self):
         browser = _BrowserStub()
         task_id = self._publish_task(999999)
@@ -319,6 +375,25 @@ class WriteGateTests(unittest.TestCase):
             self.assertEqual(task.method, "browser")
             self.assertIsNone(task.scheduled_at)
             self.assertIsNone(task.done_at)
+            self.assertEqual(session.exec(select(RiskEvent)).all(), [])
+
+    def test_youtube_retry_after_defers_task_without_risk_failure(self):
+        account_id = self._account(platform="youtube")
+        task_id = self._publish_task(account_id, platform="youtube")
+        engine = MonitorEngine(self.cfg, _BrowserStub())
+        before = datetime.utcnow()
+
+        result = asyncio.run(engine._finish_publish(
+            task_id, False, "",
+            "retry_after:86400:频道达到 YouTube 单日上传上限 (uploadLimitExceeded)",
+            platform="youtube"))
+
+        self.assertFalse(result["ok"])
+        with db.get_session() as session:
+            task = session.get(PublishTask, task_id)
+            self.assertEqual(task.status, "pending")
+            self.assertGreaterEqual(task.scheduled_at, before + timedelta(hours=23, minutes=59))
+            self.assertIn("uploadLimitExceeded", task.error)
             self.assertEqual(session.exec(select(RiskEvent)).all(), [])
 
     def test_publish_risk_response_returns_task_to_pending(self):

@@ -194,6 +194,9 @@ export async function remindConfirmedBatch(agent, count = 3, accountId = null) {
     fs.writeFileSync(selectedFile, JSON.stringify(draftCandidates, null, 2), "utf-8");
     execSync(`${PYTHON_EXE} ${STREAM_REPLIER_CLI} enqueue-drafts ${Number(accountId)} "${selectedFile}" "${queuedFile}"`, { encoding: "utf-8" });
     queued = JSON.parse(fs.readFileSync(queuedFile, "utf-8"));
+
+    // Do not stamp "reminded" here. Queueing a draft is not proof that X accepted
+    // the reply; only the durable CommentTask worker may persist success.
   }
 
   const summaryStr = execSync(`python ${PYTHON_CLI} summary`, { encoding: "utf-8" });

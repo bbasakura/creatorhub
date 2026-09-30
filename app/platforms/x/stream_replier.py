@@ -144,15 +144,11 @@ class XStreamReplier:
         return queued
 
     def record_one(self, author_nick: str, author_handle: str, tweet_link: str, tweet_text: str, reply_text: str) -> int:
-        """记录单条成功并同步飞书."""
-        self.batch_replier.record_success(
-            author_nick=author_nick,
-            author_handle=author_handle,
-            tweet_link=tweet_link,
-            tweet_text=tweet_text,
-            reply_text=reply_text,
+        """Legacy success stamping is disabled; worker evidence is authoritative."""
+        raise RuntimeError(
+            "legacy X success stamping is disabled; "
+            "wait for the durable CommentTask worker to confirm status=done"
         )
-        return self.batch_replier.progress.get("completed_count", 0)
 
     @staticmethod
     def filter_file_candidates(input_path: str, output_path: str):
@@ -179,6 +175,10 @@ class XStreamReplier:
     @staticmethod
     def enqueue_file_drafts(account_id: int, input_path: str,
                             output_path: str = "") -> List[Dict[str, Any]]:
+        from app.db import _engine, init_db
+        if _engine is None:
+            from app.config import load_config
+            init_db(load_config().db_path)
         sr = XStreamReplier()
         with open(input_path, "r", encoding="utf-8") as f:
             prepared = json.load(f)
@@ -191,17 +191,11 @@ class XStreamReplier:
 
     @staticmethod
     def process_record_file(record_path: str) -> int:
-        sr = XStreamReplier()
-        with open(record_path, "r", encoding="utf-8") as f:
-            rec = json.load(f)
-        cnt = sr.record_one(
-            author_nick=rec.get("authorNick", ""),
-            author_handle=rec.get("authorHandle", ""),
-            tweet_link=rec.get("tweetLink", ""),
-            tweet_text=rec.get("tweetText", ""),
-            reply_text=rec.get("replyText", ""),
+        del record_path
+        raise RuntimeError(
+            "legacy X success stamping is disabled; "
+            "wait for the durable CommentTask worker to confirm status=done"
         )
-        return cnt
 
     def get_progress(self) -> Dict[str, Any]:
         return {

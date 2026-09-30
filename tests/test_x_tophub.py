@@ -118,9 +118,10 @@ class TestTopHubCrawler(unittest.TestCase):
         career_topics = self.crawler.get_topics_by_category("workplace_career")
         self.assertTrue(all(t["category"] == "workplace_career" for t in career_topics))
 
+    @patch.object(TopHubCrawler, "_fetch_from_dailyhot_api", return_value=[])
     @patch.object(TopHubCrawler, "_fetch_html", side_effect=RuntimeError("Network down"))
     @patch.object(TopHubCrawler, "_load_cache", return_value=None)
-    def test_fallback_on_network_failure(self, mock_cache, mock_fetch):
+    def test_fallback_on_network_failure(self, mock_cache, mock_fetch, mock_dailyhot):
         # 网络异常且无缓存时，必须优雅降级返回 fallback 话题
         topics = self.crawler.fetch_topics(force_refresh=True)
         self.assertEqual(topics, FALLBACK_TOPICS)

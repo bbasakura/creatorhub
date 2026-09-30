@@ -29,13 +29,30 @@ def test_x_runtime_requires_bound_context():
 
 
 def test_provider_registry_keeps_browser_authoritative_for_writes():
-    with patch("app.platforms.x.providers.importlib.util.find_spec", return_value=None):
+    with (
+        patch("app.platforms.x.providers.agent_reach_available", return_value=False),
+        patch("app.platforms.x.providers.importlib.util.find_spec", return_value=None),
+    ):
         status = x_provider_status()
     assert status["default_read"] == "browser"
     assert status["write_provider"] == "browser"
     browser = next(p for p in status["providers"] if p["name"] == "browser")
+    reach = next(p for p in status["providers"] if p["name"] == "agent_reach")
     twikit = next(p for p in status["providers"] if p["name"] == "twikit")
     assert browser["available"] is True
     assert browser["authoritative_for_writes"] is True
+    assert reach["available"] is False
+    assert reach["write"] is False
     assert twikit["available"] is False
     assert twikit["write"] is False
+
+
+def test_provider_registry_prefers_agent_reach_for_reads():
+    with (
+        patch("app.platforms.x.providers.agent_reach_available", return_value=True),
+        patch("app.platforms.x.providers.importlib.util.find_spec", return_value=object()),
+    ):
+        status = x_provider_status()
+    assert status["default_read"] == "agent_reach"
+    assert status["read_chain"] == ["agent_reach", "twikit", "browser"]
+    assert status["write_provider"] == "browser"

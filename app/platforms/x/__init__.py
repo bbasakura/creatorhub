@@ -59,6 +59,7 @@ _TOPIC_EXPORTS = {
     "XBatchReplier": (".batch_replier", "XBatchReplier"),
     "XFeishuSync": (".feishu_sync", "XFeishuSync"),
     "TopHubCrawler": (".tophub_crawler", "TopHubCrawler"),
+    "XBangDanCrawler": (".xbangdan_crawler", "XBangDanCrawler"),
 }
 
 

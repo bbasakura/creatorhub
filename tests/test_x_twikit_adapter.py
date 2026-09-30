@@ -48,6 +48,34 @@ def test_adapter_passes_proxy_and_user_agent_to_twikit_client():
     assert created["user_agent"] == "ua-fixture"
 
 
+def test_adapter_restores_event_loop_policy_after_twikit_import():
+    import asyncio
+
+    created = {}
+    class FakeClient:
+        def __init__(self, **kwargs):
+            created.update(kwargs)
+        def load_cookies(self, _path):
+            pass
+
+    fake_module = SimpleNamespace(Client=FakeClient)
+    original_policy = asyncio.get_event_loop_policy()
+    replacement_policy = type(original_policy)()
+
+    def fake_import(_name):
+        asyncio.set_event_loop_policy(replacement_policy)
+        return fake_module
+
+    with (
+        patch("app.platforms.x.twikit_client.patch_twikit_transaction"),
+        patch("app.platforms.x.twikit_client.patch_twikit_user_models"),
+        patch("app.platforms.x.twikit_client.importlib.import_module", side_effect=fake_import),
+    ):
+        TwikitReadAdapter((_state(),))
+
+    assert asyncio.get_event_loop_policy() is original_policy
+
+
 def test_adapter_fails_closed_when_auth_is_missing():
     with pytest.raises(TwikitAuthUnavailable):
         TwikitReadAdapter((json.dumps({"cookies": []}),))
@@ -70,7 +98,10 @@ def test_timeline_uses_latest_timeline_read_method():
 
 
 def test_provider_prefers_twikit_for_reads_but_browser_for_writes():
-    with patch("app.platforms.x.providers.importlib.util.find_spec", return_value=object()):
+    with (
+        patch("app.platforms.x.providers.agent_reach_available", return_value=False),
+        patch("app.platforms.x.providers.importlib.util.find_spec", return_value=object()),
+    ):
         status = x_provider_status()
     assert status["default_read"] == "twikit"
     assert status["fallback_read"] == "browser"

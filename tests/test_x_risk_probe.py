@@ -34,12 +34,19 @@ def test_detect_x_write_risk_is_empty_on_normal_page():
     assert marker == ""
 
 
-def test_reply_path_dismisses_only_known_benign_overlay_after_risk_probe():
+def test_reply_path_uses_shared_risk_probe_and_safe_mask_activation():
     source = open("app/platforms/x/client.py", encoding="utf-8").read()
     reply_block = source[source.index("async def reply_x") :]
+    activation_block = source[source.index("async def _activate_x_control") :
+                              source.index("async def _fill_editor")]
     assert "detect_x_write_risk(page)" in reply_block
-    assert "dismiss_x_benign_overlay(page)" in reply_block
-    assert reply_block.index("detect_x_write_risk(page)") < reply_block.index("dismiss_x_benign_overlay(page)")
+    assert "_activate_x_control(" in reply_block
+    assert "retry_before_boundary=True" in reply_block
+    assert "force=True" not in reply_block
+    assert "dismiss_x_benign_overlay(page)" in activation_block
+    assert "detect_x_write_risk(page)" in activation_block
+    assert "allow_mask_dom" in activation_block
+    assert "if callable(before_activate) or not retry_before_boundary:" in activation_block
 
 
 def test_publish_and_relationship_paths_use_shared_probe():

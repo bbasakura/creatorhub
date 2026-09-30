@@ -6,6 +6,7 @@ cannot be bypassed by an optional reverse-engineered client.
 """
 from __future__ import annotations
 
+import asyncio
 import importlib
 import json
 import os
@@ -126,18 +127,28 @@ class TwikitReadAdapter:
         cookies = cookies_from_storage_states(storage_states)
         if not has_twikit_auth(cookies):
             raise TwikitAuthUnavailable("X storage_state 缺少 auth_token/ct0")
+        previous_policy = asyncio.get_event_loop_policy()
         try:
-            module = importlib.import_module("twikit")
-        except ImportError as exc:
-            raise TwikitUnavailable("twikit 未安装；当前继续使用 BrowserManager 读取") from exc
-        patch_twikit_transaction(module)
-        patch_twikit_user_models(module)
-        network_proxy = resolve_twikit_proxy(proxy)
-        self._client = module.Client(
-            language=language,
-            proxy=network_proxy or None,
-            user_agent=str(user_agent or "").strip() or None,
-        )
+            try:
+                module = importlib.import_module("twikit")
+            except ImportError as exc:
+                raise TwikitUnavailable(
+                    "twikit 未安装；当前继续使用 BrowserManager 读取") from exc
+            patch_twikit_transaction(module)
+            patch_twikit_user_models(module)
+            network_proxy = resolve_twikit_proxy(proxy)
+            self._client = module.Client(
+                language=language,
+                proxy=network_proxy or None,
+                user_agent=str(user_agent or "").strip() or None,
+            )
+        finally:
+            # twikit currently switches Windows' global policy to Selector on
+            # import. Patchright/Playwright requires subprocess support from
+            # Proactor, so an optional read backend must not leak that process-
+            # global side effect into CreatorHub's browser write backend.
+            if asyncio.get_event_loop_policy() is not previous_policy:
+                asyncio.set_event_loop_policy(previous_policy)
         self._load_cookies(cookies)
 
     def _load_cookies(self, cookies: dict[str, str]) -> None:

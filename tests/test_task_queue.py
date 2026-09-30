@@ -15,6 +15,7 @@ from app.models import (
     KeywordCollectionJob,
     MonitorTarget,
     PublishTask,
+    XRelationshipBatch,
 )
 
 
@@ -124,6 +125,110 @@ class TaskQueueTests(unittest.TestCase):
             self.query(queue_type="not-a-queue")
         with self.assertRaises(main.HTTPException):
             self.query(state="not-a-state")
+        with self.assertRaises(main.HTTPException):
+            self.query(platform="x", state="all", x_action="not-an-action")
+        with self.assertRaises(main.HTTPException):
+            self.query(platform="x", state="all", x_status="not-a-status")
+
+    def test_x_queue_uses_business_actions_and_independent_statuses(self):
+        now = datetime.utcnow()
+        with db.get_session() as session:
+            account = DouyinAccount(platform="x", nickname="X 队列账号")
+            session.add(account)
+            session.commit()
+            session.refresh(account)
+
+            follow_batch = XRelationshipBatch(
+                account_id=account.id, action="follow", status="active",
+                requested_count=1, total_count=1)
+            unfollow_batch = XRelationshipBatch(
+                account_id=account.id, action="unfollow", status="active",
+                requested_count=1, total_count=1)
+            session.add(follow_batch)
+            session.add(unfollow_batch)
+            session.commit()
+            session.refresh(follow_batch)
+            session.refresh(unfollow_batch)
+
+            session.add(AccountActionTask(
+                platform="x", account_id=account.id, action="follow",
+                target_nick="浇友目标", status="pending",
+                content='{"campaign":"jiaoyou","source":"test","require_verified":true}'))
+            session.add(AccountActionTask(
+                platform="x", account_id=account.id, batch_id=follow_batch.id,
+                action="follow", target_nick="回关目标", status="doing"))
+            session.add(AccountActionTask(
+                platform="x", account_id=account.id, batch_id=unfollow_batch.id,
+                action="unfollow", target_nick="取关目标", status="pending",
+                next_allowed_at=now + timedelta(minutes=5)))
+            session.add(CommentTask(
+                platform="x", account_id=account.id, content="催关",
+                aweme_id="remind-1", xsec_token="x_remind:one", status="uncertain"))
+            session.add(CommentTask(
+                platform="x", account_id=account.id, content="串门",
+                aweme_id="visit-1", xsec_token="x_visit:one", status="failed"))
+            session.add(PublishTask(
+                platform="x", account_id=account.id, title="X 草稿",
+                status="draft", source_intent_key="x-draft:test:oneclick-1"))
+            session.commit()
+
+        all_rows = self.query(platform="x", state="all", x_status="all")
+        self.assertEqual(all_rows["total"], 6)
+        self.assertEqual({
+            item["x_action"] for item in all_rows["items"]
+        }, {"growth", "followback", "unfollow", "remind", "visit", "post"})
+        self.assertEqual(all_rows["x_summary"]["running"], 1)
+        self.assertEqual(all_rows["x_summary"]["cooldown"], 1)
+        self.assertEqual(all_rows["x_summary"]["draft"], 1)
+        self.assertEqual(all_rows["x_summary"]["uncertain"], 1)
+        self.assertEqual(all_rows["x_summary"]["failed"], 1)
+
+        growth = self.query(
+            platform="x", state="all", x_status="all", x_action="growth")
+        self.assertEqual(growth["total"], 1)
+        self.assertEqual(growth["items"][0]["queue_label"], "一键浇友")
+
+        remind = self.query(
+            platform="x", state="all", x_status="uncertain", x_action="remind")
+        self.assertEqual(remind["total"], 1)
+        self.assertEqual(remind["items"][0]["queue_label"], "一键催关")
+        self.assertEqual(remind["items"][0]["x_status"], "uncertain")
+
+        cooldown = self.query(
+            platform="x", state="all", x_status="cooldown", x_action="unfollow")
+        self.assertEqual(cooldown["total"], 1)
+        self.assertEqual(cooldown["items"][0]["queue_label"], "一键取关")
+
+    def test_bulk_cancel_ui_contract(self):
+        index = Path("app/web/index.html").read_text(encoding="utf-8")
+        js = Path("app/web/app.js").read_text(encoding="utf-8")
+        self.assertIn('id="queue-selall"', index)
+        self.assertIn('id="queue-bulk-cancel"', index)
+        self.assertIn("cancelSelectedTaskQueue", js)
+        self.assertIn('/api/task-queue/batch/cancel', js)
+
+    def test_bulk_cancel_reuses_per_task_cancel_state_machine(self):
+        with db.get_session() as session:
+            comment = CommentTask(
+                platform="douyin", account_id=self.account_id,
+                content="待取消评论", aweme_id="cancel-comment", status="pending")
+            action = AccountActionTask(
+                platform="douyin", account_id=self.account_id,
+                action="follow", target_nick="待取消账号", status="pending")
+            session.add(comment); session.add(action); session.commit()
+            session.refresh(comment); session.refresh(action)
+            comment_id, action_id = comment.id, action.id
+
+        result = asyncio.run(main.cancel_task_queue_batch(
+            main.TaskQueueBulkCancelIn(items=[
+                main.TaskQueueBulkItemIn(queue_type="comments", id=comment_id),
+                main.TaskQueueBulkItemIn(queue_type="actions", id=action_id),
+            ])))
+        self.assertEqual(result["canceled"], 2)
+        self.assertEqual(result["skipped"], 0)
+        with db.get_session() as session:
+            self.assertEqual(session.get(CommentTask, comment_id).status, "canceled")
+            self.assertEqual(session.get(AccountActionTask, action_id).status, "canceled")
 
 
 if __name__ == "__main__":

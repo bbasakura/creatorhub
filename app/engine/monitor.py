@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from sqlmodel import select
 
@@ -52,14 +53,20 @@ from ..platforms.channels import (parse_channels_feed, parse_channels_comment,
 from ..platforms.wechat_mp import (parse_mp_feed, parse_mp_comment,
                    flatten_mp_comments, parse_self_user as parse_mp_self_user,
                    publish_mp, send_mp_heartbeat)
-from ..platforms.x.client import publish_x, reply_x
-from ..platforms.x.relationship import set_x_following
+from ..platforms.x.client import (
+    publish_x, reply_x, fetch_x_self_profile, fetch_x_my_works, compose_x_text,
+    fetch_x_search, fetch_x_for_you_timeline,
+)
+from ..platforms.x.relationship import set_x_following, inspect_x_growth_profile
+from ..platforms.x.posting_engine import XPostingEngine
+from ..platforms.x.feishu_sync import XFeishuSync
+from ..platforms.x.unreciprocated_manager import UnreciprocatedManager
 from ..models import (ContentRecord, CommentRecord, CommentRule, CommentTask,
                       CommentWatch, DanmakuWatch, DanmakuRecord,
                        DouyinAccount, MonitorTarget, AccountRiskState,
                       NotificationChannel, PublishTask, AccountActionTask,
-                       FollowEdge, DmConversation, AccountWork, AccountStatSnapshot,
-                       KeywordCollectionJob)
+                       XRelationshipBatch, FollowEdge, DmConversation, AccountWork, AccountStatSnapshot,
+                       KeywordCollectionJob, XIntelAlert, XIntelScan, XRevenueProfile)
 from ..notifier import notify_all
 from ..netfp import probe_ip_region
 from ..risk import (
@@ -70,12 +77,61 @@ from ..risk import (
 )
 from ..settings import get_setting
 from ..services.task_events import add_task_event
+from ..services.x_relationship_batches import (
+    pause_relationship_batch,
+    refresh_relationship_batch,
+    should_pause_relationship_batch,
+)
+from ..services.x_workflow import create_x_post_draft
+from ..services.x_growth_dashboard import persist_x_growth_sample
+from ..services.x_intel_automation import (
+    create_daily_brief,
+    daily_brief_due,
+    load_x_intel_automation,
+    mark_alerts_notified,
+    mark_brief_notified,
+    scan_schedule,
+)
+from ..services.x_post_campaign import (
+    load_post_campaign,
+    mark_post_failed,
+    mark_post_login_required,
+    mark_post_queued,
+    mark_post_success,
+    mark_post_uncertain,
+    next_post_intent_id,
+    post_campaign_due,
+)
+from ..services.x_growth_campaign import (
+    defer_growth_scan,
+    growth_due,
+    growth_intent_match,
+    growth_seen,
+    growth_task_metadata,
+    load_growth_campaign,
+    mark_growth_cooldown,
+    mark_growth_login_required,
+    mark_growth_queued,
+    mark_growth_skipped,
+    mark_growth_success,
+    mark_growth_uncertain,
+    next_growth_source,
+    parse_growth_task_metadata,
+    save_growth_campaign,
+)
 from ..services.scheduler_runtime import PeriodicScheduler, SchedulerGroup, SchedulerStage
 from .downloader import Downloader
 from .collection import KeywordCollector
 
 MAX_AUTO_RETRY = 3
 _BROWSER_SUBMIT_MARKER = "write_submitted:browser"
+_X_REMIND_TASK_PREFIX = "x_remind:"
+_X_VISIT_TASK_PREFIX = "x_visit:"
+_X_GROWTH_GAP_RANGE = (50, 70)
+_X_FOLLOWBACK_GAP_RANGE = (75, 105)
+_X_UNFOLLOW_GAP_RANGE = (50, 70)
+_X_REMIND_GAP_RANGE = (50, 70)
+_X_VISIT_GAP_RANGE = (270, 330)
 _TASK_QUEUE_TYPE_BY_MODEL = {
     PublishTask: "publishes",
     CommentTask: "comments",
@@ -88,6 +144,19 @@ _RECORD_KEYS = frozenset({"comment_id", "text", "user_nickname", "like_count",
                           "create_time", "reply_to"})
 
 log = logging.getLogger("creatorhub.engine")
+
+
+async def _record_x_feishu(method: str, **kwargs) -> None:
+    """Best-effort X audit sync; never changes the platform write result."""
+    try:
+        sync = XFeishuSync()
+        fn = getattr(sync, method)
+        ok = await asyncio.to_thread(fn, **kwargs)
+        if not ok:
+            log.warning("X 飞书互动日志写入返回失败: method=%s", method)
+    except Exception as exc:
+        log.warning("X 飞书互动日志写入异常(%s): %s", method, exc)
+
 
 # 账号时区 -> 期望出口国家(ISO2)。仅列常见,匹配不到则跳过地区校验。
 _TZ_COUNTRY = {
@@ -651,6 +720,32 @@ class MonitorEngine:
             row.blocked_at = now
             row.next_allowed_at = proposed
 
+    def _defer_x_reminder_tasks(
+            self, account_id: int, until: datetime, reason: str) -> int:
+        """Shift pending reminder tasks behind a shared X cooldown boundary."""
+        deferred = 0
+        with get_session() as session:
+            rows = session.exec(select(CommentTask).where(
+                CommentTask.platform == "x",
+                CommentTask.account_id == account_id,
+                CommentTask.status == "pending",
+            )).all()
+            for row in rows:
+                if not str(row.xsec_token or "").startswith(_X_REMIND_TASK_PREFIX):
+                    continue
+                before = row.status
+                self._defer_row(row, reason, until, signal="rate_limit")
+                self._record_task_event(
+                    session, CommentTask, row, "remind:cooldown",
+                    from_status=before,
+                    detail=reason,
+                    metadata={"until": until.isoformat(timespec="seconds")},
+                )
+                session.add(row)
+                deferred += 1
+            session.commit()
+        return deferred
+
     @staticmethod
     def _clear_row_block(row) -> None:
         for name, value in (
@@ -725,6 +820,179 @@ class MonitorEngine:
             log.exception("idle browser session collection failed")
             return 0
 
+    async def _x_intel_channels(self) -> list[dict]:
+        with get_session() as s:
+            chans = s.exec(select(NotificationChannel).where(
+                NotificationChannel.enabled == True)).all()  # noqa: E712
+            return [{"type": c.type, "config": _loads(c.config)} for c in chans]
+
+    async def _process_x_intel_automation(self):
+        """Run due X intelligence scans without creating a second scan implementation."""
+        with get_session() as s:
+            accounts = s.exec(select(DouyinAccount).where(
+                DouyinAccount.platform == "x",
+                DouyinAccount.status != "invalid",
+            )).all()
+            specs = [{
+                "id": int(acc.id),
+                "timezone_id": str(acc.timezone_id or "Asia/Shanghai"),
+            } for acc in accounts if acc.id]
+
+        if not specs:
+            return
+
+        # Lazy imports avoid coupling the engine module to the FastAPI router at
+        # import time while still reusing the exact same scan/digest code paths.
+        from ..api.x import (
+            XContentOpportunityGenerateIn, XIntelDigestIn, XIntelScanIn,
+            generate_intel_digest, generate_intel_opportunities, scan_x_intel,
+        )
+
+        channels = None
+        for spec in specs:
+            account_id = int(spec["id"])
+            cfg = load_x_intel_automation(account_id)
+            if not cfg.get("enabled"):
+                continue
+
+            with get_session() as s:
+                account = s.get(DouyinAccount, account_id)
+                if not account:
+                    continue
+                s.expunge(account)
+
+            schedule = scan_schedule(account_id, cfg)
+            scan_result = None
+            if schedule.get("due"):
+                try:
+                    scan_result = await scan_x_intel(XIntelScanIn(
+                        account_id=account_id,
+                        posts_per_account=int(cfg["posts_per_account"]),
+                        max_accounts=int(cfg["max_accounts"]),
+                    ))
+                except Exception as exc:
+                    log.warning("X情报自动扫描失败 account=%s: %s", account_id, exc)
+                else:
+                    new_alerts = (scan_result or {}).get("new_alerts") or []
+                    if new_alerts and cfg.get("notify_explosions"):
+                        if channels is None:
+                            channels = await self._x_intel_channels()
+                        if channels:
+                            lines = []
+                            for row in new_alerts[:5]:
+                                lines.append(
+                                    f"@{row.get('author_handle') or ''} · "
+                                    f"{int(row.get('window_hours') or 0)}h "
+                                    f"+{int(row.get('view_delta') or 0)}曝光 · "
+                                    f"{float(row.get('views_per_hour') or 0):.0f}/h · "
+                                    f"效率{float(row.get('exposure_efficiency') or 0):.2f}x")
+                                if row.get("tweet_url"):
+                                    lines.append(str(row["tweet_url"]))
+                            if len(new_alerts) > 5:
+                                lines.append(f"… 本轮共 {len(new_alerts)} 条新信号")
+                            try:
+                                await notify_all(
+                                    channels, "X 情报 · 起爆信号", "\n".join(lines))
+                                mark_alerts_notified([
+                                    int(row["id"]) for row in new_alerts
+                                    if row.get("id")])
+                            except Exception as exc:
+                                log.warning("X情报起爆提醒发送失败: %s", exc)
+
+                    if cfg.get("auto_opportunities_enabled"):
+                        scan_payload = (scan_result or {}).get("scan") or {}
+                        new_scan_id = int(scan_payload.get("id") or 0)
+                        if new_scan_id:
+                            try:
+                                await generate_intel_digest(XIntelDigestIn(
+                                    account_id=account_id,
+                                    scan_id=new_scan_id,
+                                    force=False,
+                                    max_followers=50000,
+                                ))
+                                opportunity_result = await generate_intel_opportunities(
+                                    XContentOpportunityGenerateIn(
+                                        account_id=account_id,
+                                        scan_id=new_scan_id,
+                                        count=int(cfg.get("auto_draft_count") or 3),
+                                    ))
+                                log.info(
+                                    "X情报自动选题 account=%s scan=%s drafts=%s",
+                                    account_id,
+                                    new_scan_id,
+                                    int((opportunity_result or {}).get("count") or 0),
+                                )
+                            except Exception as exc:
+                                log.warning(
+                                    "X情报自动选题失败 account=%s scan=%s: %s",
+                                    account_id, new_scan_id, exc)
+
+            brief_state = daily_brief_due(account, cfg)
+            if not brief_state.get("due"):
+                continue
+            with get_session() as s:
+                latest = s.exec(select(XIntelScan).where(
+                    XIntelScan.account_id == account_id,
+                    XIntelScan.status.in_(["done", "partial"]),
+                    XIntelScan.post_count > 0,
+                ).order_by(XIntelScan.id.desc()).limit(1)).first()
+                latest_id = int(latest.id) if latest and latest.id else 0
+            if not latest_id:
+                continue
+
+            try:
+                digest_result = await generate_intel_digest(XIntelDigestIn(
+                    account_id=account_id,
+                    scan_id=latest_id,
+                    force=False,
+                    max_followers=50000,
+                ))
+            except Exception as exc:
+                log.warning("X情报每日简报生成失败 account=%s: %s", account_id, exc)
+                continue
+            scan_payload = (digest_result or {}).get("scan") or {}
+            summary = scan_payload.get("digest") or {}
+            if not summary:
+                continue
+            with get_session() as s:
+                alert_count = len(s.exec(select(XIntelAlert).where(
+                    XIntelAlert.account_id == account_id,
+                    XIntelAlert.scan_id == latest_id,
+                )).all())
+            brief = create_daily_brief(
+                account_id,
+                str(brief_state["local_date"]),
+                latest_id,
+                summary,
+                str(scan_payload.get("summary_source") or ""),
+                alert_count,
+            )
+            if cfg.get("notify_daily_brief"):
+                if channels is None:
+                    channels = await self._x_intel_channels()
+                if channels and brief.notified_at is None:
+                    topics = summary.get("topics") or []
+                    watchlist = summary.get("watchlist") or []
+                    lines = [str(summary.get("overview") or "")[:800]]
+                    if topics:
+                        lines.append("值得看：" + " / ".join(
+                            str(item.get("title") or "")[:30]
+                            for item in topics[:3] if isinstance(item, dict)))
+                    if watchlist:
+                        lines.append("继续观察：" + " / ".join(
+                            "@" + str(item.get("handle") or "").lstrip("@")
+                            for item in watchlist[:3] if isinstance(item, dict)))
+                    lines.append(f"今日起爆信号：{alert_count} 条")
+                    try:
+                        await notify_all(
+                            channels,
+                            "X 情报日报 · " + str(brief_state["local_date"]),
+                            "\n".join(line for line in lines if line),
+                        )
+                        mark_brief_notified(int(brief.id))
+                    except Exception as exc:
+                        log.warning("X情报日报推送失败: %s", exc)
+
     async def _loop(self):
         read_timeout = max(
             600.0,
@@ -740,18 +1008,28 @@ class MonitorEngine:
                 SchedulerStage("scan_danmaku", self._scan_danmaku_watches, read_timeout),
                 SchedulerStage("retry_failed", self._retry_failed, 120.0),
             )),
+            SchedulerGroup("intel", 60.0, (
+                SchedulerStage(
+                    "x_intel_automation",
+                    self._process_x_intel_automation,
+                    read_timeout,
+                ),
+            )),
             SchedulerGroup("writes", 15.0, (
                 # Browser writers own their own submit-boundary/timeout semantics;
                 # do not wrap them in an outer cancellation timeout.
                 SchedulerStage("publish_queue", self._process_publish),
+                SchedulerStage("x_post_campaign", self._process_x_post_campaigns),
                 SchedulerStage("comment_rules", self._process_comment_rules),
                 SchedulerStage("comment_queue", self._process_comment_tasks),
+                SchedulerStage("x_growth", self._process_x_growth_campaigns),
                 SchedulerStage("action_queue", self._process_action_tasks),
                 SchedulerStage("collection_queue", self._process_collection_jobs),
             )),
             SchedulerGroup("maintenance", 30.0, (
                 SchedulerStage("risk_recovery", self._process_risk_recovery, 180.0),
                 SchedulerStage("account_check", self._check_accounts, read_timeout),
+                SchedulerStage("x_growth_metrics", self._sample_x_growth_metrics, read_timeout),
                 SchedulerStage("work_health", self._check_work_health, read_timeout),
             )),
         )
@@ -1106,6 +1384,15 @@ class MonitorEngine:
                                 self.risk.record_failure(
                                     aid, OperationKind.READ_LIGHT, exc)
                                 return {"ok": False, "error": str(exc)}
+                elif platform == "x":
+                    try:
+                        u = await fetch_x_self_profile(self.browser, identity)
+                        err = ""
+                    except RuntimeError as exc:
+                        if str(exc).startswith("logged_out:"):
+                            u, err = {}, "logged_out"
+                        else:
+                            raise
                 elif platform == "kuaishou":
                     u, err = await fetch_ks_self_profile(self.browser, identity)
                 elif platform == "wechat_mp":
@@ -1146,6 +1433,16 @@ class MonitorEngine:
                     parsed = parse_mp_self_user(u)
                 elif platform == "shipinhao":
                     parsed = parse_channels_self_user(u)
+                elif platform == "x":
+                    handle = str(u.get("handle") or "").strip().lstrip("@")
+                    parsed = {
+                        "nickname": u.get("nickname") or (f"@{handle}" if handle else ""),
+                        "sec_uid": handle,
+                        "douyin_id": handle,
+                        "avatar": u.get("avatar") or "",
+                        "follower_count": u.get("follower_count") or 0,
+                        "aweme_count": u.get("aweme_count") or 0,
+                    }
                 else:
                     parsed = parse_self_user(u)
                 account.status = "active"
@@ -1220,6 +1517,68 @@ class MonitorEngine:
                       and self._keepalive_due(account.last_active_at, account.platform)]
         for probe in probes:
             await self._probe_account_health(probe)
+
+    async def _sample_x_growth_metrics(self) -> int:
+        """Read-only sampler for X growth/revenue accounts; never writes to X."""
+        now = time.time()
+        if now - getattr(self, "_last_x_growth_metric_sample", 0.0) < 1800:
+            return 0
+        self._last_x_growth_metric_sample = now
+
+        samples = []
+        with get_session() as session:
+            tracked_ids = {
+                int(row.account_id)
+                for row in session.exec(select(XRevenueProfile)).all()
+            }
+            for account_id in tracked_ids:
+                account = session.get(DouyinAccount, account_id)
+                if not account or account.platform != "x":
+                    continue
+                if account.status == "invalid" or not account.storage_state:
+                    continue
+                samples.append((
+                    account_id,
+                    self.browser.identity_for(account),
+                ))
+
+        completed = 0
+        for account_id, identity in samples:
+            decision = self.risk.preflight(account_id, OperationKind.READ_LIGHT)
+            if not decision.allowed:
+                continue
+            try:
+                async with self._operation_guard(
+                        account_id, OperationKind.READ_LIGHT):
+                    if not self.risk.preflight(
+                            account_id, OperationKind.READ_LIGHT).allowed:
+                        continue
+                    items, profile = await fetch_x_my_works(
+                        self.browser, identity, limit=200)
+                self.risk.record_success(account_id, OperationKind.READ_LIGHT)
+                await asyncio.to_thread(
+                    persist_x_growth_sample,
+                    account_id,
+                    items or [],
+                    profile or {},
+                )
+                self._stamp_active(account_id)
+                completed += 1
+            except RuntimeError as exc:
+                if str(exc).startswith("logged_out:"):
+                    self.risk.record_failure(
+                        account_id, OperationKind.READ_LIGHT, exc)
+                    log.warning(
+                        "X增长采样:账号 %s 登录态失效，等待重新登录", account_id)
+                else:
+                    self.risk.record_failure(
+                        account_id, OperationKind.READ_LIGHT, exc)
+                    log.warning("X增长采样:账号 %s 失败 %s", account_id, exc)
+            except Exception as exc:
+                self.risk.record_failure(
+                    account_id, OperationKind.READ_LIGHT, exc)
+                log.warning("X增长采样:账号 %s 失败 %s", account_id, exc)
+        return completed
 
     # ── 本账号作品健康监控(B5)+ 数据快照(B4)──
     async def _check_work_health(self):
@@ -2876,6 +3235,107 @@ class MonitorEngine:
             s.add(task); s.commit(); s.refresh(task)
             return task.id
 
+    async def _process_x_post_campaigns(self):
+        """Keep at most one durable one-click X post in flight per account."""
+        with get_session() as session:
+            accounts = session.exec(select(DouyinAccount).where(
+                DouyinAccount.platform == "x")).all()
+            account_rows = [{
+                "id": int(account.id),
+                "status": account.status,
+                "timezone_id": str(account.timezone_id or "Asia/Shanghai"),
+            } for account in accounts if account.id is not None]
+
+        for account_row in account_rows:
+            account_id = account_row["id"]
+            state = load_post_campaign(account_id)
+            if not post_campaign_due(state):
+                continue
+            if account_row["status"] == "invalid":
+                mark_post_login_required(account_id)
+                continue
+
+            prefix = f"x-draft:{account_id}:client:oneclick-"
+            with get_session() as session:
+                active_rows = session.exec(select(PublishTask).where(
+                    PublishTask.platform == "x",
+                    PublishTask.account_id == account_id,
+                    PublishTask.status.in_(["draft", "pending", "publishing", "uncertain"]),
+                ).order_by(PublishTask.id.desc())).all()
+                active = next(
+                    (row for row in active_rows
+                     if str(row.source_intent_key or "").startswith(prefix)),
+                    None,
+                )
+            if active is not None:
+                if active.status == "uncertain":
+                    mark_post_uncertain(
+                        account_id, task_id=int(active.id),
+                        reason="一键发帖结果不确定，已停止继续生成")
+                continue
+
+            try:
+                tz = ZoneInfo(account_row["timezone_id"])
+            except Exception:
+                tz = ZoneInfo("Asia/Shanghai")
+            target_day = datetime.now(tz).date() - timedelta(days=1)
+            with get_session() as session:
+                works = session.exec(select(AccountWork).where(
+                    AccountWork.account_id == account_id,
+                    AccountWork.platform == "x",
+                ).order_by(AccountWork.create_time.desc()).limit(500)).all()
+                previous = session.exec(select(PublishTask).where(
+                    PublishTask.platform == "x",
+                    PublishTask.account_id == account_id,
+                ).order_by(PublishTask.id.desc()).limit(160)).all()
+
+            yesterday = [
+                str(row.desc or "").strip()
+                for row in works
+                if row.create_time
+                and datetime.fromtimestamp(int(row.create_time), tz).date() == target_day
+                and str(row.desc or "").strip()
+            ]
+            refs = (yesterday[:120] if yesterday else [
+                str(row.desc or "").strip() for row in works
+                if str(row.desc or "").strip()
+            ][:100])
+            refs.extend([
+                str(row.desc or "").strip()
+                for row in previous
+                if str(row.source_intent_key or "").startswith(prefix)
+                and str(row.desc or "").strip()
+            ][:80])
+
+            try:
+                text = XPostingEngine().generate_reference_style_post(refs)
+                draft = create_x_post_draft(
+                    account_id, text,
+                    intent_id=next_post_intent_id(state))
+                task_id = int(draft["task_id"])
+                with get_session() as session:
+                    task = session.get(PublishTask, task_id)
+                    if task is None:
+                        raise RuntimeError("一键发帖任务创建后无法读取")
+                    if task.status == "draft":
+                        before = task.status
+                        task.status = "pending"
+                        task.scheduled_at = None
+                        session.add(task)
+                        add_task_event(
+                            session, queue_type="publishes", row_id=task.id,
+                            event_type="campaign:queued",
+                            from_status=before, to_status="pending",
+                            actor="x_post_campaign",
+                            detail="一键发帖按目标数生成下一条短帖")
+                        session.commit()
+                mark_post_queued(
+                    account_id, task_id=task_id, text=text)
+            except Exception as exc:
+                mark_post_failed(
+                    account_id, task_id=int(state.get("last_task_id") or 0),
+                    reason=f"生成一键短帖失败: {exc}")
+
     async def _process_publish(self):
         due = []
         now = datetime.utcnow()
@@ -2922,6 +3382,11 @@ class MonitorEngine:
                 self._defer_row(t, "账号登录态已失效，等待重新登录", fallback_seconds=900)
                 s.add(t); s.commit()
                 return {"ok": False, "error": "account_invalid"}
+            x_oneclick_campaign = (
+                t.platform == "x"
+                and str(t.source_intent_key or "").startswith(
+                    f"x-draft:{t.account_id}:client:oneclick-")
+            )
             hard_decision = self.risk.hard_preflight(
                 t.account_id, OperationKind.PUBLISH)
             if not hard_decision.allowed:
@@ -2970,12 +3435,15 @@ class MonitorEngine:
                     self._defer_row(t, "当前处于非活跃时段，发布任务已保留在队列")
                     s.add(t); s.commit()
                     return {"ok": False, "error": t.error}
-                decision = self.risk.preflight(t.account_id, OperationKind.PUBLISH)
-                if not decision.allowed:
-                    self._defer_row(t, decision.reason, decision.next_allowed_at,
-                                    signal=decision.signal)
-                    s.add(t); s.commit()
-                    return {"ok": False, "error": decision.reason}
+                if not x_oneclick_campaign:
+                    decision = self.risk.preflight(
+                        t.account_id, OperationKind.PUBLISH)
+                    if not decision.allowed:
+                        self._defer_row(
+                            t, decision.reason, decision.next_allowed_at,
+                            signal=decision.signal)
+                        s.add(t); s.commit()
+                        return {"ok": False, "error": decision.reason}
             # 发布用创作平台态;一次扫码已把创作 cookie 并入 storage_state,故回退它
             state = acc.creator_storage_state or acc.storage_state or ""
             native_mode = acc.identity_mode == "native"
@@ -2998,7 +3466,7 @@ class MonitorEngine:
             s.add(t); s.commit()
 
         if platform == "x":
-            if acc.platform != "x" or not state:
+            if not state:
                 return await self._finish_publish(
                     task_id, False, "", "X 账号未登录，请先在账号页完成 X 登录",
                     platform="x")
@@ -3089,10 +3557,23 @@ class MonitorEngine:
 
     async def _finish_publish(self, task_id, ok, url, err, platform="xhs") -> dict:
         account_id = None
+        x_feishu_payload = None
+        x_oneclick_campaign = False
+        x_oneclick_text = ""
+        final_status = ""
         failure = None
         uncertain = (not ok and isinstance(err, str)
                      and err.startswith("write_uncertain:"))
-        if not ok and not uncertain:
+        retry_after_seconds = None
+        retry_reason = ""
+        if not ok and isinstance(err, str) and err.startswith("retry_after:"):
+            try:
+                _prefix, seconds, retry_reason = err.split(":", 2)
+                retry_after_seconds = max(1, min(7 * 86400, int(seconds)))
+            except (TypeError, ValueError):
+                retry_after_seconds = None
+                retry_reason = ""
+        if not ok and not uncertain and retry_after_seconds is None:
             with get_session() as s:
                 task = s.get(PublishTask, task_id)
                 account_id = task.account_id if task else None
@@ -3104,6 +3585,13 @@ class MonitorEngine:
             if t:
                 account_id = t.account_id
                 before_status = t.status
+                x_oneclick_campaign = (
+                    platform == "x"
+                    and str(t.source_intent_key or "").startswith(
+                        f"x-draft:{t.account_id}:client:oneclick-")
+                )
+                if x_oneclick_campaign:
+                    x_oneclick_text = str(t.desc or t.title or "").strip()
                 if ok:
                     t.status = "done"
                     if platform == "wechat_mp" and "#draft=" in url:
@@ -3117,6 +3605,11 @@ class MonitorEngine:
                     t.status = "uncertain"
                     t.scheduled_at = None
                     t.done_at = None
+                elif retry_after_seconds is not None:
+                    self._defer_row(
+                        t, retry_reason or err,
+                        fallback_seconds=retry_after_seconds,
+                        signal="platform_retry_after")
                 elif failure and failure.controlled and failure.category in {
                         RiskCategory.RISK, RiskCategory.NETWORK, RiskCategory.AUTH}:
                     self._defer_row(t, err, failure.next_allowed_at,
@@ -3137,9 +3630,40 @@ class MonitorEngine:
                     from_status=before_status,
                     detail="" if ok else str(err or "")[:1000],
                     metadata={"platform": platform, "result_url": url or ""})
+                if ok and platform == "x":
+                    acc = s.get(DouyinAccount, t.account_id)
+                    try:
+                        post_text = compose_x_text(
+                            t.title, t.desc, t.topics,
+                            allow_empty=bool(_loads_list(t.media_json)))
+                    except Exception:
+                        post_text = (t.desc or t.title or "").strip()
+                    x_feishu_payload = {
+                        "post_text": post_text,
+                        "post_link": url or "",
+                        "note": "CreatorHub worker",
+                        "account_nick": getattr(acc, "nickname", "") if acc else "",
+                        "account_handle": getattr(acc, "sec_uid", "") if acc else "",
+                    }
+                final_status = t.status
                 s.add(t); s.commit()
+        if x_oneclick_campaign and account_id:
+            if ok:
+                mark_post_success(
+                    account_id, task_id=task_id,
+                    text=x_oneclick_text, result_url=url or "")
+            elif uncertain:
+                mark_post_uncertain(
+                    account_id, task_id=task_id,
+                    reason=str(err or "发布结果不确定"))
+            elif final_status == "failed":
+                mark_post_failed(
+                    account_id, task_id=task_id,
+                    reason=str(err or "发布失败"))
         if ok and account_id:
             self.risk.record_success(account_id, OperationKind.PUBLISH)
+        if x_feishu_payload:
+            await _record_x_feishu("record_post", **x_feishu_payload)
         if ok:
             try:
                 with get_session() as s:
@@ -3148,7 +3672,8 @@ class MonitorEngine:
                     channels = [{"type": c.type, "config": _loads(c.config)} for c in chans]
                 if channels:
                     pname = {"kuaishou": "快手", "douyin": "抖音",
-                             "shipinhao": "视频号", "wechat_mp": "微信公众号"}.get(platform, "小红书")
+                             "shipinhao": "视频号", "wechat_mp": "微信公众号",
+                             "x": "X"}.get(platform, "小红书")
                     await notify_all(channels, f"{pname}发布成功", url or "已发布一条作品")
             except Exception:
                 pass
@@ -3223,6 +3748,68 @@ class MonitorEngine:
                           .where(CommentTask.status == "done")).all()
         last = max([d for d in rows if d] or [None])
         return last is None or (datetime.utcnow() - last).total_seconds() >= gap
+
+    @staticmethod
+    def _stable_x_task_gap(task_id: int | None, marker: str,
+                           low: int, high: int) -> int:
+        """Return one stable per-task jitter value within the requested range."""
+        span = max(1, int(high) - int(low) + 1)
+        seed_text = f"{int(task_id or 0)}:{marker}"
+        seed = sum((idx + 1) * ord(ch) for idx, ch in enumerate(seed_text))
+        return int(low) + (seed % span)
+
+    def _x_comment_gap_spec(self, task: CommentTask) -> tuple[str, int] | None:
+        if task.platform != "x":
+            return None
+        marker = str(task.xsec_token or "")
+        if marker.startswith(_X_REMIND_TASK_PREFIX):
+            return (
+                _X_REMIND_TASK_PREFIX,
+                self._stable_x_task_gap(
+                    task.id, marker, *_X_REMIND_GAP_RANGE),
+            )
+        if marker.startswith(_X_VISIT_TASK_PREFIX):
+            return (
+                _X_VISIT_TASK_PREFIX,
+                self._stable_x_task_gap(
+                    task.id, marker, *_X_VISIT_GAP_RANGE),
+            )
+        return None
+
+    def _x_comment_gap_ok(self, account_id: int | None,
+                          prefix: str, gap: int) -> bool:
+        if not account_id:
+            return True
+        with get_session() as s:
+            rows = s.exec(select(CommentTask).where(
+                CommentTask.platform == "x",
+                CommentTask.account_id == account_id,
+                CommentTask.status == "done",
+            )).all()
+        done_times = [
+            row.done_at for row in rows
+            if row.done_at is not None
+            and str(row.xsec_token or "").startswith(prefix)
+        ]
+        last = max(done_times or [None])
+        return last is None or (
+            datetime.utcnow() - last).total_seconds() >= max(1, int(gap))
+
+    def _x_comment_gate_error(self, account_id: int | None,
+                              prefix: str, gap: int) -> str:
+        """X one-click comments use their own cadence, not COMMENT caps."""
+        pause_error = self._write_pause_error(account_id)
+        if pause_error:
+            return pause_error
+        hard_decision = self.risk.hard_preflight(
+            account_id, OperationKind.COMMENT)
+        if not hard_decision.allowed:
+            return hard_decision.reason
+        if not self._in_active_window(account_id):
+            return "当前处于非活跃时段，评论任务已保留在队列"
+        if not self._x_comment_gap_ok(account_id, prefix, gap):
+            return f"尚未达到 X 一键评论随机间隔（本条 {int(gap)} 秒）"
+        return ""
 
     def _comment_gate_error(self, account_id) -> str:
         """Return the reason a comment write must remain queued.
@@ -3793,11 +4380,16 @@ class MonitorEngine:
             tasks = s.exec(select(CommentTask).where(CommentTask.status == "pending")).all()
             for t in tasks:
                 if t.scheduled_at is None or t.scheduled_at <= now:
-                    due.append((t.id, t.account_id))
+                    due.append((t.id, t.account_id, self._x_comment_gap_spec(t)))
         seen_acct = set()
-        for tid, aid in due:
-            # 同一轮每账号最多执行一条,且尊重全局最小间隔 + 每小时配额(其余下轮再发)
-            if aid in seen_acct or self._comment_gate_error(aid):
+        for tid, aid, x_gap_spec in due:
+            if aid in seen_acct:
+                continue
+            gate_error = (
+                self._x_comment_gate_error(aid, *x_gap_spec)
+                if x_gap_spec else self._comment_gate_error(aid)
+            )
+            if gate_error:
                 continue
             seen_acct.add(aid)
             try:
@@ -3806,12 +4398,12 @@ class MonitorEngine:
                 log.warning("评论任务 %s 执行异常: %s", tid, e)
 
     # ── 本账号写操作队列(取关/回关/发私信)──
-    def _action_gap_ok(self, account_id, gap: int) -> bool:
-        """距该账号上一次成功写操作是否已超过最小间隔(防同账号连发)。
-        实际间隔取「任务级 min_gap」与「全局 action_min_gap_seconds」的较大者。"""
+    def _action_gap_ok(self, account_id, gap: int, *, use_engine_floor: bool = True) -> bool:
+        """Check action spacing; X one-click tasks may own their exact cadence."""
         if not account_id:
             return True
-        gap = max(gap, self.cfg.engine.action_min_gap_seconds)
+        if use_engine_floor:
+            gap = max(gap, self.cfg.engine.action_min_gap_seconds)
         if gap <= 0:
             return True
         with get_session() as s:
@@ -3842,13 +4434,24 @@ class MonitorEngine:
             return False
         return True
 
-    def _action_gate_error(self, account_id, gap: int, action: str = "follow") -> str:
-        """Apply the same write gate to queued and API-triggered actions."""
+    def _action_gate_error(self, account_id, gap: int, action: str = "follow",
+                           *, x_one_click: bool = False) -> str:
+        """Apply write gates; X one-click relationship tasks own their cadence."""
         pause_error = self._write_pause_error(account_id)
         if pause_error:
             return pause_error
+        if x_one_click:
+            hard_decision = self.risk.hard_preflight(
+                account_id, OperationKind.SOCIAL)
+            if not hard_decision.allowed:
+                return hard_decision.reason
         if not self._in_active_window(account_id):
             return "当前处于非活跃时段，写操作已保留在队列"
+        if x_one_click:
+            if not self._action_gap_ok(
+                    account_id, gap, use_engine_floor=False):
+                return f"尚未达到 X 一键关系随机间隔（本条 {int(gap)} 秒）"
+            return ""
         if not self._action_cap_ok(account_id):
             return "已达到账号写操作额度"
         if not self._action_gap_ok(account_id, gap):
@@ -3859,6 +4462,170 @@ class MonitorEngine:
             return decision.reason
         return ""
 
+    async def _process_x_growth_campaigns(self):
+        """Produce at most one durable X follow task per active 浇友 campaign."""
+        with get_session() as session:
+            accounts = session.exec(select(DouyinAccount).where(
+                DouyinAccount.platform == "x")).all()
+            account_rows = [{
+                "id": account.id,
+                "status": account.status,
+                "handle": str(account.sec_uid or "").strip().lstrip("@"),
+            } for account in accounts if account.id is not None]
+
+        for account_row in account_rows:
+            account_id = int(account_row["id"])
+            state = load_growth_campaign(account_id)
+            if not growth_due(state):
+                continue
+            if account_row["status"] == "invalid":
+                mark_growth_login_required(account_id)
+                continue
+
+            # Do not build a backlog: a campaign owns at most one active follow task.
+            active_growth_task = None
+            with get_session() as session:
+                rows = session.exec(select(AccountActionTask).where(
+                    AccountActionTask.platform == "x",
+                    AccountActionTask.account_id == account_id,
+                    AccountActionTask.action == "follow",
+                    AccountActionTask.status.in_(["pending", "doing", "uncertain"]),
+                )).all()
+                active_growth_task = next(
+                    (row for row in rows if parse_growth_task_metadata(row.content)), None)
+            if active_growth_task is not None:
+                if active_growth_task.status == "uncertain":
+                    mark_growth_uncertain(
+                        account_id,
+                        reason=f"关注 @{active_growth_task.target_uid} 结果不确定，已停止自动浇友")
+                else:
+                    defer_growth_scan(state, error="上一位浇友任务仍在队列中")
+                    save_growth_campaign(state)
+                continue
+
+            gap = random.randint(*_X_GROWTH_GAP_RANGE)
+            gate_error = self._action_gate_error(
+                account_id, gap, "follow", x_one_click=True)
+            if gate_error:
+                defer_growth_scan(state, error=gate_error)
+                save_growth_campaign(state)
+                continue
+
+            with get_session() as session:
+                account = session.get(DouyinAccount, account_id)
+                if account is None:
+                    continue
+                identity = self.browser.identity_for(account)
+
+            channel, source_value = next_growth_source(state)
+            source_label = (
+                f"关键词:{source_value}" if channel == "keyword" else "为你推荐")
+            selected = None
+            try:
+                decision = self.risk.preflight(account_id, OperationKind.READ_LIGHT)
+                if not decision.allowed:
+                    defer_growth_scan(state, error=decision.reason)
+                    save_growth_campaign(state)
+                    continue
+                async with self._operation_guard(
+                        account_id, OperationKind.READ_LIGHT,
+                        fallback_key=f"x-growth:{account_id}"):
+                    if channel == "keyword":
+                        items = await fetch_x_search(
+                            self.browser, identity, source_value,
+                            limit=20, product="Latest")
+                    else:
+                        items = await fetch_x_for_you_timeline(
+                            self.browser, identity, limit=20)
+
+                    inspected = 0
+                    self_handle = str(account_row["handle"] or "").casefold()
+                    for item in items:
+                        author = item.get("author") or {}
+                        handle = str(author.get("handle") or "").strip().lstrip("@")
+                        if not handle or handle.casefold() == self_handle:
+                            continue
+                        if growth_seen(state, handle):
+                            continue
+                        if not bool(author.get("verified")):
+                            mark_growth_skipped(state, handle)
+                            continue
+                        tweet_text = str(item.get("text") or "")
+                        broad = channel == "for_you"
+                        if not growth_intent_match(tweet_text, broad=broad):
+                            mark_growth_skipped(state, handle)
+                            continue
+                        if inspected >= 4:
+                            break
+                        inspected += 1
+                        profile = await inspect_x_growth_profile(
+                            self.browser, identity, handle)
+                        combined = f"{tweet_text}\n{profile.get('bio') or ''}"
+                        if not profile.get("verified"):
+                            mark_growth_skipped(state, handle)
+                            continue
+                        if profile.get("relationship_state") in {"following", "pending"}:
+                            mark_growth_skipped(state, handle)
+                            continue
+                        if not growth_intent_match(combined, broad=broad):
+                            mark_growth_skipped(state, handle)
+                            continue
+                        selected = {
+                            "handle": handle,
+                            "nickname": str(profile.get("nickname") or author.get("name") or handle),
+                            "tweet_url": str(item.get("url") or ""),
+                            "intent_text": tweet_text,
+                        }
+                        break
+                self.risk.record_success(account_id, OperationKind.READ_LIGHT)
+            except Exception as exc:
+                text = str(exc)
+                if "logged_out:" in text:
+                    mark_growth_login_required(
+                        account_id,
+                        reason="X登录态失效，请在面板手动登录后重试")
+                else:
+                    self.risk.record_failure(account_id, OperationKind.READ_LIGHT, exc)
+                    defer_growth_scan(state, error=f"候选检索失败: {text}")
+                    save_growth_campaign(state)
+                continue
+
+            if selected is None:
+                defer_growth_scan(state, error=f"{source_label} 暂无符合条件的新蓝V候选")
+                save_growth_campaign(state)
+                continue
+
+            with get_session() as session:
+                task = AccountActionTask(
+                    platform="x",
+                    account_id=account_id,
+                    action="follow",
+                    target_uid=selected["handle"],
+                    target_nick=selected["nickname"],
+                    content=growth_task_metadata(
+                        source=source_label,
+                        tweet_url=selected["tweet_url"],
+                        intent_text=selected["intent_text"]),
+                    status="pending",
+                    min_gap_seconds=gap,
+                )
+                session.add(task)
+                session.flush()
+                add_task_event(
+                    session, queue_type="actions", row_id=task.id,
+                    event_type="campaign:queued", from_status="", to_status="pending",
+                    actor="x_growth",
+                    detail=f"一键浇友候选 @{selected['handle']} · {source_label}",
+                    metadata={"source": source_label, "verified": True})
+                session.commit()
+
+            mark_growth_queued(
+                state,
+                handle=selected["handle"],
+                nickname=selected["nickname"],
+                source=source_label)
+            save_growth_campaign(state)
+
     async def _process_action_tasks(self):
         now = datetime.utcnow()
         due = []
@@ -3866,14 +4633,27 @@ class MonitorEngine:
             tasks = s.exec(select(AccountActionTask).where(
                 AccountActionTask.status == "pending")).all()
             for t in tasks:
+                if t.batch_id:
+                    batch = s.get(XRelationshipBatch, t.batch_id)
+                    if not batch or batch.status != "active":
+                        continue
                 if t.scheduled_at is None or t.scheduled_at <= now:
-                    due.append((t.id, t.account_id, t.min_gap_seconds))
+                    growth_meta = (
+                        parse_growth_task_metadata(t.content)
+                        if t.platform == "x" and t.action == "follow" else {}
+                    )
+                    x_one_click = (
+                        t.platform == "x"
+                        and t.action in {"follow", "unfollow"}
+                        and (bool(t.batch_id) or bool(growth_meta))
+                    )
+                    due.append((t.id, t.account_id, t.min_gap_seconds, x_one_click))
         seen_acct = set()
-        for tid, aid, gap in due:
-            # 同账号每轮最多执行一条,尊重最小间隔 + 每日/每小时配额(其余下轮再发)
-            if aid in seen_acct or not self._action_gap_ok(aid, gap):
+        for tid, aid, gap, x_one_click in due:
+            if aid in seen_acct or not self._action_gap_ok(
+                    aid, gap, use_engine_floor=not x_one_click):
                 continue
-            if not self._action_cap_ok(aid):
+            if not x_one_click and not self._action_cap_ok(aid):
                 continue
             seen_acct.add(aid)
             try:
@@ -3902,6 +4682,10 @@ class MonitorEngine:
             t = s.get(AccountActionTask, task_id)
             if not t or t.status != "pending":
                 return {"ok": False, "error": "任务不可执行"}
+            if t.batch_id:
+                batch = s.get(XRelationshipBatch, t.batch_id)
+                if not batch or batch.status != "active":
+                    return {"ok": False, "error": "批次已暂停、取消或完成"}
             account_id = t.account_id
             acc = s.get(DouyinAccount, t.account_id) if t.account_id else None
             if not acc:
@@ -3920,20 +4704,50 @@ class MonitorEngine:
                 return {"ok": False, "error": environment_error}
             if acc.status == "invalid":
                 self._defer_row(t, "账号登录态已失效，等待重新登录", fallback_seconds=900)
+                if t.platform == "x" and t.action in {"follow", "unfollow"} and t.batch_id:
+                    pause_relationship_batch(
+                        s, t.batch_id,
+                        reason="账号登录态已失效，X 关系批次已自动暂停",
+                        signal="auth_invalid")
                 s.add(t); s.commit()
                 return {"ok": False, "error": "account_invalid"}
+            growth_meta = (
+                parse_growth_task_metadata(t.content)
+                if t.platform == "x" and t.action == "follow" else {}
+            )
+            x_one_click = (
+                t.platform == "x"
+                and t.action in {"follow", "unfollow"}
+                and (bool(t.batch_id) or bool(growth_meta))
+            )
             gate_error = self._action_gate_error(
-                t.account_id, t.min_gap_seconds, t.action)
+                t.account_id, t.min_gap_seconds, t.action,
+                x_one_click=x_one_click)
             if gate_error:
-                kind = (OperationKind.DM if t.action == "send_dm"
-                        else OperationKind.SOCIAL)
-                decision = self.risk.preflight(t.account_id, kind)
-                self._defer_row(t, gate_error, decision.next_allowed_at,
-                                signal=decision.signal)
+                if x_one_click:
+                    self._defer_row(
+                        t, gate_error,
+                        fallback_seconds=max(1, int(t.min_gap_seconds or 1)))
+                    failure_signal = ""
+                else:
+                    kind = (OperationKind.DM if t.action == "send_dm"
+                            else OperationKind.SOCIAL)
+                    decision = self.risk.preflight(t.account_id, kind)
+                    self._defer_row(t, gate_error, decision.next_allowed_at,
+                                    signal=decision.signal)
+                    failure_signal = decision.signal
+                if t.platform == "x" and t.action in {"follow", "unfollow"} and t.batch_id:
+                    should_pause, reason, signal = should_pause_relationship_batch(
+                        error=gate_error,
+                        failure_signal=failure_signal)
+                    if should_pause:
+                        pause_relationship_batch(
+                            s, t.batch_id, reason=reason, signal=signal)
                 s.add(t); s.commit()
                 return {"ok": False, "error": gate_error}
             action = t.action
             target_uid, target_sec_uid, content = t.target_uid, t.target_sec_uid, t.content
+            target_nick = t.target_nick or target_uid or target_sec_uid
             platform = t.platform
             # 抖音发私信优先走无头 API(imapi/send):取会话的 short_id+ticket
             dm_conv_id, dm_short_id, dm_ticket = t.conv_id, "", ""
@@ -3955,14 +4769,18 @@ class MonitorEngine:
                 detail=f"{platform} {action} 已被单执行器领取")
             s.add(t); s.commit()
 
+        x_relationship_state = ""
         try:
             if platform == "x" and action in {"follow", "unfollow"}:
                 outcome = await set_x_following(
                     self.browser, identity, target_uid or target_sec_uid,
                     action == "follow",
                     on_submit=lambda: self._mark_browser_submit(
-                        AccountActionTask, task_id))
+                        AccountActionTask, task_id),
+                    require_verified=bool(growth_meta.get("require_verified")),
+                )
                 ok = outcome.ok
+                x_relationship_state = outcome.state
                 err = "" if ok else (
                     ("write_uncertain:" if outcome.status == "uncertain" else "")
                     + (outcome.error or f"X {action} 失败"))
@@ -4009,6 +4827,18 @@ class MonitorEngine:
         )
         failure = None if ok or uncertain else self.risk.record_failure(
             account_id, kind, err)
+        if growth_meta and account_id:
+            if uncertain:
+                mark_growth_uncertain(account_id, reason=str(err or "关注结果不确定"))
+            elif failure and failure.category == RiskCategory.AUTH:
+                mark_growth_login_required(
+                    account_id,
+                    reason="X登录态失效，请在面板手动登录后重试")
+            elif failure and failure.category == RiskCategory.RISK:
+                mark_growth_cooldown(
+                    account_id,
+                    reason=str(err or "X 风控/限流，自动冷却"),
+                    external_until=failure.next_allowed_at)
         with get_session() as s:
             t = s.get(AccountActionTask, task_id)
             account_id = t.account_id if t else None
@@ -4040,7 +4870,27 @@ class MonitorEngine:
                     from_status=before_status,
                     detail="" if ok else str(err or "")[:1000],
                     metadata={"platform": platform, "action": action})
-                s.add(t); s.commit()
+                s.add(t)
+                s.flush()
+                if platform == "x" and action in {"follow", "unfollow"} and t.batch_id:
+                    failure_category = (
+                        failure.category.value if failure and failure.category else "")
+                    failure_signal = failure.signal if failure else ""
+                    should_pause, pause_reason, pause_signal = should_pause_relationship_batch(
+                        error=err,
+                        uncertain=uncertain,
+                        failure_category=failure_category,
+                        failure_signal=failure_signal,
+                    )
+                    if should_pause:
+                        pause_relationship_batch(
+                            s, t.batch_id,
+                            reason=pause_reason,
+                            signal=pause_signal)
+                    else:
+                        refresh_relationship_batch(
+                            s, s.get(XRelationshipBatch, t.batch_id))
+                s.commit()
                 if ok and action in ("follow", "unfollow"):
                     # 同一个人可能同时有两行:关注列表(following)+ 粉丝列表(fan)。
                     # 两行都要维护 —— 回关是在粉丝列表点的,只动 following 行的话
@@ -4080,8 +4930,43 @@ class MonitorEngine:
                             fan.is_mutual = True
                             s.add(fan)
                     s.commit()
+                    if t.batch_id:
+                        refresh_relationship_batch(
+                            s, s.get(XRelationshipBatch, t.batch_id))
+                        s.commit()
         if ok and account_id:
             self.risk.record_success(account_id, kind)
+        if ok and growth_meta and account_id and action == "follow":
+            mark_growth_success(
+                account_id,
+                handle=target_uid or target_sec_uid,
+                nickname=target_nick,
+                source=str(growth_meta.get("source") or ""))
+        if ok and platform == "x" and action in {"follow", "unfollow"}:
+            growth_source = str(growth_meta.get("source") or "") if growth_meta else ""
+            note = (
+                f"一键浇友; 来源={growth_source}; state={x_relationship_state}"
+                if growth_meta else
+                (f"CreatorHub worker; state={x_relationship_state}"
+                 if x_relationship_state else "CreatorHub worker")
+            )
+            await _record_x_feishu(
+                "record_relationship",
+                target_nick=target_nick,
+                target_handle=target_uid or target_sec_uid,
+                action=action,
+                note=note,
+            )
+        elif growth_meta and failure and failure.category == RiskCategory.RISK:
+            await _record_x_feishu(
+                "record_reply",
+                target_nick=target_nick or "X 候选",
+                target_handle=target_uid or target_sec_uid,
+                reply_text="浇友未执行：触发 X 限流/风控，已进入冷却",
+                actions=["关注"],
+                refollow_status="—",
+                note=f"一键浇友限流事件; 来源={growth_meta.get('source') or ''}; {err}",
+            )
         return {"ok": ok, "error": "" if ok else err}
 
     async def execute_comment_task(self, task_id: int) -> dict:
@@ -4107,19 +4992,30 @@ class MonitorEngine:
             if t.status not in ("pending",):
                 return {"ok": False, "error": f"任务状态为 {t.status}"}
             account_id = t.account_id
-            # 执行前再查一次每日上限(生成到执行之间可能已超额)
-            cap = self.cfg.engine.comment_daily_cap_per_account
-            if cap > 0 and self._acct_today_count(s, t.account_id) >= cap:
-                self._defer_row(
-                    t, "已达账号每日评论上限",
-                    datetime.utcnow() + timedelta(days=1))
-                s.add(t); s.commit()
-                return {"ok": False, "error": "已达每日上限"}
             platform = t.platform
             aweme_id, xsec_token = t.aweme_id, t.xsec_token
+            x_gap_spec = self._x_comment_gap_spec(t)
+            if x_gap_spec is None:
+                # 非 X 一键评论仍执行全局每日评论上限。
+                cap = self.cfg.engine.comment_daily_cap_per_account
+                if cap > 0 and self._acct_today_count(s, t.account_id) >= cap:
+                    self._defer_row(
+                        t, "已达账号每日评论上限",
+                        datetime.utcnow() + timedelta(days=1))
+                    s.add(t); s.commit()
+                    return {"ok": False, "error": "已达每日上限"}
             target_cid, target_nick = t.target_comment_id, t.target_nick
             target_text = getattr(t, "target_text", "") or ""
             content = t.content
+            is_x_remind = (
+                platform == "x"
+                and str(xsec_token or "").startswith(_X_REMIND_TASK_PREFIX)
+            )
+            remind_handle = (
+                str(xsec_token or "")[len(_X_REMIND_TASK_PREFIX):].strip().lstrip("@")
+                if is_x_remind else ""
+            )
+            remind_nick = (target_text or target_nick or remind_handle).strip()
             acc = s.get(DouyinAccount, t.account_id) if t.account_id else None
             # 写操作必须有登录账号:绑定账号不存在(被删/重登成新号)时直接失败,
             # 绝不退回匿名 profile(那会开一个未登录窗口,看着像"发了"其实没登录)
@@ -4142,11 +5038,19 @@ class MonitorEngine:
                 self._defer_row(t, "账号登录态已失效，等待重新登录", fallback_seconds=900)
                 s.add(t); s.commit()
                 return {"ok": False, "error": "account_invalid"}
-            gate_error = self._comment_gate_error(t.account_id)
+            gate_error = (
+                self._x_comment_gate_error(t.account_id, *x_gap_spec)
+                if x_gap_spec else self._comment_gate_error(t.account_id)
+            )
             if gate_error:
-                decision = self.risk.preflight(t.account_id, OperationKind.COMMENT)
-                self._defer_row(t, gate_error, decision.next_allowed_at,
-                                signal=decision.signal)
+                if x_gap_spec:
+                    self._defer_row(
+                        t, gate_error, fallback_seconds=max(1, int(x_gap_spec[1])))
+                else:
+                    decision = self.risk.preflight(
+                        t.account_id, OperationKind.COMMENT)
+                    self._defer_row(t, gate_error, decision.next_allowed_at,
+                                    signal=decision.signal)
                 s.add(t); s.commit()
                 return {"ok": False, "error": gate_error}
             state = acc.storage_state or acc.creator_storage_state or ""
@@ -4162,8 +5066,135 @@ class MonitorEngine:
                 detail=f"{platform} 评论任务已被单执行器领取")
             s.add(t); s.commit()
 
+        def cancel_reminder(reason: str, event_type: str) -> None:
+            with get_session() as session:
+                row = session.get(CommentTask, task_id)
+                if not row:
+                    return
+                before = row.status
+                row.status = "canceled"
+                row.scheduled_at = None
+                row.error = reason[:500]
+                row.done_at = None
+                self._clear_row_block(row)
+                self._record_task_event(
+                    session, CommentTask, row, event_type,
+                    from_status=before,
+                    detail=reason,
+                    metadata={"handle": remind_handle},
+                )
+                session.add(row)
+                session.commit()
+
+        if is_x_remind:
+            try:
+                profile = await inspect_x_growth_profile(
+                    self.browser, identity, remind_handle)
+            except Exception as exc:
+                reason = str(exc or "X 催关主页复核失败")
+                delay = 900 if "logged_out:" in reason else 300
+                with get_session() as session:
+                    row = session.get(CommentTask, task_id)
+                    if row:
+                        before = row.status
+                        self._defer_row(
+                            row, reason, fallback_seconds=delay,
+                            signal=("auth_required" if "logged_out:" in reason else "deferred"),
+                        )
+                        self._record_task_event(
+                            session, CommentTask, row, "remind:preflight_deferred",
+                            from_status=before, detail=reason,
+                            metadata={"handle": remind_handle},
+                        )
+                        session.add(row)
+                        session.commit()
+                return {"ok": False, "error": reason, "deferred": True}
+
+            risk_marker = str(profile.get("risk_marker") or "").strip()
+            if risk_marker:
+                reason = f"X 催关触发平台限流/风控：{risk_marker}；冷却15分钟"
+                UnreciprocatedManager().trigger_rate_limit(15)
+                until = datetime.utcnow() + timedelta(minutes=15)
+                self._defer_x_reminder_tasks(account_id, until, reason)
+                with get_session() as session:
+                    row = session.get(CommentTask, task_id)
+                    if row:
+                        before = row.status
+                        self._defer_row(row, reason, until, signal="rate_limit")
+                        self._record_task_event(
+                            session, CommentTask, row, "remind:cooldown",
+                            from_status=before, detail=reason,
+                            metadata={"handle": remind_handle, "minutes": 15},
+                        )
+                        session.add(row)
+                        session.commit()
+                return {"ok": False, "error": reason, "deferred": True}
+
+            relationship_state = str(profile.get("relationship_state") or "")
+            if relationship_state in {"not_following", "pending"}:
+                UnreciprocatedManager().mark_not_following(remind_handle)
+                reason = f"@{remind_handle} 当前不是“正在关注”，已跳过催关"
+                cancel_reminder(reason, "remind:skipped_not_following")
+                return {"ok": True, "skipped": "not_following", "error": ""}
+
+            if relationship_state != "following":
+                reason = f"@{remind_handle} 无法确认当前关注状态，稍后重试"
+                with get_session() as session:
+                    row = session.get(CommentTask, task_id)
+                    if row:
+                        before = row.status
+                        self._defer_row(row, reason, fallback_seconds=300)
+                        self._record_task_event(
+                            session, CommentTask, row, "remind:preflight_deferred",
+                            from_status=before, detail=reason,
+                            metadata={"handle": remind_handle},
+                        )
+                        session.add(row)
+                        session.commit()
+                return {"ok": False, "error": reason, "deferred": True}
+
+            if bool(profile.get("follows_you")):
+                UnreciprocatedManager().mark_refollowed(
+                    remind_handle, remind_nick)
+                reason = f"@{remind_handle} 已回关，白名单保护并跳过催关"
+                cancel_reminder(reason, "remind:skipped_refollowed")
+                return {"ok": True, "skipped": "already_refollowed", "error": ""}
+
+            latest_tweet_id = str(profile.get("latest_tweet_id") or "").strip()
+            latest_tweet_url = str(profile.get("latest_tweet_url") or "").strip()
+            if bool(profile.get("profile_unavailable")) or not latest_tweet_id:
+                UnreciprocatedManager().mark_no_tweets(remind_handle)
+                reason = (
+                    f"@{remind_handle} 账号不可用或没有可回复推文，已跳过催关"
+                )
+                cancel_reminder(reason, "remind:skipped_no_tweets")
+                return {"ok": True, "skipped": "no_tweets", "error": ""}
+
+            aweme_id = latest_tweet_id
+            target_cid = latest_tweet_id
+            with get_session() as session:
+                row = session.get(CommentTask, task_id)
+                if row:
+                    row.aweme_id = latest_tweet_id
+                    row.target_comment_id = latest_tweet_id
+                    self._record_task_event(
+                        session, CommentTask, row, "remind:preflight_ok",
+                        from_status=row.status,
+                        detail=(
+                            f"@{remind_handle} 已确认：正在关注、未回关、存在最新推文"
+                        ),
+                        metadata={
+                            "handle": remind_handle,
+                            "tweet_id": latest_tweet_id,
+                            "tweet_url": latest_tweet_url,
+                        },
+                    )
+                    session.add(row)
+                    session.commit()
+
         ok, result, err, method = False, "", "", ""
         uncertain = False
+        remind_cooldown_until = None
         xhs_mode = self._xhs_comment_write_mode()
         if native_mode and xhs_mode == "api":
             xhs_mode = "browser"
@@ -4238,6 +5269,24 @@ class MonitorEngine:
         except Exception as e:
             ok, err = False, repr(e)
 
+        if is_x_remind and not ok and not uncertain:
+            error_text = str(err or "")
+            lowered = error_text.casefold()
+            if (
+                "risk_blocked:" in lowered
+                or "429" in lowered
+                or "rate limit" in lowered
+                or "speed limit" in lowered
+                or "速度限制" in error_text
+                or "受到速度限制" in error_text
+            ):
+                UnreciprocatedManager().trigger_rate_limit(15)
+                remind_cooldown_until = datetime.utcnow() + timedelta(minutes=15)
+                self._defer_x_reminder_tasks(
+                    account_id, remind_cooldown_until,
+                    f"X 催关触发限流/风控：{error_text[:220]}；冷却15分钟",
+                )
+
         failure = None if ok or manual_only or uncertain else self.risk.record_failure(
             account_id, OperationKind.COMMENT, err)
         with get_session() as s:
@@ -4254,6 +5303,14 @@ class MonitorEngine:
                     t.status = "uncertain"
                     t.scheduled_at = None
                     t.done_at = None
+                elif remind_cooldown_until is not None:
+                    next_at = remind_cooldown_until
+                    if (
+                        failure and failure.next_allowed_at
+                        and failure.next_allowed_at > next_at
+                    ):
+                        next_at = failure.next_allowed_at
+                    self._defer_row(t, err, next_at, signal="rate_limit")
                 elif failure and failure.controlled and failure.category in {
                         RiskCategory.RISK, RiskCategory.NETWORK, RiskCategory.AUTH}:
                     self._defer_row(t, err, failure.next_allowed_at,
@@ -4279,6 +5336,27 @@ class MonitorEngine:
                 s.add(t); s.commit()
         if ok:
             self.risk.record_success(account_id, OperationKind.COMMENT)
+            if platform == "x" and is_x_remind:
+                tweet_link = (
+                    result if str(result or "").startswith("http")
+                    else f"https://x.com/i/web/status/{aweme_id}"
+                )
+                await asyncio.to_thread(
+                    UnreciprocatedManager().record_reminded,
+                    remind_handle, remind_nick, tweet_link, content,
+                )
+            elif platform == "x":
+                await _record_x_feishu(
+                    "record_reply",
+                    target_nick=target_nick or "X 用户",
+                    target_handle=target_nick or "",
+                    reply_text=content,
+                    tweet_link=(
+                        result if str(result or "").startswith("http")
+                        else f"https://x.com/i/web/status/{aweme_id}"
+                    ),
+                    note="CreatorHub worker",
+                )
             log.info("评论任务 %s 已发送(%s,作品 %s)", task_id, method, aweme_id)
         else:
             log.info("评论任务 %s 失败: %s", task_id, err)

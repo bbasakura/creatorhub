@@ -578,6 +578,205 @@ class FollowEdge(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class XOpsSettings(SQLModel, table=True):
+    """X 一键运营账号级产品设置；所有前端入口共用同一目标数。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True, unique=True)
+    target_count: int = 100
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class XRevenueProfile(SQLModel, table=True):
+    """X 增长/收益驾驶舱的本地配置与官方口径手工快照。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    premium_active: bool = False
+    identity_verified: bool = False
+    payout_connected: bool = False
+    rewards_enrolled: bool = False
+    official_verified_followers: int = 0
+    official_qualified_impressions_90d: int = 0
+    target_verified_followers: int = 500
+    target_qualified_impressions_90d: int = 500000
+    note: str = ""
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class XCreatorStudioSnapshot(SQLModel, table=True):
+    """X Creator Studio 官方数据快照（只读同步）。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    period_days: int = 7
+    verified_followers: int = 0
+    follower_count: int = 0
+    impressions: int = 0
+    verified_impressions: int = 0
+    unverified_impressions: int = 0
+    engagements: int = 0
+    engagement_rate: float = 0.0
+    profile_visits: int = 0
+    replies: int = 0
+    likes: int = 0
+    reposts: int = 0
+    bookmarks: int = 0
+    shares: int = 0
+    follows: int = 0
+    unfollows: int = 0
+    posts: int = 0
+    reply_posts: int = 0
+    qualified_impressions_90d: int = 0
+    verified_followers_eligible: bool = False
+    qualified_impressions_eligible: bool = False
+    analytics_ok: bool = False
+    rewards_ok: bool = False
+    daily_json: str = ""
+    raw_json: str = ""
+    error: str = ""
+    captured_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class XAccountGrowthSnapshot(SQLModel, table=True):
+    """X 账号增长快照；用于粉丝变化与帖子表现的时间关联。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    follower_count: int = 0
+    following_count: int = 0
+    post_count: int = 0
+    captured_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class XWorkMetricSnapshot(SQLModel, table=True):
+    """X 自有帖指标快照；为 1h/3h/6h/24h/72h 生命周期分析保留历史。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    item_id: str = Field(default="", index=True)
+    create_time: int = 0
+    play_count: int = 0
+    like_count: int = 0
+    comment_count: int = 0
+    share_count: int = 0
+    captured_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class XIntelBenchmark(SQLModel, table=True):
+    """X 情报：一个登录账号下维护的对标账号。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    handle: str = Field(default="", index=True)
+    nickname: str = ""
+    note: str = ""
+    avatar: str = ""
+    follower_count: int = 0
+    following_count: int = 0
+    tweet_count: int = 0
+    verified: bool = False
+    enabled: bool = True
+    last_synced_at: Optional[datetime] = None
+    last_error: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class XIntelScan(SQLModel, table=True):
+    """X 情报：一次爆款雷达扫描的覆盖率和状态。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    status: str = Field(default="running", index=True)  # running | done | partial | failed
+    requested_accounts: int = 0
+    successful_accounts: int = 0
+    failed_accounts: int = 0
+    post_count: int = 0
+    posts_per_account: int = 5
+    started_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    finished_at: Optional[datetime] = None
+    error: str = ""
+    summary_json: str = ""
+    summary_source: str = ""
+    summary_generated_at: Optional[datetime] = None
+
+
+class XIntelPostSnapshot(SQLModel, table=True):
+    """X 情报：雷达扫描中的帖子快照；同一帖可跨扫描保留多份以支持后续增速分析。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    scan_id: int = Field(index=True)
+    account_id: int = Field(index=True)
+    benchmark_id: Optional[int] = Field(default=None, index=True)
+    tweet_id: str = Field(default="", index=True)
+    tweet_url: str = ""
+    author_handle: str = Field(default="", index=True)
+    author_name: str = ""
+    author_verified: bool = False
+    author_followers: int = 0
+    text: str = ""
+    posted_at: str = ""
+    view_count: int = 0
+    like_count: int = 0
+    reply_count: int = 0
+    retweet_count: int = 0
+    engagement_rate: float = 0.0
+    exposure_efficiency: float = 0.0
+    radar_score: float = 0.0
+    fetched_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class XIntelAlert(SQLModel, table=True):
+    """X 情报：基于真实跨扫描增速触发的内部起爆信号。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    scan_id: int = Field(index=True)
+    tweet_id: str = Field(default="", index=True)
+    tweet_url: str = ""
+    author_handle: str = Field(default="", index=True)
+    author_name: str = ""
+    alert_type: str = Field(default="explosion", index=True)
+    level: str = Field(default="rising", index=True)
+    window_hours: int = 0
+    view_count: int = 0
+    view_delta: int = 0
+    views_per_hour: float = 0.0
+    exposure_efficiency: float = 0.0
+    engagement_rate: float = 0.0
+    signal_score: float = 0.0
+    reason: str = ""
+    notified_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class XIntelDailyBrief(SQLModel, table=True):
+    """X 情报：按账号本地日期持久化的每日运营简报。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    local_date: str = Field(default="", index=True)
+    scan_id: Optional[int] = Field(default=None, index=True)
+    summary_json: str = ""
+    summary_source: str = ""
+    alert_count: int = 0
+    notified_at: Optional[datetime] = None
+    generated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class XContentOpportunity(SQLModel, table=True):
+    """X 情报转内容：带证据、策略和待确认草稿的可追溯内容机会。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    account_id: int = Field(index=True)
+    scan_id: Optional[int] = Field(default=None, index=True)
+    source_key: str = Field(default="", index=True, unique=True)
+    status: str = Field(default="drafted", index=True)  # drafted | dismissed
+    topic: str = ""
+    angle: str = ""
+    why_now: str = ""
+    strategy: str = ""
+    content_type: str = Field(default="观点短帖", index=True)
+    score: float = 0.0
+    source_tweet_ids_json: str = "[]"
+    source_urls_json: str = "[]"
+    evidence_json: str = "{}"
+    draft_text: str = ""
+    draft_task_id: Optional[int] = Field(default=None, index=True)
+    generation_source: str = Field(default="rules", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
 class DmConversation(SQLModel, table=True):
     """私信会话(一条会话 = 与某人的对话)。"""
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -613,11 +812,29 @@ class DmMessage(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class XRelationshipBatch(SQLModel, table=True):
+    """X 关系批量写操作的控制批次；子任务仍由 AccountActionTask 执行。"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    platform: str = Field(default="x", index=True)
+    account_id: int = Field(index=True)
+    action: str = Field(default="unfollow", index=True)
+    status: str = Field(default="active", index=True)  # active | paused | canceled | completed
+    requested_count: int = 0
+    total_count: int = 0
+    skipped_count: int = 0
+    pause_reason: str = ""
+    stop_signal: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    done_at: Optional[datetime] = None
+
+
 class AccountActionTask(SQLModel, table=True):
     """本账号写操作队列(取关/回关/发私信)。状态机同 CommentTask,带节流。"""
     id: Optional[int] = Field(default=None, primary_key=True)
     platform: str = Field(default="douyin", index=True)  # douyin | xhs | kuaishou
     account_id: int = Field(index=True)
+    batch_id: Optional[int] = Field(default=None, index=True)
     action: str = Field(default="follow", index=True)  # follow | unfollow | send_dm
     target_uid: str = ""              # 目标 user_id
     target_sec_uid: str = ""          # 抖音 sec_uid

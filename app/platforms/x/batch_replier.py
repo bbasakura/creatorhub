@@ -116,35 +116,8 @@ class XBatchReplier:
         return result
 
     def record_success(self, author_nick: str, author_handle: str, tweet_link: str, tweet_text: str, reply_text: str):
-        now_str = time.strftime("%Y-%m-%d %H:%M:%S")
-        self.progress["completed_count"] = self.progress.get("completed_count", 0) + 1
-
-        if "replied_links" not in self.progress:
-            self.progress["replied_links"] = {}
-        self.progress["replied_links"][tweet_link] = {
-            "time": now_str,
-            "author_nick": author_nick,
-            "author_handle": author_handle,
-            "tweet_text": tweet_text[:60],
-            "reply_text": reply_text,
-        }
-
-        if "replied_authors" not in self.progress:
-            self.progress["replied_authors"] = {}
-        self.progress["replied_authors"][author_handle] = self.progress["replied_authors"].get(author_handle, 0) + 1
-
-        self._save_progress()
-
-        try:
-            ok = self.feishu.record_reply(
-                target_nick=author_nick,
-                target_handle=author_handle,
-                reply_text=reply_text,
-                tweet_link=tweet_link,
-                actions=["留言"],
-                refollow_status="—",
-                note=f"第2轮100条 [第{self.progress['completed_count']}条]",
-            )
-            print(f"[Feishu] Synced record #{self.progress['completed_count']} -> {author_handle}: {ok}")
-        except Exception as e:
-            print(f"[Feishu] Sync error for #{self.progress['completed_count']}:", e)
+        """Fail closed: only the durable CreatorHub worker may persist X success."""
+        raise RuntimeError(
+            "legacy X success stamping is disabled; "
+            "wait for the durable CommentTask worker to confirm status=done"
+        )

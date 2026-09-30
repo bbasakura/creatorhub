@@ -263,6 +263,90 @@ async def fetch_x_self_profile(mgr: BrowserManager, identity: Identity) -> dict:
         return await _x_profile_snapshot(page, base)
 
 
+async def _visible_x_mask(page: Any) -> bool:
+    try:
+        mask = page.locator('[data-testid="mask"]').first
+        return bool(await mask.count() and await mask.is_visible())
+    except Exception:
+        return False
+
+
+async def _last_visible_control(page: Any, selector: str, timeout_ms: int = 10_000) -> Any:
+    controls = page.locator(selector)
+    deadline = asyncio.get_running_loop().time() + max(0.2, timeout_ms / 1000)
+    while asyncio.get_running_loop().time() < deadline:
+        try:
+            count = await controls.count()
+        except Exception:
+            count = 0
+        for index in range(count - 1, -1, -1):
+            control = controls.nth(index)
+            try:
+                if await control.is_visible():
+                    return control
+            except Exception:
+                continue
+        await asyncio.sleep(0.12)
+    raise RuntimeError("未找到当前可见的 X 操作控件")
+
+
+async def _activate_x_control(
+        page: Any, control: Any, *, label: str, before_activate=None,
+        retry_before_boundary: bool = False, allow_mask_dom: bool = False) -> str:
+    """Activate one verified X control without force-clicking through unknown UI.
+
+    A visible X mask can cover the reply modal even while its controls remain
+    valid. In that known case use the control's own DOM click after risk probing.
+    Stateful submit callers pass before_activate; once that callback fires,
+    this function never retries another activation path.
+    """
+    risk_marker = await detect_x_write_risk(page)
+    if risk_marker:
+        raise RuntimeError(f"risk_blocked:X {label}前检测到平台风控/验证提示: {risk_marker}")
+
+    dismissed = await dismiss_x_benign_overlay(page)
+    if dismissed:
+        risk_marker = await detect_x_write_risk(page)
+        if risk_marker:
+            raise RuntimeError(f"risk_blocked:X {label}前检测到平台风控/验证提示: {risk_marker}")
+
+    async def _dom_activate() -> str:
+        if callable(before_activate):
+            before_activate()
+        await control.evaluate(
+            """el => {
+                if (el.getAttribute('aria-disabled') === 'true' || el.disabled) {
+                    throw new Error('control disabled');
+                }
+                el.focus();
+                el.click();
+            }"""
+        )
+        return "dom"
+
+    if allow_mask_dom and await _visible_x_mask(page):
+        return await _dom_activate()
+
+    if callable(before_activate):
+        before_activate()
+    try:
+        await control.click(timeout=4_000)
+        return "pointer"
+    except Exception:
+        # A submit boundary may already have been crossed. Never retry it.
+        if callable(before_activate) or not retry_before_boundary:
+            raise
+        risk_marker = await detect_x_write_risk(page)
+        if risk_marker:
+            raise RuntimeError(
+                f"risk_blocked:X {label}前检测到平台风控/验证提示: {risk_marker}")
+        await dismiss_x_benign_overlay(page)
+        if allow_mask_dom and await _visible_x_mask(page):
+            return await _dom_activate()
+        await control.click(timeout=4_000)
+        return "pointer"
+
+
 async def _fill_editor(page: Any, text: str) -> Any:
     editors = page.locator('[data-testid="tweetTextarea_0"]')
     editor = None
@@ -286,23 +370,43 @@ async def _fill_editor(page: Any, text: str) -> Any:
     if editor is None:
         raise RuntimeError("未找到 X 帖子输入框，页面可能已改版或登录失效")
 
-    # X 的回复弹层会放置 modal mask；鼠标 click 可能被 mask 拦截。
-    # DOM focus 不产生平台写副作用，也不会跨过 submit boundary。
-    try:
-        await editor.evaluate("el => el.focus()")
-    except Exception:
+    # X 的回复弹层会放置 modal mask；任何鼠标 click 都可能被 mask 拦截。
+    # 这里只允许 DOM focus，并做短重试；绝不回退到 pointer click。
+    focus_error = None
+    for _ in range(3):
         try:
-            await editor.click(timeout=3000)
+            await editor.evaluate("el => el.focus()")
+            focus_error = None
+            break
         except Exception as exc:
-            raise RuntimeError("X 输入框无法获得焦点") from exc
+            focus_error = exc
+            await page.wait_for_timeout(120)
+    if focus_error is not None:
+        raise RuntimeError("X 输入框无法通过 DOM focus 获得焦点") from focus_error
+    # X 当前 Draft/contenteditable 在回复 modal 中对非空 Locator.fill()
+    # 直接写正文可能重复，而全新 Draft 直接 keyboard 输入又可能被吃掉。
+    # 真实页面验证稳定路径：短占位初始化 -> 清空 -> DOM focus -> keyboard 正文。
     try:
-        await editor.fill(text)
-    except Exception:
+        await editor.fill("x")
+        await editor.fill("")
+        await editor.evaluate("el => el.focus()")
         await page.keyboard.press("Control+A")
         await page.keyboard.insert_text(text)
-    current = str(await editor.inner_text() or "").strip()
-    if not current or text[: min(12, len(text))] not in current:
-        raise RuntimeError("X 文本写入后回读校验失败")
+    except Exception:
+        await editor.fill(text)
+
+    def _normalized(value: str) -> str:
+        return (str(value or "")
+                .replace("\r\n", "\n")
+                .replace("\r", "\n")
+                .replace("\u200b", "")
+                .strip())
+
+    current = _normalized(await editor.inner_text() or "")
+    expected = _normalized(text)
+    if current != expected:
+        raise RuntimeError(
+            f"X 文本写入后回读校验失败(expected={len(expected)}, actual={len(current)})")
     return editor
 
 
@@ -322,9 +426,10 @@ async def _set_media(page: Any, files: Sequence[str], media_type: str) -> list[s
 
 
 async def _submit_once(page: Any, submitted: dict, evidence: dict, on_submit=None) -> None:
-    button = page.locator('[data-testid="tweetButtonInline"], [data-testid="tweetButton"]').first
     try:
-        await button.wait_for(state="visible", timeout=10_000)
+        button = await _last_visible_control(
+            page, '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]',
+            timeout_ms=10_000)
     except Exception as exc:
         raise RuntimeError("未找到 X 发送按钮") from exc
     for _ in range(60):
@@ -337,10 +442,16 @@ async def _submit_once(page: Any, submitted: dict, evidence: dict, on_submit=Non
     risk_marker = await detect_x_write_risk(page)
     if risk_marker:
         raise RuntimeError(f"risk_blocked:X 写入前检测到平台风控/验证提示: {risk_marker}")
-    if callable(on_submit):
-        on_submit()
-    submitted["clicked"] = True
-    await button.click()
+    def _mark_submit_boundary():
+        if submitted["clicked"]:
+            return
+        if callable(on_submit):
+            on_submit()
+        submitted["clicked"] = True
+
+    await _activate_x_control(
+        page, button, label="发送", before_activate=_mark_submit_boundary,
+        allow_mask_dom=True)
     for _ in range(32):
         if evidence.get("accepted"):
             return
@@ -443,6 +554,9 @@ async def fetch_x_search(
                     user_node = card.locator('[data-testid="User-Name"]').first
                     user_text = str(await user_node.inner_text() or "") if await user_node.count() else ""
                     handle_match = re.search(r"@([A-Za-z0-9_]{1,15})", user_text)
+                    verified = bool(await user_node.locator(
+                        '[data-testid="icon-verified"], svg[aria-label*="Verified"], svg[aria-label*="认证"]'
+                    ).count()) if await user_node.count() else False
                     time_node = card.locator("time").first
                     created_at = str(await time_node.get_attribute("datetime") or "") if await time_node.count() else ""
                     items.append({
@@ -453,6 +567,7 @@ async def fetch_x_search(
                             "handle": handle_match.group(1) if handle_match else "",
                             "name": user_text.splitlines()[0].strip() if user_text else "",
                             "id": "",
+                            "verified": verified,
                         },
                         "created_at": created_at,
                         "metrics": {"reply": 0, "retweet": 0, "like": 0, "view": 0},
@@ -465,6 +580,67 @@ async def fetch_x_search(
             await page.wait_for_timeout(650)
     return items
 
+
+async def fetch_x_for_you_timeline(
+        mgr: BrowserManager, identity: Identity, limit: int = 20) -> list[dict]:
+    """Read the authenticated For You timeline with author blue-check evidence."""
+    limit = max(1, min(80, int(limit or 20)))
+    items: list[dict] = []
+    seen: set[str] = set()
+    async with mgr.visible_page(identity, url=X_HOME_URL) as page:
+        if await _page_logged_out(page):
+            raise RuntimeError("logged_out:X 登录态已失效，请重新登录")
+        for label in ("For you", "为你推荐"):
+            try:
+                tab = page.get_by_role("tab", name=label).first
+                if await tab.count() and await tab.is_visible():
+                    await tab.click()
+                    await page.wait_for_timeout(700)
+                    break
+            except Exception:
+                continue
+        for _ in range(8):
+            cards = page.locator('article[data-testid="tweet"]')
+            for index in range(await cards.count()):
+                card = cards.nth(index)
+                try:
+                    link = card.locator('a[href*="/status/"]').first
+                    href = str(await link.get_attribute("href") or "")
+                    match = _STATUS_RE.search(href)
+                    if not match or match.group(1) in seen:
+                        continue
+                    tweet_id = match.group(1)
+                    seen.add(tweet_id)
+                    text_node = card.locator('[data-testid="tweetText"]').first
+                    tweet_text = str(await text_node.inner_text() or "") if await text_node.count() else ""
+                    user_node = card.locator('[data-testid="User-Name"]').first
+                    user_text = str(await user_node.inner_text() or "") if await user_node.count() else ""
+                    handle_match = re.search(r"@([A-Za-z0-9_]{1,15})", user_text)
+                    verified = bool(await user_node.locator(
+                        '[data-testid="icon-verified"], svg[aria-label*="Verified"], svg[aria-label*="认证"]'
+                    ).count()) if await user_node.count() else False
+                    time_node = card.locator("time").first
+                    created_at = str(await time_node.get_attribute("datetime") or "") if await time_node.count() else ""
+                    items.append({
+                        "id": tweet_id,
+                        "url": f"https://x.com/i/web/status/{tweet_id}",
+                        "text": tweet_text.strip(),
+                        "author": {
+                            "handle": handle_match.group(1) if handle_match else "",
+                            "name": user_text.splitlines()[0].strip() if user_text else "",
+                            "id": "",
+                            "verified": verified,
+                        },
+                        "created_at": created_at,
+                        "metrics": {"reply": 0, "retweet": 0, "like": 0, "view": 0},
+                    })
+                    if len(items) >= limit:
+                        return items
+                except Exception:
+                    continue
+            await page.mouse.wheel(0, 1400)
+            await page.wait_for_timeout(650)
+    return items
 
 async def fetch_x_following_timeline(
         mgr: BrowserManager, identity: Identity, limit: int = 20) -> list[dict]:
@@ -595,10 +771,10 @@ async def fetch_x_my_works(
 
 async def fetch_x_relationships(
         mgr: BrowserManager, identity: Identity, direction: str,
-        limit: int = 300) -> tuple[list[dict], dict]:
+        limit: int = 300, expected_total: int = 0) -> tuple[list[dict], dict]:
     if direction not in {"following", "fan"}:
         raise ValueError("direction must be following or fan")
-    limit = max(1, min(500, int(limit or 300)))
+    limit = max(1, min(2000, int(limit or 300)))
     async with mgr.visible_page(identity, url=X_HOME_URL) as page:
         if await _page_logged_out(page):
             raise RuntimeError("logged_out:X 登录态已失效，请重新登录")
@@ -610,17 +786,32 @@ async def fetch_x_relationships(
         users: list[dict] = []
         seen: set[str] = set()
         stagnant_rounds = 0
-        for _ in range(16):
+        profile_total = max(0, int(expected_total or 0))
+        if profile_total <= 0:
+            profile_total = int(
+                profile.get("following_count" if direction == "following"
+                            else "follower_count") or 0)
+        target_total = min(limit, profile_total) if profile_total > 0 else limit
+        # X virtualizes relationship rows; ~8-12 new users per scroll is
+        # common. Scale the scroll budget to the actual profile total instead
+        # of the old fixed 16 rounds, while retaining a hard ceiling and the
+        # stagnant-round early stop below.
+        max_rounds = max(16, min(160, (target_total + 7) // 8 + 8))
+        for _ in range(max_rounds):
             rows = await page.locator('[data-testid="UserCell"]').evaluate_all("""cells => cells.map(cell => {
                 const raw = (cell.innerText || '').trim();
                 const desc = cell.querySelector('[data-testid="UserDescription"]');
                 const img = cell.querySelector('img[src*="profile_images"]');
                 const unfollow = cell.querySelector('button[data-testid$="-unfollow"]');
+                const verified = !!cell.querySelector(
+                    '[data-testid="icon-verified"], svg[aria-label*="Verified"], svg[aria-label*="认证"]'
+                );
                 return {
                     raw,
                     signature: desc ? (desc.innerText || '').trim() : '',
                     avatar: img ? (img.getAttribute('src') || '') : '',
                     following: !!unfollow,
+                    verified,
                 };
             })""")
             before = len(seen)
@@ -646,17 +837,21 @@ async def fetch_x_relationships(
                         "signature": str(row.get("signature") or ""),
                         "is_mutual": bool(direction == "fan" and is_following),
                         "is_following": bool(is_following),
-                        "raw_json": json.dumps({"handle": other}, ensure_ascii=False),
+                        "raw_json": json.dumps({
+                            "handle": other,
+                            "verified": bool(row.get("verified")),
+                            "provider": "browser",
+                        }, ensure_ascii=False),
                     })
-                    if len(users) >= limit:
+                    if len(users) >= target_total:
                         return users, profile
                 except Exception:
                     continue
             stagnant_rounds = stagnant_rounds + 1 if len(seen) == before else 0
             if stagnant_rounds >= 3:
                 break
-            await page.mouse.wheel(0, 1800)
-            await page.wait_for_timeout(550)
+            await page.mouse.wheel(0, 2200)
+            await page.wait_for_timeout(450)
         return users, profile
 
 
@@ -780,10 +975,15 @@ async def reply_x(
                 risk_marker = await detect_x_write_risk(page)
                 if risk_marker:
                     return False, "", f"risk_blocked:X 回复前检测到平台风控/验证提示: {risk_marker}"
-            button = article.locator('[data-testid="reply"]').first
             try:
-                await button.click(timeout=8_000)
+                button = await _last_visible_control(
+                    article, '[data-testid="reply"]', timeout_ms=8_000)
+                await _activate_x_control(
+                    page, button, label="打开回复框", retry_before_boundary=True)
             except Exception as exc:
+                message = str(exc or "")
+                if message.startswith("risk_blocked:"):
+                    return False, "", message
                 return False, "", f"无法打开 X 回复框: {exc!r}"
             await _fill_editor(page, reply)
             page.on("response", listener)
